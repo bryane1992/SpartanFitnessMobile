@@ -135,6 +135,7 @@ export default function ExerciseDictionary() {
         showsHorizontalScrollIndicator={false}
         keyExtractor={(item) => item.id}
         style={styles.filterRow}
+        contentContainerStyle={{ paddingHorizontal: 12 }}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={[styles.filterChip, muscleFilter === item.id && styles.filterChipActive]}
@@ -154,6 +155,7 @@ export default function ExerciseDictionary() {
         showsHorizontalScrollIndicator={false}
         keyExtractor={(item) => item.id}
         style={styles.filterRow}
+        contentContainerStyle={{ paddingHorizontal: 12 }}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={[styles.filterChip, styles.filterChipEquip, equipFilter === item.id && styles.filterChipEquipActive]}
@@ -242,18 +244,19 @@ const styles = StyleSheet.create({
 
   // Filters
   filterRow: {
-    paddingHorizontal: 12,
-    maxHeight: 36,
-    marginBottom: 6,
+    marginBottom: 8,
+    flexGrow: 0,
   },
   filterChip: {
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     borderRadius: 20,
-    paddingVertical: 5,
+    paddingVertical: 7,
     paddingHorizontal: 14,
     marginRight: 6,
+    minHeight: 32,
+    justifyContent: 'center',
   },
   filterChipActive: {
     backgroundColor: 'rgba(255,65,54,0.15)',
