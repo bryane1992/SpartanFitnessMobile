@@ -304,12 +304,16 @@ function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress,
             <Text
               style={[styles.exerciseName, isDone ? styles.exerciseNameDone : null]}
               numberOfLines={1}
-              onPress={onNamePress}
             >{`${name}${swapped}`}</Text>
             <Text style={[styles.exerciseRx, { color: blockColor }, isDone ? styles.exerciseRxDone : null]}>{sets}</Text>
           </View>
           <Text style={styles.exerciseLoad}>{rest ? `${weight} \u2014 ${rest}` : weight}</Text>
         </View>
+
+        {/* GIF/Demo button */}
+        <TouchableOpacity style={styles.demoBtn} onPress={onNamePress}>
+          <Text style={styles.demoBtnText}>GIF</Text>
+        </TouchableOpacity>
       </TouchableOpacity>
 
       {/* Log inputs - shown when checked */}
@@ -465,7 +469,23 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   checkIcon: { color: '#000', fontSize: 11, fontWeight: '800' },
-  exerciseContent: { flex: 1 },
+  exerciseContent: { flex: 1, marginRight: 8 },
+  demoBtn: {
+    backgroundColor: 'rgba(255,65,54,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,65,54,0.25)',
+    borderRadius: 5,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    alignSelf: 'center',
+  },
+  demoBtnText: {
+    color: '#FF4136',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    fontFamily: 'monospace',
+  },
   exerciseTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   exerciseName: { color: '#fff', fontSize: 13, fontWeight: '500', letterSpacing: 0.4, textTransform: 'uppercase', flex: 1 },
   exerciseNameDone: { textDecorationLine: 'line-through', color: 'rgba(255,255,255,0.4)' },

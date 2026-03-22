@@ -15,6 +15,7 @@ import ProgressionPlan from './src/screens/ProgressionPlan';
 import Settings from './src/screens/Settings';
 import Onboarding from './src/screens/Onboarding';
 import PerformanceTracker from './src/screens/PerformanceTracker';
+import ExerciseDictionary from './src/screens/ExerciseDictionary';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -79,13 +80,13 @@ function MainTabs() {
         }}
       />
       <Tab.Screen
-        name="Progress"
-        component={ProgressionPlan}
+        name="Library"
+        component={ExerciseDictionary}
         options={{
-          title: "My Plan",
-          tabBarLabel: 'Plan',
+          title: 'Exercise Library',
+          tabBarLabel: 'Library',
           tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 20, color }}>{'\uD83D\uDCCA'}</Text>
+            <Text style={{ fontSize: 13, color, fontWeight: '900', fontFamily: 'monospace' }}>DB</Text>
           ),
         }}
       />
@@ -172,6 +173,7 @@ export default function App() {
       >
         <Stack.Screen name="Onboarding" component={Onboarding} />
         <Stack.Screen name="Main" component={MainTabs} />
+        <Stack.Screen name="PlanOverview" component={ProgressionPlan} />
       </Stack.Navigator>
     </NavigationContainer>
   );

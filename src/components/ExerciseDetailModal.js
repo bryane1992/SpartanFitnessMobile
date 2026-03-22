@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import { getExerciseFullById } from '../data/database';
+import { getExerciseFullById, getDatabase } from '../data/database';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -27,7 +27,19 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
 
   const loadExercise = async () => {
     try {
-      const ex = await getExerciseFullById(exerciseId);
+      let ex = await getExerciseFullById(exerciseId);
+      // If seed exercise without gif_url, try to find a matching ExerciseDB exercise by name
+      if (ex && !ex.gif_url && ex.name) {
+        const database = await getDatabase();
+        const match = await database.getFirstAsync(
+          "SELECT * FROM exercises WHERE gif_url IS NOT NULL AND name LIKE ? AND source = 'exercisedb' LIMIT 1",
+          [`%${ex.name.replace(/_/g, ' ')}%`]
+        );
+        if (match) {
+          // Merge: keep seed identity but use ExerciseDB's gif and instructions
+          ex = { ...ex, gif_url: match.gif_url, instructions: match.instructions, target_muscles: match.target_muscles };
+        }
+      }
       setExercise(ex);
       setGifLoading(true);
     } catch (e) {
