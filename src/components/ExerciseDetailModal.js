@@ -41,6 +41,12 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
         const searchName = (ex.name || '').toLowerCase().replace(/_/g, ' ');
         console.log(`[GIF] Looking for match: "${searchName}" (id: ${exerciseId})`);
 
+        // Debug: check if ANY exercise has gif_url
+        const gifCheck = await database.getFirstAsync(
+          "SELECT COUNT(*) as total, COUNT(gif_url) as with_gif FROM exercises WHERE source = 'exercisedb'"
+        );
+        console.log(`[GIF] DB status: ${gifCheck.total} exercisedb rows, ${gifCheck.with_gif} have gif_url`);
+
         // Try 1: full name match
         let match = await database.getFirstAsync(
           "SELECT gif_url, instructions, target_muscles FROM exercises WHERE gif_url IS NOT NULL AND LOWER(name) LIKE ? LIMIT 1",
