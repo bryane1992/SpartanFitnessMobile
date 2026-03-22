@@ -134,15 +134,10 @@ export default function ExerciseDictionary({ navigation }) {
       </View>
 
       {/* Muscle Group Filter */}
-      <FlatList
-        data={MUSCLE_FILTERS}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={(item) => item.id}
-        style={styles.filterRow}
-        contentContainerStyle={{ paddingHorizontal: 12 }}
-        renderItem={({ item }) => (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={styles.filterRowContent}>
+        {MUSCLE_FILTERS.map((item) => (
           <TouchableOpacity
+            key={item.id}
             style={[styles.filterChip, muscleFilter === item.id && styles.filterChipActive]}
             onPress={() => setMuscleFilter(item.id)}
           >
@@ -150,19 +145,14 @@ export default function ExerciseDictionary({ navigation }) {
               {item.label}
             </Text>
           </TouchableOpacity>
-        )}
-      />
+        ))}
+      </ScrollView>
 
       {/* Equipment Filter */}
-      <FlatList
-        data={EQUIP_FILTERS}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={(item) => item.id}
-        style={styles.filterRow}
-        contentContainerStyle={{ paddingHorizontal: 12 }}
-        renderItem={({ item }) => (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={styles.filterRowContent}>
+        {EQUIP_FILTERS.map((item) => (
           <TouchableOpacity
+            key={item.id}
             style={[styles.filterChip, styles.filterChipEquip, equipFilter === item.id && styles.filterChipEquipActive]}
             onPress={() => setEquipFilter(item.id)}
           >
@@ -170,8 +160,8 @@ export default function ExerciseDictionary({ navigation }) {
               {item.label}
             </Text>
           </TouchableOpacity>
-        )}
-      />
+        ))}
+      </ScrollView>
 
       {/* Results count */}
       <Text style={styles.resultCount}>{`${exercises.length} results`}</Text>
@@ -262,6 +252,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     flexGrow: 0,
   },
+  filterRowContent: {
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
   filterChip: {
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
@@ -269,9 +263,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 7,
     paddingHorizontal: 14,
-    marginRight: 6,
-    minHeight: 32,
+    marginRight: 8,
+    height: 34,
     justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
   },
   filterChipActive: {
     backgroundColor: 'rgba(255,65,54,0.15)',
