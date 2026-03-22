@@ -35,27 +35,45 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
   const loadExercise = async () => {
     try {
       let ex = await getExerciseFullById(exerciseId);
-      // If seed exercise without gif_url, try to find a matching ExerciseDB exercise by name
-      if (ex && !ex.gif_url && ex.name) {
+      // If no gif_url, try to find a matching ExerciseDB exercise
+      if (ex && !ex.gif_url) {
         const database = await getDatabase();
-        // Try exact-ish match first (case insensitive)
-        const searchName = ex.name.toLowerCase().replace(/_/g, ' ');
+        const searchName = (ex.name || '').toLowerCase().replace(/_/g, ' ');
+        console.log(`[GIF] Looking for match: "${searchName}" (id: ${exerciseId})`);
+
+        // Try 1: full name match
         let match = await database.getFirstAsync(
-          "SELECT * FROM exercises WHERE gif_url IS NOT NULL AND source = 'exercisedb' AND LOWER(name) LIKE ? LIMIT 1",
+          "SELECT gif_url, instructions, target_muscles FROM exercises WHERE gif_url IS NOT NULL AND LOWER(name) LIKE ? LIMIT 1",
           [`%${searchName}%`]
         );
-        // If no match, try with just the first two words
+
+        // Try 2: first two words
         if (!match) {
           const words = searchName.split(' ').slice(0, 2).join(' ');
           if (words.length > 3) {
             match = await database.getFirstAsync(
-              "SELECT * FROM exercises WHERE gif_url IS NOT NULL AND source = 'exercisedb' AND LOWER(name) LIKE ? LIMIT 1",
+              "SELECT gif_url, instructions, target_muscles FROM exercises WHERE gif_url IS NOT NULL AND LOWER(name) LIKE ? LIMIT 1",
               [`%${words}%`]
             );
           }
         }
+
+        // Try 3: just the main word (skip common prefixes like "db", "kb")
+        if (!match) {
+          const mainWord = searchName.replace(/^(db|kb|ez|bb)\s+/i, '').split(' ')[0];
+          if (mainWord.length > 3) {
+            match = await database.getFirstAsync(
+              "SELECT gif_url, instructions, target_muscles FROM exercises WHERE gif_url IS NOT NULL AND LOWER(name) LIKE ? AND muscle_group = ? LIMIT 1",
+              [`%${mainWord}%`, ex.muscle_group]
+            );
+          }
+        }
+
         if (match) {
-          ex = { ...ex, gif_url: match.gif_url, instructions: match.instructions, target_muscles: match.target_muscles };
+          console.log(`[GIF] Found match with gif: ${match.gif_url}`);
+          ex = { ...ex, gif_url: match.gif_url, instructions: match.instructions || ex.instructions, target_muscles: match.target_muscles || ex.target_muscles };
+        } else {
+          console.log(`[GIF] No match found for "${searchName}"`);
         }
       }
       setExercise(ex);

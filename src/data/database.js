@@ -1,6 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import { seedExercises, seedAlternatives } from './exerciseSeed';
-import { fetchAllExercises } from './exerciseApi';
+import { fetchAllExercises, fetchPagedExercises } from './exerciseApi';
 import { mapExerciseDbToLocal } from './taxonomyMap';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -613,7 +613,6 @@ export async function syncExerciseDb(onProgress) {
   let totalInserted = 0;
 
   // Fetch and save one page at a time so progress is never lost
-  const { fetchPagedExercises } = require('./exerciseApi');
   const firstPage = await fetchPagedExercises(0);
   const total = firstPage.total;
 
