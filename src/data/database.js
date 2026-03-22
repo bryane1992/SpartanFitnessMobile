@@ -610,41 +610,66 @@ export async function getRunTypeForDate(date) {
 
 export async function syncExerciseDb(onProgress) {
   const database = await getDatabase();
-  const apiExercises = await fetchAllExercises(onProgress);
-  let inserted = 0;
+  let totalInserted = 0;
 
-  // Batch insert in transactions of 50
-  for (let i = 0; i < apiExercises.length; i += 50) {
-    const batch = apiExercises.slice(i, i + 50);
-    await database.execAsync('BEGIN TRANSACTION');
+  // Fetch and save one page at a time so progress is never lost
+  const { fetchPagedExercises } = require('./exerciseApi');
+  const firstPage = await fetchPagedExercises(0);
+  const total = firstPage.total;
+
+  // Insert first page
+  totalInserted += await insertExerciseBatch(database, firstPage.data);
+  if (onProgress) onProgress(totalInserted, total);
+
+  // Fetch remaining pages
+  const totalPages = Math.ceil(total / 100);
+  for (let page = 1; page < totalPages; page++) {
     try {
-      for (const apiEx of batch) {
-        const ex = mapExerciseDbToLocal(apiEx);
-        await database.runAsync(
-          `INSERT OR REPLACE INTO exercises
-           (id, name, emoji, muscle_group, secondary_muscles, category, style_tags,
-            exclusion_tags, equipment_required, default_sets, default_reps, default_weight,
-            is_compound, difficulty, source, gif_url, instructions, target_muscles, body_parts, api_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            ex.id, ex.name, ex.emoji, ex.muscle_group, ex.secondary_muscles,
-            ex.category, ex.style_tags, ex.exclusion_tags, ex.equipment_required,
-            ex.default_sets, ex.default_reps, ex.default_weight, ex.is_compound,
-            ex.difficulty, ex.source, ex.gif_url, ex.instructions,
-            ex.target_muscles, ex.body_parts, ex.api_id,
-          ]
-        );
-        inserted++;
-      }
-      await database.execAsync('COMMIT');
+      const pageData = await fetchPagedExercises(page);
+      totalInserted += await insertExerciseBatch(database, pageData.data);
+      if (onProgress) onProgress(totalInserted, total);
     } catch (e) {
-      await database.execAsync('ROLLBACK');
-      console.error('Error in sync batch:', e);
+      // Rate limited or error — save what we have and stop
+      console.log(`Sync paused at page ${page}: ${e.message}. Saved ${totalInserted} exercises.`);
+      break;
     }
   }
 
-  await AsyncStorage.setItem('lastExerciseSync', new Date().toISOString());
-  return inserted;
+  if (totalInserted > 0) {
+    await AsyncStorage.setItem('lastExerciseSync', new Date().toISOString());
+  }
+  return totalInserted;
+}
+
+async function insertExerciseBatch(database, apiExercises) {
+  if (!apiExercises || apiExercises.length === 0) return 0;
+  let count = 0;
+  await database.execAsync('BEGIN TRANSACTION');
+  try {
+    for (const apiEx of apiExercises) {
+      const ex = mapExerciseDbToLocal(apiEx);
+      await database.runAsync(
+        `INSERT OR REPLACE INTO exercises
+         (id, name, emoji, muscle_group, secondary_muscles, category, style_tags,
+          exclusion_tags, equipment_required, default_sets, default_reps, default_weight,
+          is_compound, difficulty, source, gif_url, instructions, target_muscles, body_parts, api_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          ex.id, ex.name, ex.emoji, ex.muscle_group, ex.secondary_muscles,
+          ex.category, ex.style_tags, ex.exclusion_tags, ex.equipment_required,
+          ex.default_sets, ex.default_reps, ex.default_weight, ex.is_compound,
+          ex.difficulty, ex.source, ex.gif_url, ex.instructions,
+          ex.target_muscles, ex.body_parts, ex.api_id,
+        ]
+      );
+      count++;
+    }
+    await database.execAsync('COMMIT');
+  } catch (e) {
+    await database.execAsync('ROLLBACK');
+    console.error('Error inserting batch:', e);
+  }
+  return count;
 }
 
 export async function getExerciseCount() {

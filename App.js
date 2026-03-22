@@ -124,7 +124,7 @@ export default function App() {
       const { getDatabase: getDb } = require('./src/data/database');
       const db = await getDb();
       const apiCount = await db.getFirstAsync("SELECT COUNT(*) as count FROM exercises WHERE source = 'exercisedb'");
-      const needsSync = !apiCount || apiCount.count === 0;
+      const needsSync = !apiCount || apiCount.count < 1000; // sync until we have most exercises
 
       if (needsSync) {
         try {

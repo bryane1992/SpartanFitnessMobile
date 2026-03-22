@@ -4,7 +4,7 @@
 const BASE_URL = 'https://exercisedb-api.vercel.app/api/v1';
 const TIMEOUT = 15000;
 const PAGE_SIZE = 100;
-const DELAY_BETWEEN_REQUESTS = 1500; // 1.5s between requests to avoid 429
+const DELAY_BETWEEN_REQUESTS = 3000; // 3s between requests to avoid 429
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -66,6 +66,15 @@ export async function fetchAllExercises(onProgress) {
   }
 
   return allExercises;
+}
+
+export async function fetchPagedExercises(page) {
+  if (page > 0) await sleep(DELAY_BETWEEN_REQUESTS);
+  const result = await fetchWithRetry(`${BASE_URL}/exercises?limit=${PAGE_SIZE}&offset=${page}`);
+  return {
+    data: result.data || [],
+    total: result.metadata?.totalExercises || 1500,
+  };
 }
 
 export async function fetchExerciseById(exerciseId) {
