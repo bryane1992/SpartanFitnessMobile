@@ -120,20 +120,27 @@ export default function App() {
       // Initialize database
       await initDatabase();
 
-      // Sync ExerciseDB if needed
-      const lastSync = await AsyncStorage.getItem('lastExerciseSync');
-      const stale = !lastSync || (Date.now() - new Date(lastSync).getTime() > 30 * 24 * 60 * 60 * 1000);
-      if (stale) {
+      // Sync ExerciseDB if needed — check if we have API exercises
+      const { getDatabase: getDb } = require('./src/data/database');
+      const db = await getDb();
+      const apiCount = await db.getFirstAsync("SELECT COUNT(*) as count FROM exercises WHERE source = 'exercisedb'");
+      const needsSync = !apiCount || apiCount.count === 0;
+
+      if (needsSync) {
         try {
           setSyncStatus('Downloading exercise library...');
-          await syncExerciseDb((fetched, total) => {
+          console.log('Starting ExerciseDB sync...');
+          const synced = await syncExerciseDb((fetched, total) => {
             setSyncStatus(`Downloading exercises... ${fetched}/${total}`);
           });
+          console.log(`ExerciseDB sync complete: ${synced} exercises`);
           setSyncStatus(null);
         } catch (e) {
-          console.log('Exercise sync skipped (offline or error):', e.message);
+          console.log('Exercise sync failed:', e.message);
           setSyncStatus(null);
         }
+      } else {
+        console.log(`ExerciseDB already synced: ${apiCount.count} exercises`);
       }
 
       // Check onboarding status

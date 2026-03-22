@@ -17,12 +17,19 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
   const [exercise, setExercise] = useState(null);
   const [gifLoading, setGifLoading] = useState(true);
+  const [gifError, setGifError] = useState(false);
 
   useEffect(() => {
     if (visible && exerciseId) {
+      setGifLoading(true);
+      setGifError(false);
       loadExercise();
     }
-    return () => setExercise(null);
+    if (!visible) {
+      setExercise(null);
+      setGifLoading(true);
+      setGifError(false);
+    }
   }, [visible, exerciseId]);
 
   const loadExercise = async () => {
@@ -31,12 +38,23 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
       // If seed exercise without gif_url, try to find a matching ExerciseDB exercise by name
       if (ex && !ex.gif_url && ex.name) {
         const database = await getDatabase();
-        const match = await database.getFirstAsync(
-          "SELECT * FROM exercises WHERE gif_url IS NOT NULL AND name LIKE ? AND source = 'exercisedb' LIMIT 1",
-          [`%${ex.name.replace(/_/g, ' ')}%`]
+        // Try exact-ish match first (case insensitive)
+        const searchName = ex.name.toLowerCase().replace(/_/g, ' ');
+        let match = await database.getFirstAsync(
+          "SELECT * FROM exercises WHERE gif_url IS NOT NULL AND source = 'exercisedb' AND LOWER(name) LIKE ? LIMIT 1",
+          [`%${searchName}%`]
         );
+        // If no match, try with just the first two words
+        if (!match) {
+          const words = searchName.split(' ').slice(0, 2).join(' ');
+          if (words.length > 3) {
+            match = await database.getFirstAsync(
+              "SELECT * FROM exercises WHERE gif_url IS NOT NULL AND source = 'exercisedb' AND LOWER(name) LIKE ? LIMIT 1",
+              [`%${words}%`]
+            );
+          }
+        }
         if (match) {
-          // Merge: keep seed identity but use ExerciseDB's gif and instructions
           ex = { ...ex, gif_url: match.gif_url, instructions: match.instructions, target_muscles: match.target_muscles };
         }
       }
@@ -70,23 +88,29 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
 
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* GIF Demo */}
-            {exercise?.gif_url ? (
+            {exercise?.gif_url && !gifError ? (
               <View style={styles.gifContainer}>
                 {gifLoading ? (
-                  <ActivityIndicator size="large" color="#FF4136" style={styles.gifLoader} />
+                  <View style={styles.gifLoaderWrap}>
+                    <ActivityIndicator size="large" color="#FF4136" />
+                    <Text style={styles.gifLoadingText}>Loading demo...</Text>
+                  </View>
                 ) : null}
                 <Image
                   source={{ uri: exercise.gif_url }}
-                  style={styles.gif}
+                  style={[styles.gif, gifLoading && { position: 'absolute', opacity: 0 }]}
                   resizeMode="contain"
                   onLoad={() => setGifLoading(false)}
-                  onError={() => setGifLoading(false)}
+                  onError={() => { setGifLoading(false); setGifError(true); }}
                 />
               </View>
             ) : exercise ? (
               <View style={styles.placeholderGif}>
                 <Text style={styles.placeholderText}>{String(exercise.name).toUpperCase()}</Text>
                 <Text style={styles.placeholderSub}>{exercise.category || ''}</Text>
+                {!exercise.gif_url ? (
+                  <Text style={styles.placeholderHint}>Sync exercises in Settings for GIF demos</Text>
+                ) : null}
               </View>
             ) : (
               <View style={styles.gifContainer}>
@@ -251,9 +275,16 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 280,
   },
-  gifLoader: {
-    position: 'absolute',
-    zIndex: 1,
+  gifLoaderWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 280,
+  },
+  gifLoadingText: {
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 11,
+    fontFamily: 'monospace',
+    marginTop: 10,
   },
   placeholderGif: {
     width: '100%',
@@ -275,6 +306,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'monospace',
     marginTop: 4,
+  },
+  placeholderHint: {
+    color: '#FF4136',
+    fontSize: 10,
+    fontFamily: 'monospace',
+    marginTop: 12,
+    letterSpacing: 0.5,
   },
 
   // Chips
