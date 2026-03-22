@@ -16,6 +16,7 @@ import Settings from './src/screens/Settings';
 import Onboarding from './src/screens/Onboarding';
 import PerformanceTracker from './src/screens/PerformanceTracker';
 import ExerciseDictionary from './src/screens/ExerciseDictionary';
+import WodLibrary from './src/screens/WodLibrary';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -181,6 +182,7 @@ export default function App() {
         <Stack.Screen name="Onboarding" component={Onboarding} />
         <Stack.Screen name="Main" component={MainTabs} />
         <Stack.Screen name="ExerciseLibrary" component={ExerciseDictionary} />
+        <Stack.Screen name="WodLibrary" component={WodLibrary} />
       </Stack.Navigator>
     </NavigationContainer>
   );

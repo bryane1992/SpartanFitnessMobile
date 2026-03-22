@@ -220,6 +220,13 @@ export default function Settings({ navigation }) {
             </View>
           </TouchableOpacity>
 
+          <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('WodLibrary')}>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionLabel}>WOD Library</Text>
+              <Text style={styles.actionDesc}>Classic CrossFit WODs — track your scores</Text>
+            </View>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.actionButton} onPress={handleRegenerate}>
             <View style={styles.actionContent}>
               <Text style={styles.actionLabel}>Regenerate Plan</Text>

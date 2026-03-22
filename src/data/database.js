@@ -113,6 +113,18 @@ export async function initDatabase() {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS wod_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      wod_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      score TEXT,
+      score_type TEXT,
+      rx INTEGER DEFAULT 0,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_wod_history_wod ON wod_history(wod_id);
     CREATE INDEX IF NOT EXISTS idx_plan_days_date ON plan_days(date);
     CREATE INDEX IF NOT EXISTS idx_plan_days_plan_id ON plan_days(plan_id);
     CREATE INDEX IF NOT EXISTS idx_plan_blocks_day ON plan_blocks(plan_day_id);
@@ -680,6 +692,42 @@ export async function getExerciseCount() {
 export async function getExerciseFullById(exerciseId) {
   const database = await getDatabase();
   return database.getFirstAsync('SELECT * FROM exercises WHERE id = ?', [exerciseId]);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WOD History
+// ═══════════════════════════════════════════════════════════════
+
+export async function saveWodResult(wodId, score, scoreType, rx, notes) {
+  const database = await getDatabase();
+  await database.runAsync(
+    'INSERT INTO wod_history (wod_id, date, score, score_type, rx, notes) VALUES (?, ?, ?, ?, ?, ?)',
+    [wodId, new Date().toISOString().split('T')[0], score, scoreType, rx ? 1 : 0, notes]
+  );
+}
+
+export async function getWodHistory(wodId) {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    'SELECT * FROM wod_history WHERE wod_id = ? ORDER BY date DESC',
+    [wodId]
+  );
+}
+
+export async function getAllCompletedWodIds() {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync(
+    'SELECT DISTINCT wod_id FROM wod_history'
+  );
+  return rows.map(r => r.wod_id);
+}
+
+export async function getWodBestScore(wodId) {
+  const database = await getDatabase();
+  return database.getFirstAsync(
+    'SELECT * FROM wod_history WHERE wod_id = ? ORDER BY date DESC LIMIT 1',
+    [wodId]
+  );
 }
 
 export async function deleteAllPlanData() {
