@@ -38,14 +38,40 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
     try {
       let ex = await getExerciseFullById(exerciseId);
 
-      // If exercise already has gif_url (ExerciseDB exercise), we're good
-      if (ex?.gif_url) {
+      // If not in local DB, try fetching from API
+      if (!ex) {
+        try {
+          const response = await fetch(`${API_BASE}/exercises/${exerciseId}`);
+          if (response.ok) {
+            const result = await response.json();
+            const apiEx = result.data;
+            if (apiEx) {
+              ex = {
+                id: apiEx.exerciseId,
+                name: apiEx.name,
+                gif_url: apiEx.gifUrl,
+                muscle_group: apiEx.bodyParts?.[0] || '',
+                category: apiEx.equipments?.[0] || 'bodyweight',
+                equipment_required: JSON.stringify(apiEx.equipments || []),
+                instructions: JSON.stringify(apiEx.instructions || []),
+                target_muscles: JSON.stringify(apiEx.targetMuscles || []),
+                secondary_muscles: JSON.stringify(apiEx.secondaryMuscles || []),
+                is_compound: (apiEx.targetMuscles?.length || 0) + (apiEx.secondaryMuscles?.length || 0) >= 3 ? 1 : 0,
+                default_sets: 3, default_reps: '10', default_weight: 'BW',
+              };
+            }
+          }
+        } catch (e) { /* offline */ }
+      }
+
+      if (!ex) return;
+
+      // If exercise already has gif_url, we're good
+      if (ex.gif_url) {
         setExercise(ex);
         setGifLoading(true);
         return;
       }
-
-      if (!ex) return;
 
       // Seed exercise without gif — expand abbreviations for search
       const NAME_EXPANSIONS = {

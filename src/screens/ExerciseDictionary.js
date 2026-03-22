@@ -14,6 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { getDatabase } from '../data/database';
 import ExerciseDetailModal from '../components/ExerciseDetailModal';
 
+const API_BASE = 'https://exercisedb-api.vercel.app/api/v1';
+
 const MUSCLE_FILTERS = [
   { id: 'all', label: 'ALL' },
   { id: 'chest', label: 'CHEST' },
@@ -53,37 +55,94 @@ export default function ExerciseDictionary({ navigation }) {
   const loadExercises = useCallback(async () => {
     setLoading(true);
     try {
-      const database = await getDatabase();
-      let query = 'SELECT id, name, muscle_group, category, gif_url, is_compound FROM exercises WHERE 1=1';
-      const params = [];
+      // Build API query params
+      let apiUrl = `${API_BASE}/exercises?limit=50`;
+      let useApi = false;
 
       if (searchQuery.length >= 2) {
-        query += ' AND name LIKE ?';
-        params.push(`%${searchQuery}%`);
+        apiUrl += `&search=${encodeURIComponent(searchQuery)}`;
+        useApi = true;
       }
 
       if (muscleFilter !== 'all') {
-        query += ' AND muscle_group = ?';
-        params.push(muscleFilter);
-      }
-
-      if (equipFilter !== 'all') {
-        if (equipFilter === 'bodyweight') {
-          query += " AND (category = 'bodyweight' OR equipment_required = '[]')";
-        } else {
-          query += ' AND category = ?';
-          params.push(equipFilter);
+        // Map our muscle groups to API body parts
+        const MUSCLE_TO_BODYPART = {
+          chest: 'chest', back: 'back', arms: 'upper arms', shoulders: 'shoulders',
+          legs: 'upper legs', core: 'waist', cardio: 'cardio',
+        };
+        const bodyPart = MUSCLE_TO_BODYPART[muscleFilter];
+        if (bodyPart) {
+          apiUrl += `&bodyPart=${encodeURIComponent(bodyPart)}`;
+          useApi = true;
         }
       }
 
-      query += ' ORDER BY name ASC LIMIT 200';
+      if (equipFilter !== 'all') {
+        const EQUIP_TO_API = {
+          barbell: 'barbell', dumbbell: 'dumbbell', bodyweight: 'body weight',
+          cable: 'cable', machine: 'leverage machine', kettlebell: 'kettlebell', band: 'band',
+        };
+        const apiEquip = EQUIP_TO_API[equipFilter];
+        if (apiEquip) {
+          apiUrl += `&equipment=${encodeURIComponent(apiEquip)}`;
+          useApi = true;
+        }
+      }
 
-      const results = await database.getAllAsync(query, params);
+      let results = [];
+
+      if (useApi) {
+        // Search the API for full 1500+ exercise catalog
+        try {
+          const response = await fetch(apiUrl);
+          if (response.ok) {
+            const data = await response.json();
+            results = (data.data || []).map(ex => ({
+              id: ex.exerciseId,
+              name: ex.name,
+              muscle_group: (ex.bodyParts?.[0] || '').replace('upper arms', 'arms').replace('lower arms', 'arms').replace('upper legs', 'legs').replace('lower legs', 'legs').replace('waist', 'core'),
+              category: ex.equipments?.[0] || 'bodyweight',
+              gif_url: ex.gifUrl,
+              is_compound: (ex.targetMuscles?.length || 0) + (ex.secondaryMuscles?.length || 0) >= 3 ? 1 : 0,
+            }));
+            setTotalCount(data.metadata?.totalExercises || results.length);
+          }
+        } catch (e) {
+          // API failed, fall back to local DB
+          console.log('API search failed, using local DB:', e.message);
+        }
+      }
+
+      // Fall back to local DB if no API results or no filter active
+      if (results.length === 0) {
+        const database = await getDatabase();
+        let query = 'SELECT id, name, muscle_group, category, gif_url, is_compound FROM exercises WHERE 1=1';
+        const params = [];
+
+        if (searchQuery.length >= 2) {
+          query += ' AND name LIKE ?';
+          params.push(`%${searchQuery}%`);
+        }
+        if (muscleFilter !== 'all') {
+          query += ' AND muscle_group = ?';
+          params.push(muscleFilter);
+        }
+        if (equipFilter !== 'all') {
+          if (equipFilter === 'bodyweight') {
+            query += " AND (category = 'bodyweight' OR equipment_required = '[]')";
+          } else {
+            query += ' AND category = ?';
+            params.push(equipFilter);
+          }
+        }
+        query += ' ORDER BY name ASC LIMIT 200';
+
+        results = await database.getAllAsync(query, params);
+        const countResult = await database.getFirstAsync('SELECT COUNT(*) as count FROM exercises');
+        setTotalCount(countResult.count);
+      }
+
       setExercises(results);
-
-      // Get total count for header
-      const countResult = await database.getFirstAsync('SELECT COUNT(*) as count FROM exercises');
-      setTotalCount(countResult.count);
     } catch (e) {
       console.error('Error loading exercises:', e);
     }
