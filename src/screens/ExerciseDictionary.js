@@ -36,7 +36,7 @@ const EQUIP_FILTERS = [
   { id: 'band', label: 'BAND' },
 ];
 
-export default function ExerciseDictionary() {
+export default function ExerciseDictionary({ navigation }) {
   const [exercises, setExercises] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -113,6 +113,11 @@ export default function ExerciseDictionary() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
+        {navigation.canGoBack() ? (
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Text style={styles.backBtnText}>{'< BACK'}</Text>
+          </TouchableOpacity>
+        ) : null}
         <Text style={styles.headerTitle}>EXERCISE LIBRARY</Text>
         <Text style={styles.headerCount}>{`${totalCount} exercises`}</Text>
       </View>
@@ -213,6 +218,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 4,
+  },
+  backBtn: {
+    paddingVertical: 4,
+    paddingRight: 12,
+  },
+  backBtnText: {
+    color: '#FF4136',
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: 'monospace',
   },
   headerTitle: {
     color: '#fff',
