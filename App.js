@@ -14,6 +14,7 @@ import RunTracker from './src/screens/RunTracker';
 import ProgressionPlan from './src/screens/ProgressionPlan';
 import Settings from './src/screens/Settings';
 import Onboarding from './src/screens/Onboarding';
+import PerformanceTracker from './src/screens/PerformanceTracker';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -63,6 +64,17 @@ function MainTabs() {
           tabBarLabel: 'Track',
           tabBarIcon: ({ color }) => (
             <Text style={{ fontSize: 20, color }}>{'\uD83C\uDFC3'}</Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Stats"
+        component={PerformanceTracker}
+        options={{
+          title: 'Performance',
+          tabBarLabel: 'Stats',
+          tabBarIcon: ({ color }) => (
+            <Text style={{ fontSize: 14, color, fontWeight: '900', fontFamily: 'monospace' }}>PR</Text>
           ),
         }}
       />

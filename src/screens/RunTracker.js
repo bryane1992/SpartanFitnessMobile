@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
+import { saveRunHistory } from '../data/database';
 
 // Run type configurations with auto-segments
 const RUN_CONFIGS = {
@@ -255,12 +256,40 @@ export default function RunTracker() {
     advanceSegment();
   };
 
-  const finishRun = () => {
+  const finishRun = async () => {
+    // Capture final segment split before stopping
+    const finalSplits = [...completedSplits];
+    const seg = builtSegments[currentSegment];
+    if (seg && segmentTime > 0) {
+      finalSplits.push({
+        name: seg.name,
+        type: seg.type,
+        time: segmentTime,
+        distance: segmentDistance.current,
+        pace: segmentDistance.current > 0 ? (segmentTime / 60) / segmentDistance.current : 0,
+      });
+    }
+
     setIsRunning(false);
     setIsPaused(false);
     setRunComplete(true);
     stopGPS();
     Vibration.vibrate([0, 300, 200, 300, 200, 500]);
+
+    // Persist to database
+    try {
+      const pace = totalDistance > 0 ? (totalTime / 60) / totalDistance : 0;
+      await saveRunHistory({
+        date: new Date().toISOString().split('T')[0],
+        runType: selectedRunType,
+        totalTime,
+        totalDistance,
+        avgPace: pace,
+        splits: JSON.stringify(finalSplits),
+      });
+    } catch (e) {
+      console.error('Error saving run:', e);
+    }
   };
 
   const stopRun = () => {
@@ -372,6 +401,7 @@ export default function RunTracker() {
         <ScrollView showsVerticalScrollIndicator={false}>
           <View style={styles.completeHeader}>
             <Text style={styles.completeTitle}>RUN COMPLETE</Text>
+            <Text style={styles.runSavedText}>Run saved to history</Text>
           </View>
 
           {/* Summary stats */}
@@ -821,6 +851,13 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: 1,
+  },
+  runSavedText: {
+    color: 'rgba(1,255,112,0.5)',
+    fontSize: 11,
+    fontFamily: 'monospace',
+    marginTop: 4,
+    letterSpacing: 0.5,
   },
   summaryRow: {
     flexDirection: 'row',

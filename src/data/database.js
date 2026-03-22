@@ -99,10 +99,22 @@ export async function initDatabase() {
       snapshot TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS run_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      run_type TEXT NOT NULL,
+      total_time INTEGER NOT NULL,
+      total_distance REAL NOT NULL,
+      avg_pace REAL,
+      splits TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_plan_days_date ON plan_days(date);
     CREATE INDEX IF NOT EXISTS idx_plan_days_plan_id ON plan_days(plan_id);
     CREATE INDEX IF NOT EXISTS idx_plan_blocks_day ON plan_blocks(plan_day_id);
     CREATE INDEX IF NOT EXISTS idx_plan_exercises_block ON plan_exercises(plan_block_id);
+    CREATE INDEX IF NOT EXISTS idx_run_history_date ON run_history(date);
   `);
 
   // Seed exercises if empty
@@ -381,6 +393,162 @@ export async function swapExercise(planExerciseId, newExerciseId, oldExerciseId)
     [newExerciseId, oldExerciseId, planExerciseId]
   );
   return exercise;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Performance Tracker Queries
+// ═══════════════════════════════════════════════════════════════
+
+export async function saveRunHistory(run) {
+  const database = await getDatabase();
+  await database.runAsync(
+    `INSERT INTO run_history (date, run_type, total_time, total_distance, avg_pace, splits)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [run.date, run.runType, run.totalTime, run.totalDistance, run.avgPace, run.splits]
+  );
+}
+
+export async function getRunHistory(limit = 20) {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    'SELECT * FROM run_history ORDER BY date DESC, id DESC LIMIT ?',
+    [limit]
+  );
+}
+
+export async function getRunStats() {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync(
+    `SELECT COUNT(*) as totalRuns,
+            COALESCE(SUM(total_distance), 0) as totalDistance,
+            COALESCE(SUM(total_time), 0) as totalTime
+     FROM run_history`
+  );
+  return row;
+}
+
+export async function getPersonalRecords() {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    `SELECT e.name as exercise_name, e.id as exercise_id,
+            MAX(CAST(pe.actual_weight AS REAL)) as best_weight,
+            pd.date
+     FROM plan_exercises pe
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     JOIN exercises e ON e.id = pe.exercise_id
+     WHERE pe.is_completed = 1
+       AND pe.actual_weight IS NOT NULL
+       AND pe.actual_weight != ''
+       AND pe.actual_weight != 'BW'
+       AND CAST(pe.actual_weight AS REAL) > 0
+     GROUP BY pe.exercise_id
+     ORDER BY best_weight DESC`
+  );
+}
+
+export async function getWorkoutStats() {
+  const database = await getDatabase();
+  const workouts = await database.getFirstAsync(
+    `SELECT COUNT(*) as completed FROM plan_days WHERE is_completed = 1 AND is_rest_day = 0`
+  );
+  const total = await database.getFirstAsync(
+    `SELECT COUNT(*) as total FROM plan_days WHERE is_rest_day = 0`
+  );
+  const exercises = await database.getFirstAsync(
+    `SELECT COUNT(*) as logged FROM plan_exercises WHERE is_completed = 1`
+  );
+  return {
+    completedWorkouts: workouts.completed,
+    totalWorkouts: total.total,
+    completionRate: total.total > 0 ? Math.round((workouts.completed / total.total) * 100) : 0,
+    exercisesLogged: exercises.logged,
+  };
+}
+
+export async function getExerciseHistory(exerciseId, limit = 30) {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    `SELECT pe.actual_weight, pe.actual_reps, pe.notes, pe.sets,
+            pd.date, pd.title as workout_title
+     FROM plan_exercises pe
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     WHERE pe.exercise_id = ? AND pe.is_completed = 1
+     ORDER BY pd.date DESC
+     LIMIT ?`,
+    [exerciseId, limit]
+  );
+}
+
+export async function searchExercises(query) {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    `SELECT DISTINCT e.id, e.name, e.muscle_group, e.category
+     FROM exercises e
+     WHERE e.name LIKE ?
+     ORDER BY e.name
+     LIMIT 30`,
+    [`%${query}%`]
+  );
+}
+
+export async function getBiggestStrengthGains() {
+  const database = await getDatabase();
+  // Get exercises with 2+ logged sessions with numeric weight
+  const rows = await database.getAllAsync(
+    `SELECT pe.exercise_id, e.name as exercise_name,
+            pe.actual_weight, pd.date
+     FROM plan_exercises pe
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     JOIN exercises e ON e.id = pe.exercise_id
+     WHERE pe.is_completed = 1
+       AND pe.actual_weight IS NOT NULL
+       AND pe.actual_weight != ''
+       AND pe.actual_weight != 'BW'
+       AND CAST(pe.actual_weight AS REAL) > 0
+     ORDER BY pe.exercise_id, pd.date ASC`
+  );
+
+  // Group by exercise, calculate first vs latest weight
+  const byExercise = {};
+  for (const row of rows) {
+    if (!byExercise[row.exercise_id]) {
+      byExercise[row.exercise_id] = { name: row.exercise_name, entries: [] };
+    }
+    byExercise[row.exercise_id].entries.push({
+      weight: parseFloat(row.actual_weight),
+      date: row.date,
+    });
+  }
+
+  const gains = [];
+  for (const [id, data] of Object.entries(byExercise)) {
+    if (data.entries.length < 2) continue;
+    const first = data.entries[0].weight;
+    const latest = data.entries[data.entries.length - 1].weight;
+    const gain = latest - first;
+    if (gain > 0) {
+      gains.push({ exercise_id: id, exercise_name: data.name, gain, from: first, to: latest });
+    }
+  }
+
+  return gains.sort((a, b) => b.gain - a.gain).slice(0, 5);
+}
+
+export async function getWeeklyProgress() {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    `SELECT week_number,
+            COUNT(*) as total_days,
+            SUM(CASE WHEN is_completed = 1 THEN 1 ELSE 0 END) as completed_days,
+            phase
+     FROM plan_days
+     WHERE is_rest_day = 0
+     GROUP BY week_number
+     ORDER BY week_number ASC`
+  );
 }
 
 export async function deletePlan(planId) {
