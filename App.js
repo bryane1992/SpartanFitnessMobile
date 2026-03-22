@@ -80,13 +80,13 @@ function MainTabs() {
         }}
       />
       <Tab.Screen
-        name="Library"
-        component={ExerciseDictionary}
+        name="Progress"
+        component={ProgressionPlan}
         options={{
-          title: 'Exercise Library',
-          tabBarLabel: 'Library',
+          title: 'My Plan',
+          tabBarLabel: 'Plan',
           tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 13, color, fontWeight: '900', fontFamily: 'monospace' }}>DB</Text>
+            <Text style={{ fontSize: 14, color, fontWeight: '900', fontFamily: 'monospace' }}>WK</Text>
           ),
         }}
       />
@@ -173,7 +173,7 @@ export default function App() {
       >
         <Stack.Screen name="Onboarding" component={Onboarding} />
         <Stack.Screen name="Main" component={MainTabs} />
-        <Stack.Screen name="PlanOverview" component={ProgressionPlan} />
+        <Stack.Screen name="ExerciseLibrary" component={ExerciseDictionary} />
       </Stack.Navigator>
     </NavigationContainer>
   );

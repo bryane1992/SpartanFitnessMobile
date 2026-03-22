@@ -213,10 +213,10 @@ export default function Settings({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Actions</Text>
 
-          <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('PlanOverview')}>
+          <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('ExerciseLibrary')}>
             <View style={styles.actionContent}>
-              <Text style={styles.actionLabel}>View Plan Overview</Text>
-              <Text style={styles.actionDesc}>See your full training plan by week</Text>
+              <Text style={styles.actionLabel}>Exercise Library</Text>
+              <Text style={styles.actionDesc}>Browse 1500+ exercises with GIF demos</Text>
             </View>
           </TouchableOpacity>
 
