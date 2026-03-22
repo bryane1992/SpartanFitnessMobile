@@ -3,7 +3,7 @@
 
 const BASE_URL = 'https://exercisedb-api.vercel.app/api/v1';
 const TIMEOUT = 15000;
-const PAGE_SIZE = 200;
+const PAGE_SIZE = 100;
 const DELAY_BETWEEN_REQUESTS = 1500; // 1.5s between requests to avoid 429
 
 function sleep(ms) {
