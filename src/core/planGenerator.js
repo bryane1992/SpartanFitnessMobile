@@ -3,7 +3,7 @@
 
 import { calculatePhases, getPhaseForWeek } from './phaseCalculator';
 import { calculateWeight, calculateSetsReps, calculateRunParams, getBodyCompParams } from './progressionRules';
-import { getExercisesByFilter, savePlanDay, savePlanBlock, savePlanExercise, getDatabase } from '../data/database';
+import { getExercisesByFilter, savePlanDay, savePlanBlock, savePlanExercise, getDatabase, updateBlockRunType } from '../data/database';
 
 // Day templates define the structure of each workout type
 const DAY_TEMPLATES = {
@@ -260,7 +260,10 @@ export async function generatePlan(userProfile) {
         // Select exercises for this block
         let exercises;
         if (blockTemplate.isRun) {
-          exercises = generateRunExercises(week, phase.phase, totalWeeks, exercisePool);
+          const runType = pickRunType(templateKey, week, phase.phase, userProfile.experience);
+          // Store the run type in the block type field for RunTracker auto-match
+          await updateBlockRunType(blockId, runType);
+          exercises = generateRunExercises(week, phase.phase, totalWeeks, exercisePool, runType, userProfile.experience);
         } else if (blockTemplate.isWarmup) {
           exercises = selectWarmupExercises(blockTemplate, exercisePool);
         } else {
@@ -394,49 +397,130 @@ function selectWarmupExercises(blockTemplate, pool) {
 
   // Shuffle and pick
   const shuffled = available.sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, blockTemplate.exerciseCount).map(ex => ({
-    id: ex.id,
-    sets: ex.default_sets?.toString() || '1',
-    reps: ex.default_reps || '10',
-    weight: ex.default_weight || 'BW',
-    rest: null,
-    notes: null,
-  }));
+  return shuffled.slice(0, blockTemplate.exerciseCount).map(ex => {
+    const s = ex.default_sets?.toString() || '1';
+    const r = ex.default_reps || '10';
+    return {
+      id: ex.id,
+      sets: `${s} x ${r}`,
+      reps: r,
+      weight: ex.default_weight || 'BW',
+      rest: null,
+      notes: null,
+    };
+  });
 }
 
-function generateRunExercises(weekNumber, phase, totalWeeks, pool) {
+// Pick a run type based on template, phase, week, and experience
+function pickRunType(templateKey, weekNumber, phase, experience) {
+  // Long run days always get LONG_RUN or EASY
+  if (templateKey === 'long_run') {
+    if (phase === 'race_prep') return 'EASY';
+    return 'LONG_RUN';
+  }
+
+  // Short run days: vary by phase and week for variety
+  const RUN_ROTATION = {
+    foundation: ['EASY', 'INTERVALS', 'EASY', 'FARTLEK'],
+    build: ['TEMPO', 'INTERVALS', 'FARTLEK', 'TEMPO'],
+    peak: ['INTERVALS', 'RACE_PACE', 'TEMPO', 'INTERVALS'],
+    race_prep: ['EASY', 'TEMPO', 'EASY', 'EASY'],
+  };
+
+  const rotation = RUN_ROTATION[phase] || RUN_ROTATION.foundation;
+  const idx = (weekNumber - 1) % rotation.length;
+  let runType = rotation[idx];
+
+  // Beginners get easier runs in early phases
+  if (experience === 'beginner' && phase === 'foundation') {
+    runType = 'EASY';
+  }
+
+  return runType;
+}
+
+function generateRunExercises(weekNumber, phase, totalWeeks, pool, runType, experience) {
   const runParams = calculateRunParams(weekNumber, phase, totalWeeks);
+  const expMultiplier = experience === 'beginner' ? 0.7 :
+                        experience === 'intermediate' ? 0.85 :
+                        experience === 'advanced' ? 1.0 : 1.1;
+
+  // Scale distance by experience
+  const rawDist = parseFloat(runParams.distance);
+  const scaledDist = Math.round(rawDist * expMultiplier * 10) / 10;
+  const distance = `${scaledDist} mi`;
+
+  const longRunMin = `${Math.round(scaledDist * 9)}-${Math.round(scaledDist * 11)} min`;
 
   const runExercises = [
-    { id: 'easy_jog', sets: '1', reps: '5 min', weight: 'Build pace', rest: null, notes: 'Warm into it' },
+    { id: 'easy_jog', sets: '1 x 5 min', reps: '5 min', weight: 'Build pace', rest: null, notes: 'Warm into it' },
   ];
 
-  if (phase === 'foundation') {
-    runExercises.push(
-      { id: 'interval_run', sets: `${runParams.intervals}`, reps: '2 min hard / 1 min easy', weight: '80-85% effort', rest: null, notes: `Target: ${runParams.distance}` },
-    );
-  } else if (phase === 'build') {
-    runExercises.push(
-      { id: 'tempo_run', sets: '1', reps: '20-25 min', weight: runParams.paceType + ' pace', rest: null, notes: `Target: ${runParams.distance}` },
-    );
-  } else if (phase === 'peak') {
-    runExercises.push(
-      { id: 'interval_run', sets: `${runParams.intervals}`, reps: '90s hard / 60s easy', weight: 'Race pace', rest: null, notes: `Target: ${runParams.distance}` },
-    );
-  } else {
-    runExercises.push(
-      { id: 'easy_run', sets: '1', reps: '20-25 min', weight: 'Easy taper pace', rest: null, notes: `Target: ${runParams.distance}` },
-    );
+  const scaledIntervals = Math.max(2, Math.round(runParams.intervals * expMultiplier));
+
+  switch (runType) {
+    case 'INTERVALS':
+      runExercises.push({
+        id: 'interval_run',
+        sets: `${scaledIntervals} rounds`,
+        reps: phase === 'peak' ? '90s hard / 60s easy' : '2 min hard / 1 min easy',
+        weight: phase === 'peak' ? 'Race pace' : '80-85% effort',
+        rest: null, notes: `Target: ${distance}`,
+      });
+      break;
+    case 'TEMPO':
+      runExercises.push({
+        id: 'tempo_run', sets: '20-25 min',
+        reps: '20-25 min',
+        weight: runParams.paceType + ' pace',
+        rest: null, notes: `Target: ${distance}`,
+      });
+      break;
+    case 'FARTLEK':
+      runExercises.push({
+        id: 'tempo_run', sets: '25 min variable',
+        reps: '25 min variable',
+        weight: 'Alternate fast/easy every 2-3 min',
+        rest: null, notes: `Target: ${distance}`,
+      });
+      break;
+    case 'LONG_RUN':
+      runExercises.push({
+        id: 'easy_run', sets: longRunMin,
+        reps: longRunMin,
+        weight: 'Conversational pace',
+        rest: null, notes: `Target: ${distance}`,
+      });
+      break;
+    case 'RACE_PACE':
+      runExercises.push({
+        id: 'interval_run', sets: '25 min',
+        reps: '25 min',
+        weight: 'Goal race pace',
+        rest: null, notes: `Target: ${distance} at race effort`,
+      });
+      break;
+    case 'EASY':
+    default:
+      runExercises.push({
+        id: 'easy_run', sets: '20-30 min',
+        reps: '20-30 min',
+        weight: 'Easy conversational pace',
+        rest: null, notes: `Target: ${distance}`,
+      });
+      break;
   }
 
   runExercises.push(
-    { id: 'easy_jog', sets: '1', reps: '5 min', weight: 'Cool down', rest: null, notes: 'Easy jog to finish' },
+    { id: 'easy_jog', sets: '1 x 5 min', reps: '5 min', weight: 'Cool down', rest: null, notes: 'Easy jog to finish' },
   );
 
-  // Add a 4th exercise if pool has strides
-  const strides = pool.all.find(e => e.id === 'strides');
-  if (strides) {
-    runExercises.splice(1, 0, { id: 'strides', sets: '3', reps: '50m', weight: '80% speed', rest: null, notes: 'Pre-run strides' });
+  // Add strides for non-easy runs
+  if (runType !== 'EASY' && runType !== 'LONG_RUN') {
+    const strides = pool.all.find(e => e.id === 'strides');
+    if (strides) {
+      runExercises.splice(1, 0, { id: 'strides', sets: '3 x 50m', reps: '50m', weight: '80% speed', rest: null, notes: 'Pre-run strides' });
+    }
   }
 
   return runExercises;
@@ -453,8 +537,9 @@ function generateUUID() {
 }
 
 function addDays(dateStr, days) {
-  const date = new Date(dateStr);
-  date.setDate(date.getDate() + days);
+  // Use UTC noon to avoid timezone boundary issues
+  const date = new Date(dateStr + 'T12:00:00Z');
+  date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().split('T')[0];
 }
 
@@ -467,5 +552,9 @@ function getNextMonday() {
   const day = now.getDay(); // 0=Sun, 1=Mon, ...
   const daysUntilMonday = day === 0 ? 1 : day === 1 ? 0 : 8 - day;
   now.setDate(now.getDate() + daysUntilMonday);
-  return now.toISOString().split('T')[0];
+  // Format local date directly to avoid UTC shift
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }

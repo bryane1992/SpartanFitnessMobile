@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
-import { saveRunHistory } from '../data/database';
+import { useIsFocused } from '@react-navigation/native';
+import { saveRunHistory, getRunTypeForDate } from '../data/database';
 
 // Run type configurations with auto-segments
 const RUN_CONFIGS = {
@@ -42,13 +43,15 @@ const RUN_CONFIGS = {
   LONG_RUN: {
     name: 'LONG RUN',
     segments: [
-      { name: 'Steady Run', duration: 3600, type: 'steady' },
+      { name: 'Warm-up', duration: 300, type: 'easy' },
+      { name: 'Steady Run', duration: 2400, type: 'steady' },
+      { name: 'Cool-down', duration: 300, type: 'easy' },
     ],
   },
   EASY: {
     name: 'EASY RUN',
     segments: [
-      { name: 'Easy Run', duration: 1800, type: 'easy' },
+      { name: 'Easy Run', duration: 1500, type: 'easy' },
     ],
   },
   RACE_PACE: {
@@ -70,11 +73,15 @@ const SEGMENT_COLORS = {
   steady: '#0074D9',
 };
 
-export default function RunTracker() {
+export default function RunTracker({ route }) {
+  const isFocused = useIsFocused();
+  const passedDate = route?.params?.date;
+
   // Run config state
   const [selectedRunType, setSelectedRunType] = useState('INTERVALS');
   const [rounds, setRounds] = useState(4);
   const [builtSegments, setBuiltSegments] = useState([]);
+  const [todayRunType, setTodayRunType] = useState(null);
 
   // Tracking state
   const [isRunning, setIsRunning] = useState(false);
@@ -92,6 +99,23 @@ export default function RunTracker() {
   const lastPosition = useRef(null);
   const segmentDistance = useRef(0);
   const timerRef = useRef(null);
+
+  // Auto-detect planned run type for the given date (or today)
+  useEffect(() => {
+    if (!isFocused) return;
+    (async () => {
+      try {
+        const date = passedDate || new Date().toISOString().split('T')[0];
+        const runType = await getRunTypeForDate(date);
+        if (runType && RUN_CONFIGS[runType]) {
+          setSelectedRunType(runType);
+          setTodayRunType(runType);
+        }
+      } catch (e) {
+        console.error('Error loading run type:', e);
+      }
+    })();
+  }, [isFocused, passedDate]);
 
   // Build segment list when run type or rounds change
   useEffect(() => {
@@ -331,18 +355,28 @@ export default function RunTracker() {
           {/* Run type selector */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>RUN TYPE</Text>
+            {todayRunType ? (
+              <Text style={styles.todayPlanHint}>{`TODAY'S PLAN: ${RUN_CONFIGS[todayRunType]?.name || todayRunType}`}</Text>
+            ) : null}
             {Object.entries(RUN_CONFIGS).map(([key, config]) => (
               <TouchableOpacity
                 key={key}
-                style={[styles.typeCard, selectedRunType === key && styles.typeCardSelected]}
+                style={[
+                  styles.typeCard,
+                  selectedRunType === key && styles.typeCardSelected,
+                  todayRunType === key && selectedRunType !== key && styles.typeCardPlanned,
+                ]}
                 onPress={() => setSelectedRunType(key)}
               >
-                <Text style={[styles.typeName, selectedRunType === key && styles.typeNameSelected]}>
-                  {config.name}
-                </Text>
-                <Text style={styles.typeDesc}>
-                  {config.segments.length} segment{config.segments.length > 1 ? 's' : ''}
-                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.typeName, selectedRunType === key && styles.typeNameSelected]}>
+                    {config.name}
+                  </Text>
+                  <Text style={styles.typeDesc}>
+                    {config.segments.length} segment{config.segments.length > 1 ? 's' : ''}
+                  </Text>
+                </View>
+                {todayRunType === key ? <Text style={styles.plannedBadge}>PLANNED</Text> : null}
               </TouchableOpacity>
             ))}
           </View>
@@ -607,6 +641,29 @@ const styles = StyleSheet.create({
   typeCardSelected: {
     borderColor: '#FF4136',
     backgroundColor: 'rgba(255,65,54,0.08)',
+  },
+  typeCardPlanned: {
+    borderColor: 'rgba(1,255,112,0.3)',
+  },
+  todayPlanHint: {
+    color: '#01FF70',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+    fontFamily: 'monospace',
+    marginBottom: 8,
+  },
+  plannedBadge: {
+    color: '#01FF70',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    fontFamily: 'monospace',
+    backgroundColor: 'rgba(1,255,112,0.1)',
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
   },
   typeName: {
     color: '#fff',

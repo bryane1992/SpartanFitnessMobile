@@ -105,7 +105,7 @@ export default function Onboarding({ navigation }) {
   const [workoutStyles, setWorkoutStyles] = useState([]);
   // Step 7: Exclusions + Body Comp
   const [exclusions, setExclusions] = useState([]);
-  const [bodyCompGoal, setBodyCompGoal] = useState(null);
+  const [bodyCompGoals, setBodyCompGoals] = useState([]);
 
   // Loading state for plan generation
   const [isGenerating, setIsGenerating] = useState(false);
@@ -133,6 +133,14 @@ export default function Onboarding({ navigation }) {
       setWorkoutStyles(workoutStyles.filter(s => s !== id));
     } else {
       setWorkoutStyles([...workoutStyles, id]);
+    }
+  };
+
+  const toggleBodyCompGoal = (id) => {
+    if (bodyCompGoals.includes(id)) {
+      setBodyCompGoals(bodyCompGoals.filter(g => g !== id));
+    } else {
+      setBodyCompGoals([...bodyCompGoals, id]);
     }
   };
 
@@ -172,7 +180,8 @@ export default function Onboarding({ navigation }) {
         workoutStyles: workoutStyles,
         workoutStyle: workoutStyles.length === 1 ? workoutStyles[0] : 'hybrid',
         exclusions: exclusions,
-        bodyCompGoal: bodyCompGoal,
+        bodyCompGoals: bodyCompGoals,
+        bodyCompGoal: bodyCompGoals[0] || 'maintain',
         createdAt: new Date().toISOString(),
         onboardingVersion: 2,
       };
@@ -520,19 +529,20 @@ export default function Onboarding({ navigation }) {
         ))}
 
         {/* Body Comp */}
-        <Text style={[styles.sectionLabel, { marginTop: 25 }]}>Body composition goal?</Text>
+        <Text style={[styles.sectionLabel, { marginTop: 25 }]}>Body composition goals?</Text>
+        <Text style={styles.sectionDesc}>Select one or more</Text>
 
         {BODY_COMP_GOALS.map(bcg => (
           <TouchableOpacity
             key={bcg.id}
-            style={[styles.optionCard, bodyCompGoal === bcg.id && styles.optionCardSelected]}
-            onPress={() => setBodyCompGoal(bcg.id)}
+            style={[styles.optionCard, bodyCompGoals.includes(bcg.id) && styles.optionCardSelected]}
+            onPress={() => toggleBodyCompGoal(bcg.id)}
           >
             <View style={styles.optionContent}>
-              <Text style={[styles.optionLabel, bodyCompGoal === bcg.id && styles.optionLabelSelected]}>{bcg.label}</Text>
+              <Text style={[styles.optionLabel, bodyCompGoals.includes(bcg.id) && styles.optionLabelSelected]}>{bcg.label}</Text>
               <Text style={styles.optionDesc}>{bcg.desc}</Text>
             </View>
-            {bodyCompGoal === bcg.id && <View style={styles.checkMark} />}
+            {bodyCompGoals.includes(bcg.id) && <View style={styles.checkMark} />}
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -542,8 +552,8 @@ export default function Onboarding({ navigation }) {
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.buildButton, !bodyCompGoal && styles.nextButtonDisabled]}
-          disabled={!bodyCompGoal}
+          style={[styles.buildButton, bodyCompGoals.length === 0 && styles.nextButtonDisabled]}
+          disabled={bodyCompGoals.length === 0}
           onPress={completeOnboarding}
         >
           <Text style={styles.buildButtonText}>BUILD MY PLAN</Text>
@@ -561,7 +571,7 @@ export default function Onboarding({ navigation }) {
         <Text style={styles.generatingDetail}>Selecting exercises for your style</Text>
         <Text style={styles.generatingDetail}>Calculating progression & weights</Text>
         <Text style={styles.generatingDetail}>Planning {daysPerWeek} days/week to your event</Text>
-        <Text style={styles.generatingDetail}>Optimizing for {bodyCompGoal} goals</Text>
+        <Text style={styles.generatingDetail}>Optimizing for {bodyCompGoals.join(' + ')} goals</Text>
       </View>
     </View>
   );

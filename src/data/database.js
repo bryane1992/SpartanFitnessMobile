@@ -551,6 +551,34 @@ export async function getWeeklyProgress() {
   );
 }
 
+export async function updateBlockRunType(blockId, runType) {
+  const database = await getDatabase();
+  await database.runAsync(
+    'UPDATE plan_blocks SET type = ? WHERE id = ?',
+    [runType, blockId]
+  );
+}
+
+export async function getRunTypeForDate(date) {
+  const database = await getDatabase();
+  const block = await database.getFirstAsync(
+    `SELECT pb.type as run_type
+     FROM plan_blocks pb
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     WHERE pd.date = ? AND pb.has_gps = 1
+     LIMIT 1`,
+    [date]
+  );
+  return block ? block.run_type : null;
+}
+
+export async function deleteAllPlanData() {
+  const database = await getDatabase();
+  await database.runAsync('DELETE FROM plan_exercises');
+  await database.runAsync('DELETE FROM plan_blocks');
+  await database.runAsync('DELETE FROM plan_days');
+}
+
 export async function deletePlan(planId) {
   const database = await getDatabase();
   // Get all day IDs for this plan

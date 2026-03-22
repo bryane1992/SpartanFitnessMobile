@@ -164,7 +164,7 @@ export default function TodayWorkout({ navigation }) {
                   {hasGps ? (
                     <TouchableOpacity
                       style={styles.trackRunBtn}
-                      onPress={() => navigation.navigate('Run')}
+                      onPress={() => navigation.navigate('Run', { date: selectedDate })}
                     >
                       <Text style={styles.trackRunText}>TRACK RUN</Text>
                     </TouchableOpacity>

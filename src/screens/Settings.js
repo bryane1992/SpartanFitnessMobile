@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import useWorkoutStore from '../store/useWorkoutStore';
-import { initDatabase } from '../data/database';
+import { initDatabase, deleteAllPlanData } from '../data/database';
 
 const STYLE_LABELS = {
   crossfit: 'CrossFit',
@@ -88,6 +88,8 @@ export default function Settings({ navigation }) {
         {
           text: "Let's go",
           onPress: async () => {
+            // Wipe all plan data from database
+            await deleteAllPlanData();
             await AsyncStorage.removeItem('onboardingComplete');
             await AsyncStorage.removeItem('userProfile');
             await AsyncStorage.removeItem('planMeta');
@@ -126,7 +128,11 @@ export default function Settings({ navigation }) {
             <View style={styles.profileCard}>
               <ProfileRow label="Goal" value={GOAL_LABELS[profile.goal] || profile.goal} />
               <ProfileRow label="Style" value={STYLE_LABELS[profile.workoutStyle] || profile.workoutStyle} />
-              <ProfileRow label="Body Goal" value={BODY_COMP_LABELS[profile.bodyCompGoal] || profile.bodyCompGoal} />
+              <ProfileRow label="Body Goal" value={
+                profile.bodyCompGoals
+                  ? profile.bodyCompGoals.map(g => BODY_COMP_LABELS[g] || g).join(', ')
+                  : (BODY_COMP_LABELS[profile.bodyCompGoal] || profile.bodyCompGoal || '')
+              } />
               <ProfileRow label="Experience" value={profile.experience?.charAt(0).toUpperCase() + profile.experience?.slice(1)} />
               <ProfileRow label="Days/Week" value={`${profile.trainingDaysPerWeek} days`} />
               <ProfileRow label="Equipment" value={profile.equipment?.join(', ')} />
