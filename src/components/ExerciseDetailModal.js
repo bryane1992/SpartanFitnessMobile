@@ -63,24 +63,43 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
         [`%${searchName}%`]
       );
 
-      // If no local match, try the API directly (single request)
+      // If no local match, try the API directly
       if (!match) {
         try {
           const encoded = encodeURIComponent(searchName.split(' ').slice(0, 3).join(' '));
-          const response = await fetch(`${API_BASE}/exercises?search=${encoded}&limit=1`);
+          const response = await fetch(`${API_BASE}/exercises?search=${encoded}&limit=10`);
           if (response.ok) {
             const result = await response.json();
-            if (result.data?.[0]?.gifUrl) {
-              const apiEx = result.data[0];
-              match = {
-                gif_url: apiEx.gifUrl,
-                instructions: JSON.stringify(apiEx.instructions || []),
-                target_muscles: JSON.stringify(apiEx.targetMuscles || []),
-              };
+            if (result.data?.length > 0) {
+              // Score results: prefer shortest name that contains all our search words
+              const searchWords = searchName.toLowerCase().split(' ').filter(w => w.length > 2);
+              let bestMatch = null;
+              let bestScore = -1;
+
+              for (const apiEx of result.data) {
+                if (!apiEx.gifUrl) continue;
+                const apiName = apiEx.name.toLowerCase();
+                // Count how many of our search words appear in the API name
+                const wordMatches = searchWords.filter(w => apiName.includes(w)).length;
+                // Prefer more word matches, then shorter names (more specific)
+                const score = (wordMatches * 100) - apiName.length;
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestMatch = apiEx;
+                }
+              }
+
+              if (bestMatch) {
+                match = {
+                  gif_url: bestMatch.gifUrl,
+                  instructions: JSON.stringify(bestMatch.instructions || []),
+                  target_muscles: JSON.stringify(bestMatch.targetMuscles || []),
+                };
+              }
             }
           }
         } catch (e) {
-          // Offline or rate limited — that's OK, show placeholder
+          // Offline or rate limited — show placeholder
         }
       }
 
