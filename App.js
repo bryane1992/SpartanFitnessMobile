@@ -5,7 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { initDatabase } from './src/data/database';
+import { initDatabase, syncExerciseDb } from './src/data/database';
 import useWorkoutStore from './src/store/useWorkoutStore';
 
 // Import screens
@@ -107,6 +107,7 @@ function MainTabs() {
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasOnboarded, setHasOnboarded] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(null);
   const loadPlanMeta = useWorkoutStore(s => s.loadPlanMeta);
 
   useEffect(() => {
@@ -117,6 +118,22 @@ export default function App() {
     try {
       // Initialize database
       await initDatabase();
+
+      // Sync ExerciseDB if needed
+      const lastSync = await AsyncStorage.getItem('lastExerciseSync');
+      const stale = !lastSync || (Date.now() - new Date(lastSync).getTime() > 30 * 24 * 60 * 60 * 1000);
+      if (stale) {
+        try {
+          setSyncStatus('Downloading exercise library...');
+          await syncExerciseDb((fetched, total) => {
+            setSyncStatus(`Downloading exercises... ${fetched}/${total}`);
+          });
+          setSyncStatus(null);
+        } catch (e) {
+          console.log('Exercise sync skipped (offline or error):', e.message);
+          setSyncStatus(null);
+        }
+      }
 
       // Check onboarding status
       const onboardingComplete = await AsyncStorage.getItem('onboardingComplete');
@@ -139,6 +156,9 @@ export default function App() {
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingTitle}>SPARTAN FITNESS</Text>
         <ActivityIndicator size="large" color="#FF4136" style={{ marginTop: 20 }} />
+        {syncStatus ? (
+          <Text style={styles.syncText}>{syncStatus}</Text>
+        ) : null}
       </View>
     );
   }
@@ -169,5 +189,11 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: 3,
+  },
+  syncText: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12,
+    fontFamily: 'monospace',
+    marginTop: 12,
   },
 });

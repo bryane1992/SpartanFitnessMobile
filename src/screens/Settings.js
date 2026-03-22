@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import useWorkoutStore from '../store/useWorkoutStore';
-import { initDatabase, deleteAllPlanData } from '../data/database';
+import { initDatabase, deleteAllPlanData, syncExerciseDb, getExerciseCount } from '../data/database';
 
 const STYLE_LABELS = {
   crossfit: 'CrossFit',
@@ -39,10 +39,15 @@ const GOAL_LABELS = {
 export default function Settings({ navigation }) {
   const [profile, setProfile] = useState(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [exerciseCount, setExerciseCount] = useState(0);
+  const [lastSync, setLastSync] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState('');
   const { generateNewPlan, totalWeeks, planPhases, currentPlanId } = useWorkoutStore();
 
   useEffect(() => {
     loadProfile();
+    loadLibraryInfo();
   }, []);
 
   const loadProfile = async () => {
@@ -52,6 +57,36 @@ export default function Settings({ navigation }) {
     } catch (e) {
       console.error('Error loading profile:', e);
     }
+  };
+
+  const loadLibraryInfo = async () => {
+    try {
+      const count = await getExerciseCount();
+      setExerciseCount(count);
+      const syncDate = await AsyncStorage.getItem('lastExerciseSync');
+      setLastSync(syncDate);
+    } catch (e) {
+      console.error('Error loading library info:', e);
+    }
+  };
+
+  const handleSyncLibrary = async () => {
+    setIsSyncing(true);
+    setSyncProgress('Starting...');
+    try {
+      const count = await syncExerciseDb((fetched, total) => {
+        setSyncProgress(`${fetched}/${total} exercises`);
+      });
+      setSyncProgress(`Done! ${count} exercises synced`);
+      await loadLibraryInfo();
+    } catch (e) {
+      setSyncProgress('Sync failed — check connection');
+      console.error('Sync error:', e);
+    }
+    setTimeout(() => {
+      setIsSyncing(false);
+      setSyncProgress('');
+    }, 2000);
   };
 
   const handleRegenerate = () => {
@@ -154,6 +189,25 @@ export default function Settings({ navigation }) {
             </View>
           </View>
         )}
+
+        {/* Exercise Library */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Exercise Library</Text>
+          <View style={styles.profileCard}>
+            <ProfileRow label="Exercises" value={`${exerciseCount}`} />
+            <ProfileRow label="Last Sync" value={lastSync ? new Date(lastSync).toLocaleDateString() : 'Never'} />
+          </View>
+          <TouchableOpacity
+            style={[styles.actionButton, { marginTop: 8 }]}
+            onPress={handleSyncLibrary}
+            disabled={isSyncing}
+          >
+            <View style={styles.actionContent}>
+              <Text style={styles.actionLabel}>{isSyncing ? syncProgress : 'Refresh Library'}</Text>
+              <Text style={styles.actionDesc}>Download latest exercises with GIF demos</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
 
         {/* Actions */}
         <View style={styles.section}>

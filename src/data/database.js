@@ -1,5 +1,8 @@
 import * as SQLite from 'expo-sqlite';
 import { seedExercises, seedAlternatives } from './exerciseSeed';
+import { fetchAllExercises } from './exerciseApi';
+import { mapExerciseDbToLocal } from './taxonomyMap';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 let db = null;
 
@@ -121,6 +124,19 @@ export async function initDatabase() {
   const count = await database.getFirstAsync('SELECT COUNT(*) as count FROM exercises');
   if (count.count === 0) {
     await seedExerciseData(database);
+  }
+
+  // Schema migration: add ExerciseDB columns (idempotent)
+  const newColumns = [
+    "ALTER TABLE exercises ADD COLUMN source TEXT DEFAULT 'seed'",
+    "ALTER TABLE exercises ADD COLUMN gif_url TEXT",
+    "ALTER TABLE exercises ADD COLUMN instructions TEXT",
+    "ALTER TABLE exercises ADD COLUMN target_muscles TEXT",
+    "ALTER TABLE exercises ADD COLUMN body_parts TEXT",
+    "ALTER TABLE exercises ADD COLUMN api_id TEXT",
+  ];
+  for (const sql of newColumns) {
+    try { await database.runAsync(sql); } catch (e) { /* column already exists */ }
   }
 
   return database;
@@ -252,7 +268,7 @@ export async function getAlternatives(exerciseId, userProfile) {
   const exclusions = userProfile?.exclusions || [];
   const equipment = userProfile?.equipment || [];
 
-  return alts.filter(ex => {
+  let filtered = alts.filter(ex => {
     const tags = JSON.parse(ex.exclusion_tags || '[]');
     if (tags.some(t => exclusions.includes(t))) return false;
 
@@ -268,6 +284,22 @@ export async function getAlternatives(exerciseId, userProfile) {
     const userEquip = equipment.flatMap(e => equipmentMap[e] || []);
     return required.every(r => userEquip.includes(r));
   });
+
+  // If too few alternatives, supplement with dynamic query by muscle group
+  if (filtered.length < 3) {
+    const exercise = await database.getFirstAsync('SELECT muscle_group FROM exercises WHERE id = ?', [exerciseId]);
+    if (exercise) {
+      const existingIds = filtered.map(e => e.id).concat([exerciseId]);
+      const placeholders = existingIds.map(() => '?').join(',');
+      const dynamic = await database.getAllAsync(
+        `SELECT * FROM exercises WHERE muscle_group = ? AND id NOT IN (${placeholders}) ORDER BY RANDOM() LIMIT 15`,
+        [exercise.muscle_group, ...existingIds]
+      );
+      filtered = filtered.concat(dynamic);
+    }
+  }
+
+  return filtered;
 }
 
 // ─── Plan CRUD ───────────────────────────────────────────────
@@ -570,6 +602,60 @@ export async function getRunTypeForDate(date) {
     [date]
   );
   return block ? block.run_type : null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ExerciseDB Sync
+// ═══════════════════════════════════════════════════════════════
+
+export async function syncExerciseDb(onProgress) {
+  const database = await getDatabase();
+  const apiExercises = await fetchAllExercises(onProgress);
+  let inserted = 0;
+
+  // Batch insert in transactions of 50
+  for (let i = 0; i < apiExercises.length; i += 50) {
+    const batch = apiExercises.slice(i, i + 50);
+    await database.execAsync('BEGIN TRANSACTION');
+    try {
+      for (const apiEx of batch) {
+        const ex = mapExerciseDbToLocal(apiEx);
+        await database.runAsync(
+          `INSERT OR REPLACE INTO exercises
+           (id, name, emoji, muscle_group, secondary_muscles, category, style_tags,
+            exclusion_tags, equipment_required, default_sets, default_reps, default_weight,
+            is_compound, difficulty, source, gif_url, instructions, target_muscles, body_parts, api_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            ex.id, ex.name, ex.emoji, ex.muscle_group, ex.secondary_muscles,
+            ex.category, ex.style_tags, ex.exclusion_tags, ex.equipment_required,
+            ex.default_sets, ex.default_reps, ex.default_weight, ex.is_compound,
+            ex.difficulty, ex.source, ex.gif_url, ex.instructions,
+            ex.target_muscles, ex.body_parts, ex.api_id,
+          ]
+        );
+        inserted++;
+      }
+      await database.execAsync('COMMIT');
+    } catch (e) {
+      await database.execAsync('ROLLBACK');
+      console.error('Error in sync batch:', e);
+    }
+  }
+
+  await AsyncStorage.setItem('lastExerciseSync', new Date().toISOString());
+  return inserted;
+}
+
+export async function getExerciseCount() {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync('SELECT COUNT(*) as count FROM exercises');
+  return row.count;
+}
+
+export async function getExerciseFullById(exerciseId) {
+  const database = await getDatabase();
+  return database.getFirstAsync('SELECT * FROM exercises WHERE id = ?', [exerciseId]);
 }
 
 export async function deleteAllPlanData() {

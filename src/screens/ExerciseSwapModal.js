@@ -11,6 +11,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAlternatives, getExerciseById } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
+import ExerciseDetailModal from '../components/ExerciseDetailModal';
 
 const CATEGORY_LABELS = {
   barbell: 'Barbell',
@@ -28,6 +29,7 @@ export default function ExerciseSwapModal({ visible, exerciseId, planExerciseId,
   const [currentExercise, setCurrentExercise] = useState(null);
   const [alternatives, setAlternatives] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [detailId, setDetailId] = useState(null);
   const swapExercise = useWorkoutStore(s => s.swapExercise);
 
   useEffect(() => {
@@ -58,16 +60,18 @@ export default function ExerciseSwapModal({ visible, exerciseId, planExerciseId,
   };
 
   const renderAlternative = ({ item }) => (
-    <TouchableOpacity style={styles.altCard} onPress={() => handleSwap(item.id)}>
-      <View style={styles.altContent}>
-        <Text style={styles.altName}>{item.name}</Text>
+    <View style={styles.altCard}>
+      <TouchableOpacity style={styles.infoBtn} onPress={() => setDetailId(item.id)}>
+        <Text style={styles.infoBtnText}>i</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.altContent} onPress={() => handleSwap(item.id)}>
+        <Text style={styles.altName}>{String(item.name)}</Text>
         <Text style={styles.altDetails}>
-          {item.category} {'\u2022'} {item.muscle_group}
-          {item.is_compound ? ' \u2022 Compound' : ''}
+          {`${item.category || ''} \u2022 ${item.muscle_group || ''}${item.is_compound ? ' \u2022 Compound' : ''}`}
         </Text>
-      </View>
+      </TouchableOpacity>
       <Text style={styles.swapIcon}>{'\u2192'}</Text>
-    </TouchableOpacity>
+    </View>
   );
 
   return (
@@ -124,6 +128,12 @@ export default function ExerciseSwapModal({ visible, exerciseId, planExerciseId,
           )}
         </View>
       </View>
+
+      <ExerciseDetailModal
+        visible={!!detailId}
+        exerciseId={detailId}
+        onClose={() => setDetailId(null)}
+      />
     </Modal>
   );
 }
@@ -224,6 +234,22 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 11,
     marginTop: 2,
+  },
+  infoBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  infoBtnText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 13,
+    fontWeight: '700',
+    fontStyle: 'italic',
+    fontFamily: 'monospace',
   },
   swapIcon: {
     fontSize: 18,

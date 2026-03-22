@@ -354,6 +354,8 @@ function selectExercises(blockTemplate, pool, recentlyUsed, weekNumber, phase, u
     if (ex.is_compound && (phase === 'build' || phase === 'peak')) score += 5;
     // Spartan-specific bonus
     if (ex.category === 'bodyweight' && ex.muscle_group === 'full_body') score += 3;
+    // Prefer curated seed exercises over generic ExerciseDB ones
+    if (ex.source === 'seed' || !ex.source) score += 8;
     return { exercise: ex, score };
   });
 

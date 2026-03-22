@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import useWorkoutStore from '../store/useWorkoutStore';
 import ExerciseSwapModal from './ExerciseSwapModal';
+import ExerciseDetailModal from '../components/ExerciseDetailModal';
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -29,6 +30,7 @@ export default function TodayWorkout({ navigation }) {
 
   const [expandedBlocks, setExpandedBlocks] = useState({});
   const [swapModal, setSwapModal] = useState(null);
+  const [detailExerciseId, setDetailExerciseId] = useState(null);
 
   useEffect(() => {
     loadTodayWorkout();
@@ -195,6 +197,7 @@ export default function TodayWorkout({ navigation }) {
                           exerciseId: exercise.exercise_id,
                         });
                       }}
+                      onNamePress={() => setDetailExerciseId(exercise.exercise_id)}
                     />
                   ))}
 
@@ -257,6 +260,12 @@ export default function TodayWorkout({ navigation }) {
           onClose={() => setSwapModal(null)}
         />
       ) : null}
+
+      <ExerciseDetailModal
+        visible={!!detailExerciseId}
+        exerciseId={detailExerciseId}
+        onClose={() => setDetailExerciseId(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -265,7 +274,7 @@ export default function TodayWorkout({ navigation }) {
 // Exercise Row Component with logging
 // ═══════════════════════════════════════════════════════════════
 
-function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress }) {
+function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress, onNamePress }) {
   const isDone = !!exercise.is_completed;
   const name = String(exercise.name || 'Exercise');
   const sets = String(exercise.sets || '');
@@ -292,7 +301,11 @@ function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress 
         {/* Exercise info */}
         <View style={styles.exerciseContent}>
           <View style={styles.exerciseTopRow}>
-            <Text style={[styles.exerciseName, isDone ? styles.exerciseNameDone : null]} numberOfLines={1}>{`${name}${swapped}`}</Text>
+            <Text
+              style={[styles.exerciseName, isDone ? styles.exerciseNameDone : null]}
+              numberOfLines={1}
+              onPress={onNamePress}
+            >{`${name}${swapped}`}</Text>
             <Text style={[styles.exerciseRx, { color: blockColor }, isDone ? styles.exerciseRxDone : null]}>{sets}</Text>
           </View>
           <Text style={styles.exerciseLoad}>{rest ? `${weight} \u2014 ${rest}` : weight}</Text>
