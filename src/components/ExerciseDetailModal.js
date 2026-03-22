@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import { getExerciseFullById, getDatabase } from '../data/database';
 
+const API_BASE = 'https://exercisedb-api.vercel.app/api/v1';
+
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
 export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
@@ -35,53 +37,57 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
   const loadExercise = async () => {
     try {
       let ex = await getExerciseFullById(exerciseId);
-      // If no gif_url, try to find a matching ExerciseDB exercise
-      if (ex && !ex.gif_url) {
-        const database = await getDatabase();
-        const searchName = (ex.name || '').toLowerCase().replace(/_/g, ' ');
-        console.log(`[GIF] Looking for match: "${searchName}" (id: ${exerciseId})`);
 
-        // Debug: check if ANY exercise has gif_url
-        const gifCheck = await database.getFirstAsync(
-          "SELECT COUNT(*) as total, COUNT(gif_url) as with_gif FROM exercises WHERE source = 'exercisedb'"
-        );
-        console.log(`[GIF] DB status: ${gifCheck.total} exercisedb rows, ${gifCheck.with_gif} have gif_url`);
+      // If exercise already has gif_url (ExerciseDB exercise), we're good
+      if (ex?.gif_url) {
+        setExercise(ex);
+        setGifLoading(true);
+        return;
+      }
 
-        // Try 1: full name match
-        let match = await database.getFirstAsync(
-          "SELECT gif_url, instructions, target_muscles FROM exercises WHERE gif_url IS NOT NULL AND LOWER(name) LIKE ? LIMIT 1",
-          [`%${searchName}%`]
-        );
+      if (!ex) return;
 
-        // Try 2: first two words
-        if (!match) {
-          const words = searchName.split(' ').slice(0, 2).join(' ');
-          if (words.length > 3) {
-            match = await database.getFirstAsync(
-              "SELECT gif_url, instructions, target_muscles FROM exercises WHERE gif_url IS NOT NULL AND LOWER(name) LIKE ? LIMIT 1",
-              [`%${words}%`]
-            );
+      // Seed exercise without gif — expand abbreviations for search
+      const NAME_EXPANSIONS = {
+        'db': 'dumbbell', 'kb': 'kettlebell', 'bb': 'barbell', 'ez': 'ez-bar',
+      };
+      let searchName = (ex.name || '').toLowerCase();
+      for (const [abbr, full] of Object.entries(NAME_EXPANSIONS)) {
+        searchName = searchName.replace(new RegExp(`^${abbr}\\s+`, 'i'), `${full} `);
+      }
+
+      // Try local DB first
+      const database = await getDatabase();
+      let match = await database.getFirstAsync(
+        "SELECT gif_url, instructions, target_muscles FROM exercises WHERE gif_url IS NOT NULL AND LOWER(name) LIKE ? LIMIT 1",
+        [`%${searchName}%`]
+      );
+
+      // If no local match, try the API directly (single request)
+      if (!match) {
+        try {
+          const encoded = encodeURIComponent(searchName.split(' ').slice(0, 3).join(' '));
+          const response = await fetch(`${API_BASE}/exercises?search=${encoded}&limit=1`);
+          if (response.ok) {
+            const result = await response.json();
+            if (result.data?.[0]?.gifUrl) {
+              const apiEx = result.data[0];
+              match = {
+                gif_url: apiEx.gifUrl,
+                instructions: JSON.stringify(apiEx.instructions || []),
+                target_muscles: JSON.stringify(apiEx.targetMuscles || []),
+              };
+            }
           }
-        }
-
-        // Try 3: just the main word (skip common prefixes like "db", "kb")
-        if (!match) {
-          const mainWord = searchName.replace(/^(db|kb|ez|bb)\s+/i, '').split(' ')[0];
-          if (mainWord.length > 3) {
-            match = await database.getFirstAsync(
-              "SELECT gif_url, instructions, target_muscles FROM exercises WHERE gif_url IS NOT NULL AND LOWER(name) LIKE ? AND muscle_group = ? LIMIT 1",
-              [`%${mainWord}%`, ex.muscle_group]
-            );
-          }
-        }
-
-        if (match) {
-          console.log(`[GIF] Found match with gif: ${match.gif_url}`);
-          ex = { ...ex, gif_url: match.gif_url, instructions: match.instructions || ex.instructions, target_muscles: match.target_muscles || ex.target_muscles };
-        } else {
-          console.log(`[GIF] No match found for "${searchName}"`);
+        } catch (e) {
+          // Offline or rate limited — that's OK, show placeholder
         }
       }
+
+      if (match) {
+        ex = { ...ex, gif_url: match.gif_url, instructions: match.instructions || ex.instructions, target_muscles: match.target_muscles || ex.target_muscles };
+      }
+
       setExercise(ex);
       setGifLoading(true);
     } catch (e) {
