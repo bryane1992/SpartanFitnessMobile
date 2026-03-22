@@ -38,6 +38,51 @@
 - Zustand stores go in `src/store/`
 - Reusable UI components go in `src/components/`
 
+## ExerciseDB API
+
+The app uses the **ExerciseDB API** as its exercise data source (replacing the local exercise seed).
+
+- **Base URL**: `https://exercisedb-api.vercel.app/api/v1`
+- **No auth required** — free, open API
+- **1,500 exercises** with GIF demos, instructions, muscle targets
+
+### Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /exercises?limit=N&offset=N` | Paginated exercise list |
+| `GET /exercises/{exerciseId}` | Single exercise by ID |
+| `GET /exercises?search=query` | Search by name |
+| `GET /exercises?bodyPart=chest` | Filter by body part |
+| `GET /exercises?muscle=biceps` | Filter by target muscle |
+| `GET /exercises?equipment=barbell` | Filter by equipment |
+| `GET /bodyparts` | List all body parts |
+| `GET /equipments` | List all equipment types |
+| `GET /muscles` | List all target muscles |
+
+### Exercise Schema
+
+```json
+{
+  "exerciseId": "VPPtusI",
+  "name": "inverted row bent knees",
+  "gifUrl": "https://static.exercisedb.dev/media/VPPtusI.gif",
+  "targetMuscles": ["upper back"],
+  "bodyParts": ["back"],
+  "equipments": ["body weight"],
+  "secondaryMuscles": ["biceps", "forearms"],
+  "instructions": ["Step:1 ...", "Step:2 ..."]
+}
+```
+
+### Integration Rules
+
+- Cache exercises locally in SQLite after first fetch to minimize API calls
+- Use `gifUrl` for exercise demos in workout view and exercise detail screens
+- Map ExerciseDB body parts/muscles to our existing muscle group taxonomy
+- Always handle offline gracefully — fall back to cached data
+- API data layer goes in `src/data/exerciseApi.js`
+
 ## Environment
 
 - `.env` contains `EXPO_TOKEN` for EAS builds — never commit this file
