@@ -461,14 +461,16 @@ function generateRunExercises(weekNumber, phase, totalWeeks, pool, runType, expe
   const scaledIntervals = Math.max(2, Math.round(runParams.intervals * expMultiplier));
 
   switch (runType) {
-    case 'INTERVALS':
+    case 'INTERVALS': {
+      const intervalDesc = phase === 'peak' ? '90s hard / 60s easy' : '2 min hard / 1 min easy';
       runExercises.push({
         id: 'interval_run',
-        sets: `${scaledIntervals} rounds`,
-        reps: phase === 'peak' ? '90s hard / 60s easy' : '2 min hard / 1 min easy',
+        sets: `${scaledIntervals} rounds (${intervalDesc})`,
+        reps: intervalDesc,
         weight: phase === 'peak' ? 'Race pace' : '80-85% effort',
         rest: null, notes: `Target: ${distance}`,
       });
+    }
       break;
     case 'TEMPO':
       runExercises.push({

@@ -73,7 +73,7 @@ const SEGMENT_COLORS = {
   steady: '#0074D9',
 };
 
-export default function RunTracker({ route }) {
+export default function RunTracker({ route, navigation }) {
   const isFocused = useIsFocused();
   const passedDate = route?.params?.date;
 
@@ -348,6 +348,11 @@ export default function RunTracker({ route }) {
       <SafeAreaView style={styles.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
           <View style={styles.setupHeader}>
+            {navigation.canGoBack() ? (
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+                <Text style={styles.backBtnText}>{'< BACK'}</Text>
+              </TouchableOpacity>
+            ) : null}
             <Text style={styles.setupTitle}>GPS RUN TRACKER</Text>
             <Text style={styles.setupSub}>Auto-segmented run tracking</Text>
           </View>
@@ -433,6 +438,11 @@ export default function RunTracker({ route }) {
     return (
       <SafeAreaView style={styles.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
+          {navigation.canGoBack() ? (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+              <Text style={styles.backBtnText}>{'< BACK'}</Text>
+            </TouchableOpacity>
+          ) : null}
           <View style={styles.completeHeader}>
             <Text style={styles.completeTitle}>RUN COMPLETE</Text>
             <Text style={styles.runSavedText}>Run saved to history</Text>
@@ -485,9 +495,25 @@ export default function RunTracker({ route }) {
   // RUNNING SCREEN
   // ═══════════════════════════════════════════════════════════
 
+  const handleBackDuringRun = () => {
+    Alert.alert('Leave Run?', 'Your run is still in progress. Stop and go back?', [
+      { text: 'Keep Running', style: 'cancel' },
+      { text: 'Stop & Go Back', style: 'destructive', onPress: async () => {
+        await finishRun();
+        if (navigation.canGoBack()) navigation.goBack();
+      }},
+    ]);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
+        {navigation.canGoBack() ? (
+          <TouchableOpacity onPress={handleBackDuringRun} style={styles.runningBackBtn}>
+            <Text style={styles.backBtnText}>{'< BACK'}</Text>
+          </TouchableOpacity>
+        ) : null}
+
         {/* Current segment card */}
         <View style={[styles.segmentCard, { borderColor: segColor }]}>
           <Text style={[styles.segmentName, { color: segColor }]}>
@@ -599,6 +625,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A0A0A',
   },
   // Setup screen
+  backBtn: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  runningBackBtn: {
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 8,
+  },
+  backBtnText: {
+    color: '#FF4136',
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+  },
   setupHeader: {
     padding: 20,
     paddingTop: 10,
