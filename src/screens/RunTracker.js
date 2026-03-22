@@ -596,22 +596,57 @@ export default function RunTracker({ route, navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Up next */}
-        {currentSegment < builtSegments.length - 1 && (
-          <View style={styles.upNext}>
-            <Text style={styles.upNextLabel}>UP NEXT</Text>
-            {builtSegments.slice(currentSegment + 1, currentSegment + 3).map((seg, i) => (
-              <Text key={i} style={styles.upNextItem}>
-                {seg.name} {'\u2022'} {formatTime(seg.duration)}
-              </Text>
-            ))}
-          </View>
-        )}
+        {/* Full segment timeline */}
+        <View style={styles.timelineSection}>
+          <Text style={styles.sectionLabel}>RUN PLAN</Text>
+          {builtSegments.map((seg, i) => {
+            const isActive = i === currentSegment;
+            const isDone = i < currentSegment;
+            const segTypeColor = SEGMENT_COLORS[seg.type] || '#666';
+            const completedSplit = isDone ? completedSplits[i] : null;
+            return (
+              <View
+                key={i}
+                style={[
+                  styles.timelineRow,
+                  isActive && styles.timelineRowActive,
+                  isDone && styles.timelineRowDone,
+                ]}
+              >
+                {/* Segment indicator */}
+                <View style={[styles.timelineDot, { backgroundColor: isActive ? segTypeColor : isDone ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.06)' }]}>
+                  {isDone ? <Text style={styles.timelineDotCheck}>{'\u2713'}</Text> : null}
+                  {isActive ? <Text style={styles.timelineDotPulse}>{'\u25CF'}</Text> : null}
+                </View>
 
-        {/* Segment counter */}
-        <Text style={styles.segCounter}>
-          Segment {currentSegment + 1} of {builtSegments.length}
-        </Text>
+                {/* Segment info */}
+                <View style={styles.timelineContent}>
+                  <View style={styles.timelineTopRow}>
+                    <Text style={[
+                      styles.timelineName,
+                      isActive && { color: segTypeColor, fontWeight: '800' },
+                      isDone && styles.timelineNameDone,
+                    ]}>{String(seg.name)}</Text>
+                    <Text style={[
+                      styles.timelineType,
+                      isActive && { color: segTypeColor },
+                    ]}>{String(seg.type || '').toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.timelineBottomRow}>
+                    <Text style={styles.timelineDuration}>{formatTime(seg.duration)}</Text>
+                    {isActive ? (
+                      <Text style={[styles.timelineStatus, { color: segTypeColor }]}>IN PROGRESS</Text>
+                    ) : isDone && completedSplit ? (
+                      <Text style={styles.timelineStatus}>{`${formatTime(completedSplit.time)} \u2022 ${formatDistance(completedSplit.distance)} mi`}</Text>
+                    ) : (
+                      <Text style={styles.timelineStatus}>UPCOMING</Text>
+                    )}
+                  </View>
+                </View>
+              </View>
+            );
+          })}
+        </View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -914,31 +949,90 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-  upNext: {
+  // Segment timeline
+  timelineSection: {
     margin: 15,
-    padding: 12,
+    marginTop: 10,
     backgroundColor: 'rgba(255,255,255,0.02)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    padding: 12,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.03)',
+  },
+  timelineRowActive: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
     borderRadius: 8,
+    borderBottomWidth: 0,
+    marginBottom: 2,
   },
-  upNextLabel: {
-    color: 'rgba(255,255,255,0.3)',
-    fontSize: 10,
+  timelineRowDone: {
+    opacity: 0.5,
+  },
+  timelineDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  timelineDotCheck: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  timelineDotPulse: {
+    color: '#fff',
+    fontSize: 8,
+  },
+  timelineContent: {
+    flex: 1,
+  },
+  timelineTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  timelineName: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  timelineNameDone: {
+    textDecorationLine: 'line-through',
+    color: 'rgba(255,255,255,0.4)',
+  },
+  timelineType: {
+    color: 'rgba(255,255,255,0.25)',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
     fontFamily: 'monospace',
-    letterSpacing: 1,
-    marginBottom: 6,
   },
-  upNextItem: {
-    color: 'rgba(255,255,255,0.5)',
+  timelineBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 3,
+  },
+  timelineDuration: {
+    color: 'rgba(255,255,255,0.3)',
     fontSize: 11,
     fontFamily: 'monospace',
-    marginBottom: 3,
   },
-  segCounter: {
+  timelineStatus: {
     color: 'rgba(255,255,255,0.2)',
-    fontSize: 10,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
     fontFamily: 'monospace',
-    textAlign: 'center',
-    marginTop: 10,
   },
   // Complete screen
   completeHeader: {
