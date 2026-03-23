@@ -134,6 +134,51 @@ export async function initDatabase() {
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS session_rpe (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_exercise_id INTEGER NOT NULL,
+      set_number INTEGER NOT NULL,
+      rpe INTEGER,
+      feedback TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (plan_exercise_id) REFERENCES plan_exercises(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS mesocycles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_id TEXT NOT NULL,
+      cycle_number INTEGER NOT NULL,
+      phase TEXT NOT NULL,
+      stimulus TEXT NOT NULL,
+      start_week INTEGER NOT NULL,
+      end_week INTEGER NOT NULL,
+      target_intensity REAL,
+      target_volume REAL,
+      notes TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS injuries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      body_part TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'mild',
+      reported_at TEXT NOT NULL,
+      recovered_at TEXT,
+      notes TEXT,
+      is_active INTEGER DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS coach_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      actions TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_session_rpe_exercise ON session_rpe(plan_exercise_id);
+    CREATE INDEX IF NOT EXISTS idx_coach_messages_session ON coach_messages(session_id);
+    CREATE INDEX IF NOT EXISTS idx_injuries_active ON injuries(is_active);
     CREATE INDEX IF NOT EXISTS idx_wod_history_wod ON wod_history(wod_id);
     CREATE INDEX IF NOT EXISTS idx_plan_days_date ON plan_days(date);
     CREATE INDEX IF NOT EXISTS idx_plan_days_plan_id ON plan_days(plan_id);
@@ -738,6 +783,102 @@ export async function getWodBestScore(wodId) {
     'SELECT * FROM wod_history WHERE wod_id = ? ORDER BY date DESC LIMIT 1',
     [wodId]
   );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RPE / Autoregulation
+// ═══════════════════════════════════════════════════════════════
+
+export async function saveRpe(planExerciseId, setNumber, rpe, feedback) {
+  const database = await getDatabase();
+  await database.runAsync(
+    'INSERT INTO session_rpe (plan_exercise_id, set_number, rpe, feedback) VALUES (?, ?, ?, ?)',
+    [planExerciseId, setNumber, rpe, feedback]
+  );
+}
+
+export async function getRecentRpeForExercise(exerciseId, limit = 10) {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    `SELECT sr.rpe, sr.feedback, sr.set_number, pd.date
+     FROM session_rpe sr
+     JOIN plan_exercises pe ON pe.id = sr.plan_exercise_id
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     WHERE pe.exercise_id = ?
+     ORDER BY pd.date DESC, sr.set_number ASC
+     LIMIT ?`,
+    [exerciseId, limit]
+  );
+}
+
+export async function getAverageRpeForExercise(exerciseId) {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync(
+    `SELECT AVG(sr.rpe) as avg_rpe
+     FROM session_rpe sr
+     JOIN plan_exercises pe ON pe.id = sr.plan_exercise_id
+     WHERE pe.exercise_id = ?`,
+    [exerciseId]
+  );
+  return row?.avg_rpe;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Injury Tracking
+// ═══════════════════════════════════════════════════════════════
+
+export async function saveInjury(bodyPart, severity, notes) {
+  const database = await getDatabase();
+  await database.runAsync(
+    'INSERT INTO injuries (body_part, severity, reported_at, notes) VALUES (?, ?, ?, ?)',
+    [bodyPart, severity, new Date().toISOString(), notes]
+  );
+}
+
+export async function getActiveInjuries() {
+  const database = await getDatabase();
+  return database.getAllAsync('SELECT * FROM injuries WHERE is_active = 1 ORDER BY reported_at DESC');
+}
+
+export async function recoverInjury(injuryId) {
+  const database = await getDatabase();
+  await database.runAsync(
+    'UPDATE injuries SET is_active = 0, recovered_at = ? WHERE id = ?',
+    [new Date().toISOString(), injuryId]
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Coach Messages
+// ═══════════════════════════════════════════════════════════════
+
+export async function saveCoachMessage(sessionId, role, content, actions) {
+  const database = await getDatabase();
+  await database.runAsync(
+    'INSERT INTO coach_messages (session_id, role, content, actions) VALUES (?, ?, ?, ?)',
+    [sessionId, role, content, actions ? JSON.stringify(actions) : null]
+  );
+}
+
+export async function getCoachMessages(sessionId, limit = 20) {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    'SELECT * FROM coach_messages WHERE session_id = ? ORDER BY created_at ASC LIMIT ?',
+    [sessionId, limit]
+  );
+}
+
+export async function getCoachMessageCountThisWeek() {
+  const database = await getDatabase();
+  const monday = new Date();
+  monday.setDate(monday.getDate() - monday.getDay() + 1);
+  monday.setHours(0, 0, 0, 0);
+  const row = await database.getFirstAsync(
+    "SELECT COUNT(*) as count FROM coach_messages WHERE role = 'user' AND created_at >= ?",
+    [monday.toISOString()]
+  );
+  return row?.count || 0;
 }
 
 // ═══════════════════════════════════════════════════════════════

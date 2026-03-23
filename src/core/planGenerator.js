@@ -2,7 +2,7 @@
 // Orchestrates full multi-week plan creation from user preferences
 
 import { calculatePhases, getPhaseForWeek } from './phaseCalculator';
-import { calculateWeight, calculateSetsReps, calculateRunParams, getBodyCompParams } from './progressionRules';
+import { calculateWeight, calculateSetsReps, calculateRunParams, getBodyCompParams, getTempoForExercise, getMesocyclePhase, STIMULUS_TYPES } from './progressionRules';
 import { getExercisesByFilter, savePlanDay, savePlanBlock, savePlanExercise, getDatabase, updateBlockRunType } from '../data/database';
 
 // Day templates define the structure of each workout type
@@ -228,8 +228,10 @@ export async function generatePlan(userProfile) {
 
       const title = template.titlesByPhase[phase.phase] || template.titlesByPhase.build;
       const dayEmoji = template.emoji;
+      const mesoPhase = getMesocyclePhase(week);
+      const stimulus = STIMULUS_TYPES[mesoPhase.defaultStimulus];
 
-      // Create the day
+      // Create the day with stimulus intent
       const dayId = await savePlanDay({
         planId,
         date,
@@ -237,7 +239,7 @@ export async function generatePlan(userProfile) {
         weekNumber: week,
         phase: phase.phase,
         title: title,
-        focus: phase.name + ' • Week ' + week,
+        focus: `${mesoPhase.label} • ${stimulus.label} • Week ${week}`,
         color: phase.color,
         emoji: '',
         isRestDay: false,
@@ -371,7 +373,12 @@ function selectExercises(blockTemplate, pool, recentlyUsed, weekNumber, phase, u
 
     const ex = item.exercise;
     const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal);
-    const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience);
+    const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails);
+    const tempo = getTempoForExercise(ex, weekNumber);
+    const mesoPhase = getMesocyclePhase(weekNumber);
+
+    let notes = null;
+    if (tempo) notes = `Tempo: ${tempo}`;
 
     selected.push({
       id: ex.id,
@@ -379,7 +386,7 @@ function selectExercises(blockTemplate, pool, recentlyUsed, weekNumber, phase, u
       reps: reps,
       weight: weight,
       rest: bodyCompParams.restSeconds,
-      notes: null,
+      notes: notes,
     });
   }
 
