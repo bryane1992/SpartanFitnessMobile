@@ -1,19 +1,43 @@
-# Spartan Fitness Mobile - Agent Rules
+# Spartan Fitness Mobile — Agent Rules & Architecture
+
+## Quick Context for New Agents
+
+This is a **React Native fitness app** (Expo SDK 54, Expo Go) with:
+- Personalized workout plans with elite programming logic
+- 1500+ exercises from ExerciseDB API with GIF demos
+- 200+ CrossFit WODs with score tracking
+- GPS run tracker with segment timelines
+- Performance tracker (PRs, history, weekly progress)
+- **Planned**: Claude Sonnet AI Coach for real-time workout modification
+
+**Key docs**: `COACHING_SPEC.md` (elite programming logic, AI coach spec, subscription tiers), `TODO.md` (UI polish blueprint)
+
+---
 
 ## Expo & Dependencies
 
-- This project uses **Expo SDK 54** and must remain compatible with **Expo Go** (not dev builds).
-- **NEVER** upgrade the Expo SDK version without explicit user approval.
-- When adding new packages, always use `npx expo install <package>` instead of `npm install` — this ensures SDK-compatible versions.
-- After adding or changing dependencies, run `npx expo-doctor` to verify compatibility.
-- Do not use packages that require a custom dev build (native modules not included in Expo Go).
+- **Expo SDK 54** — must remain **Expo Go** compatible (no custom dev builds)
+- Use `npx expo install <package>` — never `npm install`
+- Run `npx expo-doctor` after adding packages
+- No native modules outside Expo Go
 
 ## Project Structure
 
-- Source code lives in `src/`
-- Screens go in `src/screens/`
-- Core logic goes in `src/core/`
-- Entry point is `App.js` in the root
+```
+App.js                  — Entry point, navigation (bottom tabs + stack)
+src/
+  screens/              — All screens (TodayWorkout, RunTracker, PerformanceTracker, etc.)
+  components/           — Reusable UI (ExerciseDetailModal, ExerciseCard, etc.)
+  core/                 — Business logic (planGenerator, progressionRules, phaseCalculator)
+  data/                 — Database, API clients, seed data
+    database.js         — SQLite schema, migrations, all queries
+    exerciseApi.js      — ExerciseDB API client
+    exerciseSeed.js     — 116 curated Spartan exercises (seed data)
+    wodSeed.js          — CrossFit WOD library
+    taxonomyMap.js      — ExerciseDB → local schema mapping
+  store/                — Zustand stores (useWorkoutStore, usePerformanceStore)
+  theme/                — (planned) Centralized design tokens
+```
 
 ## Tech Stack
 
@@ -23,67 +47,96 @@
 - AsyncStorage for local persistence
 - expo-sqlite for structured data
 - expo-location for GPS/run tracking
+- ExerciseDB API for exercise catalog
+- **Planned**: Anthropic API (Claude Sonnet 4.6) for AI Coach
+
+## Navigation
+
+```
+Stack Navigator
+├── Onboarding
+├── Main (Bottom Tabs)
+│   ├── Workout — TodayWorkout (daily view, day navigation)
+│   ├── Track — RunTracker (GPS, segments, auto-match plan)
+│   ├── Stats — PerformanceTracker (PRs, runs, gains, weekly progress)
+│   ├── Plan — ProgressionPlan (week/day overview, phase timeline)
+│   └── Settings — Profile, actions, library links
+├── ExerciseLibrary — API-powered search/filter/browse
+└── WodLibrary — CrossFit WODs with score logging
+```
 
 ## Code Style
 
-- Dark theme UI: background `#0A0A0A`, accent `#FF4136`
-- Functional components with hooks only (no class components)
-- Keep Expo Go compatibility as the top priority
-- **NO emojis** in the UI — no emoji icons, labels, buttons, or headers. Use text or icon libraries instead.
-- Make the UI stylish, bold, and visually engaging — not plain or minimal
+- Dark theme: background `#0A0A0A`, accent `#FF4136`, success `#01FF70`
+- Functional components with hooks only
+- **NO emojis in UI** — use text or icon libraries
+- Stylish, bold, visually engaging — not plain or minimal
+- All text rendered in `<Text>` components (React Native strict mode)
+- Use `String()` for any DB values rendered in JSX
 
-## Project Structure (Extended)
+## Database Schema (expo-sqlite)
 
-- Data layer goes in `src/data/` (database, seeds)
-- Zustand stores go in `src/store/`
-- Reusable UI components go in `src/components/`
+### Core Tables
+- **exercises** — 1600+ exercises (116 seed + ExerciseDB). Fields: id, name, muscle_group, category, style_tags, equipment_required, default_sets/reps/weight, is_compound, difficulty, source, gif_url, instructions, target_muscles, body_parts, api_id
+- **exercise_alternatives** — bidirectional swap mappings
+- **plan_days** — daily workout entries with phase, title, focus, color, is_rest_day, is_completed
+- **plan_blocks** — workout blocks within a day (warmup, main lifts, WOD, etc.)
+- **plan_exercises** — exercises within blocks with sets, reps, weight, rest, actual_weight, actual_reps, notes, is_completed
+- **workout_history** — archived completed workout snapshots
+
+### Tracking Tables
+- **run_history** — completed GPS runs (date, run_type, time, distance, pace, splits JSON)
+- **wod_history** — WOD completion scores (wod_id, date, score, score_type, rx, notes)
+
+### Planned Tables (for AI Coach & elite programming)
+- **coach_messages** — AI conversation history per session
+- **injuries** — body part flags with severity and recovery status
+- **user_equipment** — detailed equipment profile (specific weights, limitations)
+- **session_rpe** — per-set RPE/RIR feedback for autoregulation
+- **mesocycles** — macrocycle/phase tracking with stimulus intent per day
 
 ## ExerciseDB API
 
-The app uses the **ExerciseDB API** as its exercise data source (replacing the local exercise seed).
-
 - **Base URL**: `https://exercisedb-api.vercel.app/api/v1`
-- **No auth required** — free, open API
-- **1,500 exercises** with GIF demos, instructions, muscle targets
+- **No auth** — free, open API
+- **Rate limit**: ~100 requests/min, handle 429 with 3s+ delay and exponential backoff
+- **Max page size**: 100
+- Endpoints: `/exercises?search=&bodyPart=&equipment=&limit=&offset=`, `/exercises/{id}`, `/bodyparts`, `/equipments`, `/muscles`
+- Cache locally in SQLite after sync. App works offline after first sync.
+- GIFs load on-demand via Image component (not pre-downloaded)
 
-### Endpoints
+## Claude AI Coach (Planned)
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /exercises?limit=N&offset=N` | Paginated exercise list |
-| `GET /exercises/{exerciseId}` | Single exercise by ID |
-| `GET /exercises?search=query` | Search by name |
-| `GET /exercises?bodyPart=chest` | Filter by body part |
-| `GET /exercises?muscle=biceps` | Filter by target muscle |
-| `GET /exercises?equipment=barbell` | Filter by equipment |
-| `GET /bodyparts` | List all body parts |
-| `GET /equipments` | List all equipment types |
-| `GET /muscles` | List all target muscles |
+- **Model**: Claude Sonnet 4.6 via Anthropic API
+- **API Key**: In `.env` as `CLAUDE_TOKEN`
+- **Use case**: In-app conversational coach that can modify active workouts in real-time
+- **Response format**: JSON with `message` (text) + `actions` (executable workout changes)
+- **Context per message**: user profile, current workout, injury flags, 14-day training summary, last 6 messages (~2-3K tokens)
+- **Full spec**: See `COACHING_SPEC.md`
 
-### Exercise Schema
+## Elite Programming Principles
 
-```json
-{
-  "exerciseId": "VPPtusI",
-  "name": "inverted row bent knees",
-  "gifUrl": "https://static.exercisedb.dev/media/VPPtusI.gif",
-  "targetMuscles": ["upper back"],
-  "bodyParts": ["back"],
-  "equipments": ["body weight"],
-  "secondaryMuscles": ["biceps", "forearms"],
-  "instructions": ["Step:1 ...", "Step:2 ..."]
-}
-```
-
-### Integration Rules
-
-- Cache exercises locally in SQLite after first fetch to minimize API calls
-- Use `gifUrl` for exercise demos in workout view and exercise detail screens
-- Map ExerciseDB body parts/muscles to our existing muscle group taxonomy
-- Always handle offline gracefully — fall back to cached data
-- API data layer goes in `src/data/exerciseApi.js`
+The workout programming engine should follow these principles (see `COACHING_SPEC.md` for details):
+1. **Stimulus intent** per session (strength/hypertrophy/power/conditioning/skill)
+2. **Tempo prescriptions** on compound lifts (4-digit: eccentric-pause-concentric-pause)
+3. **Energy system training** across the week (phosphocreatine/glycolytic/oxidative)
+4. **RPE autoregulation** — post-set feedback adjusts recommendations
+5. **Mesocycle periodization** — 12-week cycles: accumulation → intensification → realization
+6. **Intelligent sequencing** — power before strength, compound before isolation, no back-to-back grip-intensive
+7. **Specific warmups** — prime exact movement patterns for the session
 
 ## Environment
 
-- `.env` contains `EXPO_TOKEN` for EAS builds — never commit this file
-- `eas.json` is configured for iOS and Android builds
+- `.env` contains `EXPO_TOKEN` (EAS builds) and `CLAUDE_TOKEN` (Anthropic API) — **never commit this file**
+- `.env` is in `.gitignore`
+- `eas.json` configured for iOS and Android builds
+- GitHub repo: `bryane1992/SpartanFitnessMobile` (private)
+
+## WOD Library
+
+- Seed data in `src/data/wodSeed.js`
+- Categories: Girls, Hero, Benchmark, AMRAP, For Time, EMOM, Chipper
+- Each WOD: id, name, category, type, movements[], scheme, rxWeight, difficulty, estimatedTime, tips
+- **Equipment requirements should be listed per WOD** for scaling to user's gear
+- Score tracking in `wod_history` table (time, rounds+reps, total reps, RX flag)
+- Goal: 200+ WODs covering the full CrossFit benchmark library

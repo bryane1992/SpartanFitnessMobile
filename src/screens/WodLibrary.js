@@ -30,6 +30,7 @@ const CATEGORY_FILTERS = [
   { id: 'fortime', label: 'FOR TIME' },
   { id: 'emom', label: 'EMOM' },
   { id: 'chipper', label: 'CHIPPER' },
+  { id: 'open', label: 'CF OPEN' },
 ];
 
 export default function WodLibrary({ navigation }) {
@@ -139,6 +140,21 @@ export default function WodLibrary({ navigation }) {
           {item.estimatedTime ? <Text style={styles.wodMetaText}>{item.estimatedTime}</Text> : null}
           {item.rxWeight !== 'BW' ? <Text style={styles.wodMetaText}>{item.rxWeight}</Text> : null}
         </View>
+        {item.equipment && item.equipment.length > 0 ? (
+          <View style={styles.equipRow}>
+            {item.equipment.map((eq, i) => (
+              <View key={i} style={styles.equipChip}>
+                <Text style={styles.equipChipText}>{String(eq).replace(/_/g, ' ').toUpperCase()}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.equipRow}>
+            <View style={[styles.equipChip, styles.equipChipGreen]}>
+              <Text style={[styles.equipChipText, styles.equipChipTextGreen]}>NO EQUIPMENT</Text>
+            </View>
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -372,6 +388,11 @@ const styles = StyleSheet.create({
   wodMovements: { color: 'rgba(255,255,255,0.5)', fontSize: 12, lineHeight: 18, marginBottom: 8 },
   wodMeta: { flexDirection: 'row', flexWrap: 'wrap' },
   wodMetaText: { color: 'rgba(255,255,255,0.2)', fontSize: 10, fontFamily: 'monospace', marginRight: 12 },
+  equipRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 },
+  equipChip: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 4, paddingVertical: 2, paddingHorizontal: 6, marginRight: 4, marginBottom: 2 },
+  equipChipText: { color: 'rgba(255,255,255,0.25)', fontSize: 8, fontWeight: '700', letterSpacing: 0.5, fontFamily: 'monospace' },
+  equipChipGreen: { backgroundColor: 'rgba(1,255,112,0.06)' },
+  equipChipTextGreen: { color: 'rgba(1,255,112,0.4)' },
   doneBadge: { backgroundColor: 'rgba(1,255,112,0.12)', borderRadius: 4, paddingVertical: 2, paddingHorizontal: 8, marginRight: 6 },
   doneBadgeText: { color: '#01FF70', fontSize: 9, fontWeight: '800', letterSpacing: 0.5, fontFamily: 'monospace' },
   diffBadge: { borderWidth: 1, borderRadius: 4, paddingVertical: 2, paddingHorizontal: 8 },
