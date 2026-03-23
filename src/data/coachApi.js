@@ -107,6 +107,7 @@ function buildContext(context) {
   if (context.profile) {
     const p = context.profile;
     parts.push(`USER PROFILE: Goal: ${p.goal}, Experience: ${p.experience}, Style: ${p.workoutStyle}, Body comp: ${p.bodyCompGoal}`);
+    if (p.additionalNotes) parts.push(`USER NOTES: ${p.additionalNotes}`);
     if (p.equipmentDetails) {
       if (p.equipmentDetails.barbell?.maxWeight) parts.push(`Barbell max: ${p.equipmentDetails.barbell.maxWeight} lbs`);
       if (p.equipmentDetails.kettlebell?.weights) parts.push(`Kettlebells: ${p.equipmentDetails.kettlebell.weights} lbs`);

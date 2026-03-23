@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  TextInput,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -108,6 +109,7 @@ export default function Onboarding({ navigation }) {
   // Step 7: Exclusions + Body Comp
   const [exclusions, setExclusions] = useState([]);
   const [bodyCompGoals, setBodyCompGoals] = useState([]);
+  const [additionalNotes, setAdditionalNotes] = useState('');
 
   // Loading state for plan generation
   const [isGenerating, setIsGenerating] = useState(false);
@@ -185,8 +187,9 @@ export default function Onboarding({ navigation }) {
         exclusions: exclusions,
         bodyCompGoals: bodyCompGoals,
         bodyCompGoal: bodyCompGoals[0] || 'maintain',
+        additionalNotes: additionalNotes.trim(),
         createdAt: new Date().toISOString(),
-        onboardingVersion: 3,
+        onboardingVersion: 4,
       };
 
       // Save profile
@@ -656,6 +659,20 @@ export default function Onboarding({ navigation }) {
             {bodyCompGoals.includes(bcg.id) && <View style={styles.checkMark} />}
           </TouchableOpacity>
         ))}
+
+        {/* Anything else */}
+        <Text style={[styles.sectionLabel, { marginTop: 25 }]}>Anything else we should know?</Text>
+        <Text style={styles.sectionDesc}>Injuries, preferences, limitations, goals — our AI will factor this in</Text>
+        <TextInput
+          style={styles.notesInput}
+          placeholder="e.g. Bad left knee, training for a Spartan race in June, prefer morning workouts, hate burpees..."
+          placeholderTextColor="rgba(255,255,255,0.2)"
+          value={additionalNotes}
+          onChangeText={setAdditionalNotes}
+          multiline
+          numberOfLines={4}
+          textAlignVertical="top"
+        />
       </ScrollView>
 
       <View style={styles.buttonRow}>
@@ -886,6 +903,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 6,
     fontFamily: 'monospace',
+  },
+  notesInput: {
+    backgroundColor: '#1A1A1A',
+    borderWidth: 2,
+    borderColor: '#222',
+    borderRadius: 14,
+    padding: 16,
+    color: '#fff',
+    fontSize: 14,
+    minHeight: 100,
+    lineHeight: 22,
   },
   // Date picker styles
   divider: {
