@@ -112,7 +112,7 @@ export async function generateAIPlan(userProfile, onStatus) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 16000,
+        max_tokens: 8000,
         system: PLAN_SYSTEM_PROMPT,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -130,7 +130,8 @@ export async function generateAIPlan(userProfile, onStatus) {
     const result = await response.json();
     let rawText = result.content?.[0]?.text || '';
 
-    console.log('[AI Plan] Raw response length:', rawText.length);
+    const usage = result.usage || {};
+    console.log(`[AI Plan] Tokens — in: ${usage.input_tokens || '?'}, out: ${usage.output_tokens || '?'}, response: ${rawText.length} chars`);
 
     // Strip markdown fences
     rawText = rawText.trim();
@@ -185,7 +186,9 @@ function buildPlanPrompt(profile) {
   }
 
   if (profile.additionalNotes) {
-    parts.push(`\nUSER NOTES: ${profile.additionalNotes}`);
+    // Cap notes at 300 chars to control token spend
+    const notes = profile.additionalNotes.substring(0, 300);
+    parts.push(`\nUSER NOTES: ${notes}`);
   }
 
   const trainingDayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];

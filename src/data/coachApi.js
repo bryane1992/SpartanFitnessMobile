@@ -57,24 +57,41 @@ Give 2-4 options when the user reports pain/injury. Always include flagInjury in
 
 If no actions or options needed, return empty arrays.`;
 
+// Sanitize user input — cap length, strip weird chars
+function sanitizeInput(text, maxLen = 500) {
+  if (!text) return '';
+  // Remove control chars and excessive whitespace
+  let clean = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '').trim();
+  // Cap length
+  if (clean.length > maxLen) clean = clean.substring(0, maxLen) + '...';
+  return clean;
+}
+
 export async function sendCoachMessage(apiKey, messages, context) {
   // Use bundled key if none provided
   if (!apiKey) apiKey = BUNDLED_API_KEY;
   const userContext = buildContext(context);
 
-  const anthropicMessages = messages.map(m => ({
+  // Only keep last 4 messages (not 6) to reduce tokens
+  const recentMessages = messages.slice(-4);
+  const anthropicMessages = recentMessages.map(m => ({
     role: m.role,
-    content: m.content,
+    // Strip old context from previous messages — only keep the user's actual text
+    content: m.role === 'user'
+      ? sanitizeInput(
+          m.content.includes('\nUser says: ') ? m.content.split('\nUser says: ').pop() : m.content
+        )
+      : m.content,
   }));
 
-  // Always prepend context to the latest user message so Claude has workout state
-  const lastIdx = anthropicMessages.length - 1;
-  if (lastIdx >= 0 && anthropicMessages[lastIdx].role === 'user') {
-    anthropicMessages[lastIdx].content = `${userContext}\n\nUser says: ${anthropicMessages[lastIdx].content}`;
+  // Only prepend context to the FIRST user message in the batch
+  // (system prompt + one context block is enough, Claude remembers within conversation)
+  const firstUserIdx = anthropicMessages.findIndex(m => m.role === 'user');
+  if (firstUserIdx >= 0) {
+    anthropicMessages[firstUserIdx].content = `${userContext}\n\nUser says: ${anthropicMessages[firstUserIdx].content}`;
   }
 
-  console.log('[AI Coach] Context sent:', userContext.substring(0, 500));
-  console.log('[AI Coach] Messages count:', anthropicMessages.length);
+  console.log('[AI Coach] Context length:', userContext.length, 'chars, Messages:', anthropicMessages.length);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT);
@@ -89,7 +106,7 @@ export async function sendCoachMessage(apiKey, messages, context) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 500,
+        max_tokens: 350,
         system: SYSTEM_PROMPT,
         messages: anthropicMessages,
       }),
@@ -106,8 +123,9 @@ export async function sendCoachMessage(apiKey, messages, context) {
 
     const result = await response.json();
     const rawText = result.content?.[0]?.text || '';
+    const usage = result.usage || {};
 
-    console.log('[AI Coach] Raw response:', rawText);
+    console.log(`[AI Coach] Tokens — in: ${usage.input_tokens || '?'}, out: ${usage.output_tokens || '?'}`);
 
     // Strip markdown code fences if present (```json ... ```)
     let text = rawText.trim();
@@ -144,7 +162,7 @@ function buildContext(context) {
   if (context.profile) {
     const p = context.profile;
     parts.push(`USER PROFILE: Goal: ${p.goal}, Experience: ${p.experience}, Style: ${p.workoutStyle}, Body comp: ${p.bodyCompGoal}`);
-    if (p.additionalNotes) parts.push(`USER NOTES: ${p.additionalNotes}`);
+    if (p.additionalNotes) parts.push(`USER NOTES: ${sanitizeInput(p.additionalNotes, 300)}`);
     if (p.equipmentDetails) {
       if (p.equipmentDetails.barbell?.maxWeight) parts.push(`Barbell max: ${p.equipmentDetails.barbell.maxWeight} lbs`);
       if (p.equipmentDetails.kettlebell?.weights) parts.push(`Kettlebells: ${p.equipmentDetails.kettlebell.weights} lbs`);
@@ -155,21 +173,22 @@ function buildContext(context) {
 
   if (context.workout) {
     const w = context.workout;
-    parts.push(`\nCURRENT WORKOUT: "${w.title}" (${w.focus})`);
+    parts.push(`\nWORKOUT: "${w.title}"`);
     if (w.blocks) {
       for (const block of w.blocks) {
-        parts.push(`Block: ${block.name} (${block.type})`);
-        if (block.exercises) {
-          for (const ex of block.exercises) {
-            const status = ex.is_completed ? 'DONE' : 'TODO';
-            let line = `  [${status}] ${ex.name} — ${ex.sets} @ ${ex.weight || 'BW'}${ex.notes ? ' (' + ex.notes + ')' : ''} (planExerciseId: ${ex.id})`;
-            // Add available alternatives for swapping
-            if (context.alternatives && context.alternatives[ex.id]) {
-              const altNames = context.alternatives[ex.id].map(a => `${a.name} (id:${a.id})`).join(', ');
-              line += `\n    SWAP OPTIONS: ${altNames}`;
-            }
-            parts.push(line);
+        // Skip warmup blocks to save tokens
+        if (block.name?.toUpperCase().includes('WARM')) continue;
+        const exercises = block.exercises || [];
+        const todoExercises = exercises.filter(ex => !ex.is_completed);
+        const doneCount = exercises.length - todoExercises.length;
+        if (doneCount > 0) parts.push(`${block.name}: ${doneCount} done`);
+        for (const ex of todoExercises) {
+          let line = `  ${ex.name} ${ex.sets} @ ${ex.weight || 'BW'} (id:${ex.id})`;
+          if (context.alternatives && context.alternatives[ex.id]) {
+            const altNames = context.alternatives[ex.id].map(a => `${a.name}(${a.id})`).join(',');
+            line += ` swaps:${altNames}`;
           }
+          parts.push(line);
         }
       }
     }

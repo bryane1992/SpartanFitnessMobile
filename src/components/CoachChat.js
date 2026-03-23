@@ -77,15 +77,16 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
       const parsedProfile = profile ? JSON.parse(profile) : null;
       const injuries = await getActiveInjuries();
 
-      // Gather alternatives for each exercise in today's workout
+      // Gather alternatives only for incomplete exercises (saves tokens)
       const alternatives = {};
       if (workout?.blocks) {
         for (const block of workout.blocks) {
           for (const ex of (block.exercises || [])) {
+            if (ex.is_completed) continue; // skip done exercises
             try {
               const alts = await getAlternatives(ex.exercise_id || ex.id, parsedProfile);
               if (alts && alts.length > 0) {
-                alternatives[ex.id] = alts.slice(0, 5).map(a => ({ id: a.id, name: a.name, muscle_group: a.muscle_group }));
+                alternatives[ex.id] = alts.slice(0, 3).map(a => ({ id: a.id, name: a.name }));
               }
             } catch {}
           }
