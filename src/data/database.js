@@ -207,6 +207,34 @@ export async function initDatabase() {
     try { await database.runAsync(sql); } catch (e) { /* column already exists */ }
   }
 
+  // Data migration: remove deprecated 'heavy_barbell' exclusion tag from all exercises
+  try {
+    const tagged = await database.getAllAsync(
+      "SELECT id, exclusion_tags FROM exercises WHERE exclusion_tags LIKE '%heavy_barbell%'"
+    );
+    for (const ex of tagged) {
+      const tags = JSON.parse(ex.exclusion_tags || '[]').filter(t => t !== 'heavy_barbell');
+      await database.runAsync(
+        'UPDATE exercises SET exclusion_tags = ? WHERE id = ?',
+        [JSON.stringify(tags), ex.id]
+      );
+    }
+    if (tagged.length > 0) console.log(`[DB] Cleaned heavy_barbell tag from ${tagged.length} exercises`);
+  } catch (e) { /* already clean */ }
+
+  // Clean deprecated exclusion from user profile
+  try {
+    const profileStr = await AsyncStorage.getItem('userProfile');
+    if (profileStr) {
+      const profile = JSON.parse(profileStr);
+      if (profile.exclusions?.includes('heavy_barbell')) {
+        profile.exclusions = profile.exclusions.filter(e => e !== 'heavy_barbell');
+        await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
+        console.log('[DB] Removed heavy_barbell from user profile exclusions');
+      }
+    }
+  } catch (e) { /* no profile yet */ }
+
   return database;
 }
 

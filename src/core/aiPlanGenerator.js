@@ -127,8 +127,23 @@ export async function generateAIPlan(userProfile, onStatus) {
       previousPhaseExercises.length > 0 ? `\n\nPREVIOUS PHASES USED THESE EXERCISES (pick DIFFERENT accessories and WODs): ${previousPhaseExercises.join(', ')}` : ''
     }\n\nRespond with JSON: {"planName":"...","weeklyTemplate":[...],"restDayAdvice":"...","programNotes":"..."}`;
 
+    // Small delay between calls to avoid network issues
+    if (i > 0) await new Promise(r => setTimeout(r, 1500));
+
     try {
-      const result = await callClaude(apiKey, phasePrompt);
+      // Retry once on network failure
+      let result;
+      try {
+        result = await callClaude(apiKey, phasePrompt);
+      } catch (retryErr) {
+        if (retryErr.message?.includes('Network') || retryErr.name === 'AbortError') {
+          console.log(`[AI Plan] Retrying ${phase} after network error...`);
+          await new Promise(r => setTimeout(r, 3000));
+          result = await callClaude(apiKey, phasePrompt);
+        } else {
+          throw retryErr;
+        }
+      }
       phaseTemplates[phase] = { weeklyTemplate: result.weeklyTemplate || [] };
       if (i === 0) {
         planName = result.planName || planName;
