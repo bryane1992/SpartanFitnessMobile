@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import useWorkoutStore from '../store/useWorkoutStore';
 import ExerciseSwapModal from './ExerciseSwapModal';
 import ExerciseDetailModal from '../components/ExerciseDetailModal';
+import CoachChat from '../components/CoachChat';
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -31,6 +32,7 @@ export default function TodayWorkout({ navigation }) {
   const [expandedBlocks, setExpandedBlocks] = useState({});
   const [swapModal, setSwapModal] = useState(null);
   const [detailExerciseId, setDetailExerciseId] = useState(null);
+  const [coachVisible, setCoachVisible] = useState(false);
 
   useEffect(() => {
     loadTodayWorkout();
@@ -266,6 +268,20 @@ export default function TodayWorkout({ navigation }) {
         exerciseId={detailExerciseId}
         onClose={() => setDetailExerciseId(null)}
       />
+
+      {/* AI Coach floating button */}
+      {workout && !isRestDay ? (
+        <TouchableOpacity style={styles.coachFab} onPress={() => setCoachVisible(true)}>
+          <Text style={styles.coachFabText}>AI</Text>
+        </TouchableOpacity>
+      ) : null}
+
+      <CoachChat
+        visible={coachVisible}
+        onClose={() => setCoachVisible(false)}
+        workout={workout}
+        sessionId={workout ? `workout-${workout.id}-${selectedDate}` : null}
+      />
     </SafeAreaView>
   );
 }
@@ -469,6 +485,28 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   checkIcon: { color: '#000', fontSize: 11, fontWeight: '800' },
+  coachFab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FF4136',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 8,
+    shadowColor: '#FF4136',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  coachFabText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
   exerciseContent: { flex: 1, marginRight: 8 },
   demoBtn: {
     backgroundColor: 'rgba(255,65,54,0.12)',

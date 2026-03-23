@@ -121,6 +121,13 @@ export default function App() {
       // Initialize database
       await initDatabase();
 
+      // Seed Claude API key from env if not already stored
+      const existingKey = await AsyncStorage.getItem('claudeApiKey');
+      if (!existingKey) {
+        // In dev, you can set this in .env — but RN doesn't auto-read .env at runtime
+        // The key must be manually entered in Settings or pre-seeded here
+      }
+
       // Sync ExerciseDB if needed — check if we have API exercises
       const { getDatabase: getDb } = require('./src/data/database');
       const db = await getDb();

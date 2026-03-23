@@ -43,12 +43,29 @@ export default function Settings({ navigation }) {
   const [lastSync, setLastSync] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState('');
+  const [claudeKey, setClaudeKey] = useState('');
+  const [hasClaudeKey, setHasClaudeKey] = useState(false);
   const { generateNewPlan, totalWeeks, planPhases, currentPlanId } = useWorkoutStore();
 
   useEffect(() => {
     loadProfile();
     loadLibraryInfo();
+    loadClaudeKey();
   }, []);
+
+  const loadClaudeKey = async () => {
+    const key = await AsyncStorage.getItem('claudeApiKey');
+    setHasClaudeKey(!!key);
+  };
+
+  const saveClaudeKey = async () => {
+    if (claudeKey.trim()) {
+      await AsyncStorage.setItem('claudeApiKey', claudeKey.trim());
+      setHasClaudeKey(true);
+      setClaudeKey('');
+      Alert.alert('Saved', 'AI Coach is now enabled!');
+    }
+  };
 
   const loadProfile = async () => {
     try {
@@ -199,6 +216,32 @@ export default function Settings({ navigation }) {
           </View>
         )}
 
+        {/* AI Coach */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>AI Coach</Text>
+          <View style={styles.profileCard}>
+            <ProfileRow label="Status" value={hasClaudeKey ? 'Active' : 'Not configured'} />
+          </View>
+          {!hasClaudeKey ? (
+            <View style={{ marginTop: 8 }}>
+              <TextInput
+                style={styles.apiKeyInput}
+                placeholder="Paste Claude API key (sk-ant-...)"
+                placeholderTextColor="#555"
+                value={claudeKey}
+                onChangeText={setClaudeKey}
+                secureTextEntry
+              />
+              <TouchableOpacity style={styles.actionButton} onPress={saveClaudeKey}>
+                <View style={styles.actionContent}>
+                  <Text style={styles.actionLabel}>Save API Key</Text>
+                  <Text style={styles.actionDesc}>Enables AI Coach on workout screen</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+
         {/* Exercise Library */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Exercise Library</Text>
@@ -347,6 +390,18 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 12,
     marginTop: 2,
+  },
+  apiKeyInput: {
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    color: '#fff',
+    fontSize: 12,
+    fontFamily: 'monospace',
+    marginBottom: 8,
   },
   regeneratingContainer: {
     flex: 1,
