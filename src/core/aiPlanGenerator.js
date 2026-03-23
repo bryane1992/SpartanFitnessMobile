@@ -305,11 +305,13 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
           const aiEx = block.exercises[exIdx];
           const matchedId = fuzzyMatchExercise(aiEx.name, exercisePool);
 
-          // Apply weekly progression to weight
-          let baseWeight = aiEx.weight || 'BW';
+          // Look up matched exercise to get its category
+          const matchedExercise = exercisePool.all.find(e => e.id === matchedId);
+          const category = matchedExercise?.category || null;
 
-          // Validate weight against equipment limits
-          baseWeight = capWeightToEquipment(baseWeight, aiEx.name, userProfile);
+          // Validate weight against equipment limits using DB category
+          let baseWeight = aiEx.weight || 'BW';
+          baseWeight = capWeightToEquipment(baseWeight, category, userProfile);
 
           const progWeight = applyWeeklyProgression(baseWeight, week, phase.phase);
 
@@ -409,31 +411,28 @@ function fuzzyMatchExercise(name, pool) {
   return (seeds.length > 0 ? seeds[Math.floor(Math.random() * seeds.length)] : pool.all[0])?.id || 'air_squats';
 }
 
-// Validate and cap weights to user's actual equipment
-function capWeightToEquipment(weight, exerciseName, profile) {
+// Validate and cap weights to user's actual equipment using exercise category from DB
+function capWeightToEquipment(weight, category, profile) {
   if (!weight || weight === 'BW' || weight === 'bodyweight') return weight;
   const numWeight = parseFloat(weight);
   if (isNaN(numWeight) || numWeight === 0) return weight;
+  if (!category) return weight;
 
-  const name = (exerciseName || '').toLowerCase();
   const details = profile.equipmentDetails || {};
 
-  // Detect if this is a dumbbell exercise
-  const isDumbbell = name.includes('db') || name.includes('dumbbell') || name.includes('dumbell');
-  if (isDumbbell && details.dumbbells?.maxWeight) {
-    const maxDb = parseFloat(details.dumbbells.maxWeight);
-    if (numWeight > maxDb) {
-      return `${Math.round(maxDb / 5) * 5} lb`;
-    }
-  }
+  const limits = {
+    dumbbell: details.dumbbells?.maxWeight ? parseFloat(details.dumbbells.maxWeight) : null,
+    barbell: details.barbell?.maxWeight ? parseFloat(details.barbell.maxWeight) : null,
+    kettlebell: details.kettlebell?.weights
+      ? Math.max(...details.kettlebell.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0), 0)
+      : null,
+  };
 
-  // Detect barbell exercise
-  const isBarbell = name.includes('barbell') || name.includes('bar ') || name.includes('bench press') || name.includes('squat') || name.includes('deadlift');
-  if (isBarbell && details.barbell?.maxWeight) {
-    const maxBar = parseFloat(details.barbell.maxWeight);
-    if (numWeight > maxBar) {
-      return `${Math.round(maxBar / 5) * 5} lb`;
-    }
+  const maxWeight = limits[category];
+  if (maxWeight && numWeight > maxWeight) {
+    const capped = Math.round(maxWeight / 5) * 5;
+    console.log(`[AI Plan] Capped ${category} weight: ${numWeight} → ${capped} lb`);
+    return `${capped} lb`;
   }
 
   return weight;
