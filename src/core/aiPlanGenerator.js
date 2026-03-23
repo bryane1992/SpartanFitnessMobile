@@ -68,7 +68,11 @@ IMPORTANT:
 - Only include training days, not rest days
 - Exercise names should be common names that can be fuzzy-matched to a database
 - Weight should be realistic for the user's experience level and equipment
-- Sets/reps should match the body comp goal and mesocycle phase`;
+- Sets/reps should match the body comp goal and mesocycle phase
+- Keep exercise names SHORT (e.g. "Bench Press" not "Barbell Flat Bench Press")
+- 3-6 exercises per block, 2-4 blocks per day — do NOT over-program
+- Keep "notes" and "rest" fields null unless truly needed
+- Do NOT add explanatory text outside the JSON — return ONLY valid JSON`;
 
 export async function generateAIPlan(userProfile, onStatus) {
   const apiKey = getApiKey();
@@ -94,7 +98,7 @@ export async function generateAIPlan(userProfile, onStatus) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 4000,
+        max_tokens: 16000,
         system: PLAN_SYSTEM_PROMPT,
         messages: [{ role: 'user', content: prompt }],
       }),
