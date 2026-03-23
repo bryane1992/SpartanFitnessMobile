@@ -535,7 +535,6 @@ export default function Onboarding({ navigation }) {
             {workoutStyles.includes(ws.id) && <View style={styles.checkMark} />}
           </TouchableOpacity>
         ))}
-      </ScrollView>
 
         {/* Body Comp */}
         <Text style={[styles.sectionLabel, { marginTop: 25 }]}>Body composition focus?</Text>
