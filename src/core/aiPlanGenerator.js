@@ -84,7 +84,7 @@ IMPORTANT:
 - Exercise names should be common names that can be fuzzy-matched to a database
 - Weight should be realistic for the user's experience level and equipment
 - Sets/reps should match the body comp goal and mesocycle phase
-- Keep exercise names SHORT (e.g. "Bench Press" not "Barbell Flat Bench Press")
+- Use COMMON exercise names: "Back Squat", "Bench Press", "Deadlift", "Pull Up", "Overhead Press", "Bent Over Row", "Lunges", "Romanian Deadlift", "Bicep Curl", "Tricep Pushdown", "Lat Pulldown", "Leg Press", "Farmer Walk", "Plank", "Push Up". Do NOT prefix with equipment (say "Bench Press" not "Barbell Bench Press")
 - 3-6 exercises per block, 2-4 blocks per day — do NOT over-program
 - Keep "notes" and "rest" fields null unless truly needed
 - Do NOT add explanatory text outside the JSON — return ONLY valid JSON`;
@@ -94,8 +94,11 @@ export async function generateAIPlan(userProfile, onStatus) {
 
   if (onStatus) onStatus('Analyzing your goals and equipment...');
 
-  // Build the user context for Claude
-  const prompt = buildPlanPrompt(userProfile);
+  // Preload exercise pool so we can send names to Claude
+  const exercisePool = await loadExercisePool(userProfile);
+
+  // Build the user context for Claude, including available exercise names
+  const prompt = buildPlanPrompt(userProfile, exercisePool);
 
   if (onStatus) onStatus('Designing your personalized program...');
 
@@ -144,8 +147,8 @@ export async function generateAIPlan(userProfile, onStatus) {
 
     if (onStatus) onStatus('Matching exercises to our database...');
 
-    // Now convert AI plan to DB records
-    return await saveAIPlanToDb(aiPlan, userProfile, onStatus);
+    // Now convert AI plan to DB records using the already-loaded pool
+    return await saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool);
 
   } catch (e) {
     clearTimeout(timer);
@@ -154,7 +157,7 @@ export async function generateAIPlan(userProfile, onStatus) {
   }
 }
 
-function buildPlanPrompt(profile) {
+function buildPlanPrompt(profile, exercisePool) {
   const parts = [];
 
   parts.push('Design a weekly workout template for this user:\n');
@@ -202,18 +205,27 @@ function buildPlanPrompt(profile) {
     parts.push(`\nEVENT DATE: ${profile.eventDate}`);
   }
 
+  // Send available exercise names so Claude picks from real exercises
+  if (exercisePool && exercisePool.all.length > 0) {
+    // Prefer seed exercises (curated), limit to 120 names to control tokens
+    const seeds = exercisePool.all.filter(e => e.source === 'seed' || !e.source);
+    const apiExercises = exercisePool.all.filter(e => e.source === 'exercisedb');
+    const exerciseList = [
+      ...seeds.map(e => e.name),
+      ...apiExercises.slice(0, Math.max(0, 120 - seeds.length)).map(e => e.name),
+    ];
+    parts.push(`\nAVAILABLE EXERCISES (use these exact names when possible):\n${exerciseList.join(', ')}`);
+  }
+
   return parts.join('\n');
 }
 
-async function saveAIPlanToDb(aiPlan, userProfile, onStatus) {
+async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
   const planId = generateUUID();
   const startDate = getNextMonday();
   const eventDate = userProfile.eventDate || addWeeks(startDate, 16);
   const phaseData = calculatePhases(startDate, eventDate);
   const { totalWeeks, phases } = phaseData;
-
-  // Load exercise pool for fuzzy matching
-  const exercisePool = await loadExercisePool(userProfile);
 
   const trainingDays = userProfile.trainingDays || [0, 1, 2, 3, 4];
   const template = aiPlan.weeklyTemplate || [];
@@ -311,51 +323,76 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus) {
 
 // Fuzzy match an exercise name to our DB
 function fuzzyMatchExercise(name, pool) {
-  if (!name) return 'air_squats'; // fallback
+  if (!name) return 'air_squats';
 
-  const normalizedName = name.toLowerCase().trim();
+  const query = name.toLowerCase().trim();
 
-  // Exact match first
-  const exact = pool.all.find(e =>
-    e.name.toLowerCase() === normalizedName
-  );
+  // 1. Exact match
+  const exact = pool.all.find(e => e.name.toLowerCase() === query);
   if (exact) return exact.id;
 
-  // Partial match
-  const partial = pool.all.find(e =>
-    e.name.toLowerCase().includes(normalizedName) ||
-    normalizedName.includes(e.name.toLowerCase())
-  );
-  if (partial) return partial.id;
+  // 2. One name contains the other entirely
+  const containsMatch = pool.all.find(e => {
+    const eName = e.name.toLowerCase();
+    return eName.includes(query) || query.includes(eName);
+  });
+  if (containsMatch) return containsMatch.id;
 
-  // Word overlap scoring
-  const nameWords = normalizedName.split(/\s+/);
+  // 3. Score-based matching — weight meaningful words higher than generic ones
+  const GENERIC_WORDS = new Set(['barbell', 'dumbbell', 'cable', 'machine', 'band', 'seated', 'standing', 'weighted', 'single', 'double', 'arm', 'leg', 'with', 'the', 'and', 'for']);
+  const queryWords = query.split(/\s+/).filter(w => w.length >= 2);
+
   let bestScore = 0;
   let bestMatch = null;
 
   for (const ex of pool.all) {
-    const exWords = ex.name.toLowerCase().split(/\s+/);
+    const exName = ex.name.toLowerCase();
+    const exWords = exName.split(/\s+/);
+
     let score = 0;
-    for (const word of nameWords) {
-      if (word.length < 3) continue;
-      if (exWords.some(w => w.includes(word) || word.includes(w))) {
-        score += 1;
+    let meaningfulMatches = 0;
+    let totalMeaningful = 0;
+
+    for (const word of queryWords) {
+      const isGeneric = GENERIC_WORDS.has(word);
+      const matched = exWords.some(w => w === word || (w.length > 3 && word.length > 3 && (w.startsWith(word) || word.startsWith(w))));
+
+      if (matched) {
+        score += isGeneric ? 0.5 : 3; // meaningful words worth 6x more
+        if (!isGeneric) meaningfulMatches++;
       }
+      if (!isGeneric) totalMeaningful++;
     }
-    // Bonus for same word count
-    if (exWords.length === nameWords.length) score += 0.5;
+
+    // Bonus: proportion of meaningful words matched
+    if (totalMeaningful > 0) {
+      score += (meaningfulMatches / totalMeaningful) * 5;
+    }
+
+    // Penalty: big length difference suggests wrong exercise
+    const lenDiff = Math.abs(exWords.length - queryWords.length);
+    score -= lenDiff * 0.3;
 
     if (score > bestScore) {
       bestScore = score;
-      bestMatch = ex.id;
+      bestMatch = ex;
     }
   }
 
-  if (bestMatch && bestScore >= 1) return bestMatch;
+  if (bestMatch && bestScore >= 3) {
+    console.log(`[AI Plan] Matched "${name}" → "${bestMatch.name}" (score: ${bestScore.toFixed(1)})`);
+    return bestMatch.id;
+  }
 
-  // Last resort: find something in the same muscle group
-  console.warn(`[AI Plan] Could not match exercise: "${name}"`);
-  return pool.all[Math.floor(Math.random() * Math.min(20, pool.all.length))]?.id || 'air_squats';
+  // 4. Last resort: try to match by seed exercise ID (e.g. "bench_press" → "bench_press")
+  const idGuess = query.replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+  const idMatch = pool.all.find(e => e.id === idGuess);
+  if (idMatch) return idMatch.id;
+
+  console.warn(`[AI Plan] No match for "${name}" — using fallback`);
+  // Pick a random seed exercise as fallback (prefer seed over API exercises)
+  const seeds = pool.all.filter(e => e.source === 'seed' || !e.source);
+  return (seeds.length > 0 ? seeds[Math.floor(Math.random() * seeds.length)] : pool.all[0])?.id || 'air_squats';
 }
 
 function applyWeeklyProgression(baseWeight, weekNumber, phase) {
