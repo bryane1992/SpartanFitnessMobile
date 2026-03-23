@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { initDatabase, saveUserEquipment } from '../data/database';
+import { initDatabase, saveUserEquipment, getWorkoutForDate } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 
 const TOTAL_STEPS = 7;
@@ -120,8 +120,53 @@ export default function Onboarding({ navigation }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingStatus, setGeneratingStatus] = useState('');
   const [planSummary, setPlanSummary] = useState(null);
+  const [adjustmentNotes, setAdjustmentNotes] = useState('');
 
   const generateNewPlan = useWorkoutStore(s => s.generateNewPlan);
+
+  const handleRegenWithAdjustments = async () => {
+    // Append adjustments to the notes and regenerate
+    const updatedNotes = [additionalNotes, `ADJUSTMENTS: ${adjustmentNotes.trim()}`].filter(Boolean).join('\n');
+    setAdditionalNotes(updatedNotes);
+    setAdjustmentNotes('');
+    setPlanSummary(null);
+    setIsGenerating(true);
+    setVisibleStep(0);
+
+    try {
+      const profileStr = await AsyncStorage.getItem('userProfile');
+      const profile = profileStr ? JSON.parse(profileStr) : {};
+      profile.additionalNotes = updatedNotes;
+      await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
+
+      const result = await generateNewPlan(profile, setGeneratingStatus);
+
+      const weekPreview = [];
+      const startDate = result.startDate;
+      for (let d = 0; d < 7; d++) {
+        const date = new Date(startDate + 'T12:00:00Z');
+        date.setUTCDate(date.getUTCDate() + d);
+        const dateStr = date.toISOString().split('T')[0];
+        try {
+          const workout = await getWorkoutForDate(dateStr);
+          if (workout) weekPreview.push(workout);
+        } catch {}
+      }
+
+      setIsGenerating(false);
+      setPlanSummary({
+        planName: result.planName || 'Your Custom Plan',
+        totalWeeks: result.totalWeeks,
+        notes: result.programNotes || null,
+        daysPerWeek: profile.trainingDaysPerWeek,
+        goals: profile.goals || [profile.goal],
+        weekPreview,
+      });
+    } catch (e) {
+      console.error('Error regenerating:', e);
+      setIsGenerating(false);
+    }
+  };
 
   const toggleGoal = (id) => {
     if (selectedGoals.includes(id)) {
@@ -231,6 +276,19 @@ export default function Onboarding({ navigation }) {
 
       const result = await generateNewPlan(profile, setGeneratingStatus);
 
+      // Load week 1 workouts for preview
+      const weekPreview = [];
+      const startDate = result.startDate;
+      for (let d = 0; d < 7; d++) {
+        const date = new Date(startDate + 'T12:00:00Z');
+        date.setUTCDate(date.getUTCDate() + d);
+        const dateStr = date.toISOString().split('T')[0];
+        try {
+          const workout = await getWorkoutForDate(dateStr);
+          if (workout) weekPreview.push(workout);
+        } catch {}
+      }
+
       // Show plan summary before navigating
       setIsGenerating(false);
       setPlanSummary({
@@ -239,6 +297,7 @@ export default function Onboarding({ navigation }) {
         notes: result.programNotes || null,
         daysPerWeek: profile.trainingDaysPerWeek,
         goals: selectedGoals,
+        weekPreview,
       });
     } catch (error) {
       console.error('Error completing onboarding:', error);
@@ -732,6 +791,8 @@ export default function Onboarding({ navigation }) {
       build_muscle: 'Build Muscle', lose_fat: 'Lose Fat', get_stronger: 'Get Stronger',
       endurance: 'Endurance', athletic: 'Athletic Performance', general_fitness: 'General Fitness',
     };
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
     return (
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.summaryContainer}>
@@ -761,6 +822,35 @@ export default function Onboarding({ navigation }) {
             ))}
           </View>
 
+          {/* Week 1 Preview */}
+          {planSummary.weekPreview && planSummary.weekPreview.length > 0 ? (
+            <View style={styles.summaryNotesCard}>
+              <Text style={styles.summaryNotesTitle}>WEEK 1 PREVIEW</Text>
+              {planSummary.weekPreview.map((day, i) => (
+                <View key={i} style={styles.previewDay}>
+                  <View style={styles.previewDayHeader}>
+                    <Text style={styles.previewDayName}>{dayNames[day.day_of_week] || ''}</Text>
+                    <Text style={[styles.previewDayTitle, day.is_rest_day && { color: '#444' }]}>
+                      {day.title}
+                    </Text>
+                  </View>
+                  {!day.is_rest_day && day.blocks ? (
+                    day.blocks.filter(b => !b.name?.toUpperCase().includes('WARM')).map((block, bi) => (
+                      <View key={bi} style={styles.previewBlock}>
+                        <Text style={styles.previewBlockName}>{block.name}</Text>
+                        {(block.exercises || []).map((ex, ei) => (
+                          <Text key={ei} style={styles.previewExercise}>
+                            {ex.name} — {String(ex.sets)} @ {String(ex.weight || 'BW')}
+                          </Text>
+                        ))}
+                      </View>
+                    ))
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           {planSummary.notes ? (
             <View style={styles.summaryNotesCard}>
               <Text style={styles.summaryNotesTitle}>COACH NOTES</Text>
@@ -771,18 +861,41 @@ export default function Onboarding({ navigation }) {
           <View style={styles.summaryProgression}>
             <Text style={styles.summaryNotesTitle}>PROGRESSION</Text>
             <Text style={styles.summaryNotesText}>
-              Weeks 1-4: Accumulation — building work capacity with moderate intensity{'\n\n'}
+              Weeks 1-4: Accumulation — building work capacity{'\n\n'}
               Weeks 5-8: Intensification — heavier loads, lower volume{'\n\n'}
-              Weeks 9-12: Realization — peak performance, testing benchmarks{'\n\n'}
+              Weeks 9-12: Realization — peak performance{'\n\n'}
               Every 4th week is a deload for recovery.
             </Text>
+          </View>
+
+          {/* Adjustment notes */}
+          <View style={styles.summaryNotesCard}>
+            <Text style={styles.summaryNotesTitle}>WANT CHANGES?</Text>
+            <TextInput
+              style={styles.notesInput}
+              placeholder="e.g. More chest work, swap deadlifts for trap bar, add a second run day..."
+              placeholderTextColor="rgba(255,255,255,0.2)"
+              value={adjustmentNotes}
+              onChangeText={setAdjustmentNotes}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+            {adjustmentNotes.trim().length > 0 ? (
+              <TouchableOpacity
+                style={[styles.buildButton, { marginTop: 12 }]}
+                onPress={handleRegenWithAdjustments}
+              >
+                <Text style={styles.buildButtonText}>REBUILD WITH CHANGES</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           <TouchableOpacity
             style={styles.buildButton}
             onPress={() => navigation.replace('Main')}
           >
-            <Text style={styles.buildButtonText}>LET'S GO</Text>
+            <Text style={styles.buildButtonText}>LOOKS GOOD — LET'S GO</Text>
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
@@ -1369,8 +1482,48 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 18,
     width: '100%',
-    marginBottom: 24,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#222',
+  },
+  // Week preview
+  previewDay: {
+    marginBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.04)',
+    paddingBottom: 12,
+  },
+  previewDayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  previewDayName: {
+    color: '#FF4136',
+    fontSize: 12,
+    fontWeight: '900',
+    width: 36,
+    fontFamily: 'monospace',
+  },
+  previewDayTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  previewBlock: {
+    marginLeft: 36,
+    marginBottom: 6,
+  },
+  previewBlockName: {
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 3,
+  },
+  previewExercise: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    lineHeight: 18,
   },
 });
