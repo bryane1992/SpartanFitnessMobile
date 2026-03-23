@@ -90,7 +90,13 @@ IMPORTANT:
 - Weight should be realistic for the user's experience level and equipment
 - Sets/reps should match the body comp goal and mesocycle phase
 - Use COMMON exercise names: "Back Squat", "Bench Press", "Deadlift", "Pull Up", "Overhead Press", "Bent Over Row", "Lunges", "Romanian Deadlift", "Bicep Curl", "Tricep Pushdown", "Lat Pulldown", "Leg Press", "Farmer Walk", "Plank", "Push Up". Do NOT prefix with equipment (say "Bench Press" not "Barbell Bench Press")
-- 3-6 exercises per block, 2-4 blocks per day — do NOT over-program
+- MINIMUM VOLUME per training day:
+  * MAIN LIFTS block: 3-4 compound exercises (e.g. squat, press, row)
+  * ACCESSORIES block: 2-3 isolation/support exercises
+  * WOD/CONDITIONING block: use a REAL named WOD from the AVAILABLE WODS list, or a multi-exercise circuit with 3+ movements. NEVER a single exercise.
+  * WARMUP: 3-4 dynamic movements
+- Each training day should have 3-4 blocks total and 10-16 exercises total
+- WODs must use the exact WOD name and movements from the AVAILABLE WODS list. Do NOT invent fake WODs.
 - Keep "notes" and "rest" fields null unless truly needed
 - Do NOT add explanatory text outside the JSON — return ONLY valid JSON`;
 
