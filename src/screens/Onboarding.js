@@ -58,11 +58,11 @@ const WORKOUT_STYLES = [
 ];
 
 const EXCLUSIONS = [
-  { id: 'olympic_lift', label: 'Olympic Lifts', icon: '', desc: 'Clean, snatch, jerk' },
-  { id: 'heavy_barbell', label: 'Heavy Barbell', icon: '', desc: 'Squat, deadlift, bench' },
+  { id: 'olympic_lift', label: 'Olympic Lifts', icon: '', desc: 'Clean, snatch, jerk — complex barbell movements' },
+  { id: 'max_effort', label: 'Max Effort / 1RM', icon: '', desc: 'Singles and heavy triples near your max' },
   { id: 'running', label: 'Running', icon: '', desc: 'All running movements' },
-  { id: 'jumping', label: 'Jumping / Plyo', icon: '', desc: 'Box jumps, jump squats' },
-  { id: 'overhead', label: 'Overhead Work', icon: '', desc: 'Presses, jerks, snatches' },
+  { id: 'jumping', label: 'Jumping / Plyo', icon: '', desc: 'Box jumps, jump squats, burpees' },
+  { id: 'overhead', label: 'Overhead Work', icon: '', desc: 'Overhead presses, jerks, snatches' },
 ];
 
 const BODY_COMP_GOALS = [

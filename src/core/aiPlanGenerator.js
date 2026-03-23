@@ -102,12 +102,64 @@ export async function generateAIPlan(userProfile, onStatus) {
   if (onStatus) onStatus('Analyzing your goals and equipment...');
 
   const exercisePool = await loadExercisePool(userProfile);
-  const prompt = buildPlanPrompt(userProfile, exercisePool);
+  const basePrompt = buildPlanPrompt(userProfile, exercisePool);
 
-  if (onStatus) onStatus('Designing your personalized program...');
+  // Generate each phase separately to avoid token truncation
+  const phaseNames = ['accumulation', 'intensification', 'realization'];
+  const phaseDescriptions = {
+    accumulation: 'ACCUMULATION (weeks 1-4): Higher volume, moderate intensity. 4x10, 3x12. RPE 6-7. Pick longer WODs (12-20 min).',
+    intensification: 'INTENSIFICATION (weeks 5-8): Moderate volume, higher intensity. 4x8, 5x5. RPE 7-8. Different accessories than accumulation. Moderate WODs (8-12 min).',
+    realization: 'REALIZATION (weeks 9-12): Low volume, high intensity. 5x3, 3x3. RPE 8-9. Minimal accessories, peak compounds. Short intense WODs (<8 min).',
+  };
 
+  const phaseTemplates = {};
+  let planName = 'Custom Program';
+  let programNotes = '';
+  let restDayAdvice = 'Light walking, foam rolling, mobility';
+  const previousPhaseExercises = [];
+
+  for (let i = 0; i < phaseNames.length; i++) {
+    const phase = phaseNames[i];
+    const statusMessages = ['Designing accumulation phase...', 'Designing intensification phase...', 'Designing realization phase...'];
+    if (onStatus) onStatus(statusMessages[i]);
+
+    const phasePrompt = `${basePrompt}\n\nGenerate ONLY the ${phase.toUpperCase()} phase template.\n${phaseDescriptions[phase]}${
+      previousPhaseExercises.length > 0 ? `\n\nPREVIOUS PHASES USED THESE EXERCISES (pick DIFFERENT accessories and WODs): ${previousPhaseExercises.join(', ')}` : ''
+    }\n\nRespond with JSON: {"planName":"...","weeklyTemplate":[...],"restDayAdvice":"...","programNotes":"..."}`;
+
+    try {
+      const result = await callClaude(apiKey, phasePrompt);
+      phaseTemplates[phase] = { weeklyTemplate: result.weeklyTemplate || [] };
+      if (i === 0) {
+        planName = result.planName || planName;
+        programNotes = result.programNotes || '';
+        restDayAdvice = result.restDayAdvice || restDayAdvice;
+      }
+      // Track exercises used so next phase picks different ones
+      for (const day of (result.weeklyTemplate || [])) {
+        for (const block of (day.blocks || [])) {
+          for (const ex of (block.exercises || [])) {
+            if (ex.name) previousPhaseExercises.push(ex.name);
+          }
+        }
+      }
+    } catch (e) {
+      console.error(`[AI Plan] ${phase} phase failed:`, e.message);
+      // If a phase fails, reuse the previous one
+      const fallback = phaseTemplates[phaseNames[i - 1]] || { weeklyTemplate: [] };
+      phaseTemplates[phase] = fallback;
+    }
+  }
+
+  if (onStatus) onStatus('Matching exercises to our database...');
+
+  const aiPlan = { planName, programNotes, restDayAdvice, phases: phaseTemplates };
+  return await saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool);
+}
+
+async function callClaude(apiKey, prompt) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 90000); // 90s for 3 phase templates
+  const timer = setTimeout(() => controller.abort(), 45000);
 
   try {
     const response = await fetch(ANTHROPIC_API_URL, {
@@ -119,7 +171,7 @@ export async function generateAIPlan(userProfile, onStatus) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 12000, // 3 phases need more tokens
+        max_tokens: 6000,
         system: PLAN_SYSTEM_PROMPT,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -130,29 +182,22 @@ export async function generateAIPlan(userProfile, onStatus) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[AI Plan] API error:', response.status, errorText);
-      throw new Error(`Plan generation failed: ${response.status}`);
+      throw new Error(`API ${response.status}: ${errorText}`);
     }
 
     const result = await response.json();
     let rawText = result.content?.[0]?.text || '';
     const usage = result.usage || {};
-    console.log(`[AI Plan] Tokens — in: ${usage.input_tokens || '?'}, out: ${usage.output_tokens || '?'}, response: ${rawText.length} chars`);
+    console.log(`[AI Plan] Tokens — in: ${usage.input_tokens || '?'}, out: ${usage.output_tokens || '?'}`);
 
     rawText = rawText.trim();
     if (rawText.startsWith('```')) {
       rawText = rawText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
     }
 
-    const aiPlan = JSON.parse(rawText);
-
-    if (onStatus) onStatus('Matching exercises to our database...');
-
-    return await saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool);
-
+    return JSON.parse(rawText);
   } catch (e) {
     clearTimeout(timer);
-    console.error('[AI Plan] Error:', e);
     throw e;
   }
 }
