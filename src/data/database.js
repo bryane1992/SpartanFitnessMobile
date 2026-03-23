@@ -308,11 +308,11 @@ export async function getExercisesByFilter({ muscleGroups, style, exclusions, eq
     params.push(...allowed);
   }
 
-  const results = await database.getAllAsync(query, params);
+  let filtered = await database.getAllAsync(query, params);
 
   // Filter out exclusions in JS (JSON array matching)
   if (exclusions && exclusions.length > 0) {
-    return results.filter(ex => {
+    filtered = filtered.filter(ex => {
       const tags = JSON.parse(ex.exclusion_tags || '[]');
       return !tags.some(t => exclusions.includes(t));
     });
@@ -320,33 +320,42 @@ export async function getExercisesByFilter({ muscleGroups, style, exclusions, eq
 
   // Filter by equipment in JS
   if (equipment && equipment.length > 0) {
-    return results.filter(ex => {
+    const equipmentMap = {
+      dumbbells: ['dumbbell'],
+      barbell: ['barbell', 'bench'],  // barbell implies bench access
+      squat_rack: ['rack', 'barbell'], // rack implies barbell
+      bench: ['bench'],
+      pull_up_bar: ['pull_up_bar'],
+      kettlebell: ['kettlebell'],
+      cables: ['cable'],
+      machines: ['machine'],
+      bands: ['band'],
+      cardio_machines: ['machine'],
+      outdoor: ['outdoor'],
+      full_gym: ['barbell', 'dumbbell', 'cable', 'machine', 'bench', 'rack', 'kettlebell'],
+      home_gym: ['barbell', 'dumbbell', 'bench', 'kettlebell'],
+      minimal: ['band', 'kettlebell'],
+      bodyweight: [],
+    };
+    const userEquip = equipment.flatMap(e => equipmentMap[e] || []);
+
+    // Debug: check bench press specifically
+    const benchEx = filtered.find(e => e.id === 'bench_press');
+    if (benchEx) {
+      const req = JSON.parse(benchEx.equipment_required || '[]');
+      console.log(`[DB Filter] Bench press requires: ${req.join(',')}, user has: ${userEquip.join(',')}, pass: ${req.every(r => userEquip.includes(r))}`);
+    } else {
+      console.log(`[DB Filter] Bench press not in results (excluded or not matching style/difficulty)`);
+    }
+
+    filtered = filtered.filter(ex => {
       const required = JSON.parse(ex.equipment_required || '[]');
-      if (required.length === 0) return true; // bodyweight, no equipment needed
-      // Check user has at least one matching equipment category
-      const equipmentMap = {
-        // New specific equipment IDs
-        dumbbells: ['dumbbell'],
-        barbell: ['barbell', 'bench'],  // barbell implies bench access
-        squat_rack: ['rack', 'barbell'], // rack implies barbell
-        bench: ['bench'],
-        pull_up_bar: ['pull_up_bar'],
-        kettlebell: ['kettlebell'],
-        cables: ['cable'],
-        machines: ['machine'],
-        bands: ['band'],
-        cardio_machines: ['machine'],
-        outdoor: ['outdoor'],
-        // Legacy broad categories
-        full_gym: ['barbell', 'dumbbell', 'cable', 'machine', 'bench', 'rack', 'kettlebell'],
-        home_gym: ['barbell', 'dumbbell', 'bench', 'kettlebell'],
-        minimal: ['band', 'kettlebell'],
-        bodyweight: [],
-      };
-      const userEquip = equipment.flatMap(e => equipmentMap[e] || []);
+      if (required.length === 0) return true;
       return required.every(r => userEquip.includes(r));
     });
   }
+
+  return filtered;
 
   return results;
 }

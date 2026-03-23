@@ -173,8 +173,9 @@ export async function generateAIPlan(userProfile, onStatus) {
 }
 
 async function callClaude(apiKey, prompt) {
+  console.log(`[AI Plan] Sending prompt: ${prompt.length} chars`);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 45000);
+  const timer = setTimeout(() => controller.abort(), 60000);
 
   try {
     const response = await fetch(ANTHROPIC_API_URL, {
