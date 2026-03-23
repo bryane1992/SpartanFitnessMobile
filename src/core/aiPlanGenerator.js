@@ -254,16 +254,24 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus) {
         const block = dayTemplate.blocks[blockIdx];
 
         // Detect run blocks — set GPS tracking
+        const RUN_TYPES = ['EASY', 'TEMPO', 'INTERVALS', 'FARTLEK', 'LONG_RUN', 'RACE_PACE'];
+        const blockTypeUpper = (block.type || '').toUpperCase();
         const isRunBlock = block.isRun
           || block.name?.toUpperCase() === 'RUN'
-          || ['EASY', 'TEMPO', 'INTERVALS', 'FARTLEK', 'LONG_RUN', 'RACE_PACE'].includes(block.type?.toUpperCase());
+          || RUN_TYPES.includes(blockTypeUpper);
+
+        // Normalize run block type to match RUN_CONFIGS keys in RunTracker
+        const blockType = isRunBlock
+          ? (RUN_TYPES.includes(blockTypeUpper) ? blockTypeUpper : 'INTERVALS')
+          : block.type;
 
         const blockId = await savePlanBlock({
           planDayId: dayId, sortOrder: blockIdx,
-          name: block.name, type: block.type,
+          name: block.name, type: blockType,
           timeCap: block.duration, isAmrap: false, hasGps: isRunBlock,
         });
 
+        // For run blocks, don't apply weight progression to exercises
         // Match and save exercises
         for (let exIdx = 0; exIdx < (block.exercises || []).length; exIdx++) {
           const aiEx = block.exercises[exIdx];
@@ -346,6 +354,15 @@ function fuzzyMatchExercise(name, pool) {
 
 function applyWeeklyProgression(baseWeight, weekNumber, phase) {
   if (!baseWeight || baseWeight === 'BW' || baseWeight === 'bodyweight') return baseWeight;
+
+  // Don't apply progression to non-weight values (pace, effort, etc.)
+  const lower = baseWeight.toLowerCase();
+  if (lower.includes('%') || lower.includes('pace') || lower.includes('effort')
+      || lower.includes('min') || lower.includes('easy') || lower.includes('warm')
+      || lower.includes('cool') || lower.includes('conversational')
+      || lower.includes('speed') || lower.includes('target')) {
+    return baseWeight;
+  }
 
   const numWeight = parseFloat(baseWeight);
   if (isNaN(numWeight) || numWeight === 0) return baseWeight;

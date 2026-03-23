@@ -745,24 +745,34 @@ export default function Onboarding({ navigation }) {
   ];
 
   // Stagger step completions on a timer so it feels alive
+  // Last step only completes when plan is actually done (isGenerating goes false)
   const [visibleStep, setVisibleStep] = useState(0);
+  const [planReady, setPlanReady] = useState(false);
   const timerRef = useRef(null);
 
   useEffect(() => {
     if (!isGenerating) {
-      setVisibleStep(0);
+      if (visibleStep > 0) {
+        // Plan finished — check off the last step
+        setPlanReady(true);
+        setVisibleStep(GENERATING_STEPS.length);
+      } else {
+        setPlanReady(false);
+      }
       return;
     }
 
-    // Step delays in ms — early steps are quick, middle ones linger
-    const delays = [2000, 3000, 4000, 8000, 6000, 5000];
+    setPlanReady(false);
+    // Step delays in ms — only advance to step 5 (index 4), hold there until done
+    const delays = [2500, 3500, 5000, 8000, 7000];
     let current = 0;
+    const maxTimerStep = GENERATING_STEPS.length - 1; // stop one before last
 
     const advance = () => {
       current++;
       setVisibleStep(current);
-      if (current < GENERATING_STEPS.length) {
-        timerRef.current = setTimeout(advance, delays[current] || 4000);
+      if (current < maxTimerStep) {
+        timerRef.current = setTimeout(advance, delays[current] || 5000);
       }
     };
 
