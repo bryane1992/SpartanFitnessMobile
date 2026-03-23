@@ -9,115 +9,105 @@ import { getDatabase, savePlanDay, savePlanBlock, savePlanExercise, getExercises
 import { getWods } from '../data/wodSeed';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-haiku-4-5-20251001'; // Haiku for structured plan output — fast & cheap
+const MODEL = 'claude-haiku-4-5-20251001';
 
 function getApiKey() {
   return Constants.expoConfig?.extra?.claudeApiKey
     || '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';
 }
 
-const PLAN_SYSTEM_PROMPT = `You are an elite strength & conditioning coach designing a personalized workout program.
+const PLAN_SYSTEM_PROMPT = `You are an elite S&C coach designing a periodized program.
 
-You will receive a user's complete profile and must design a WEEKLY TEMPLATE — a repeating pattern of training days.
+You must design THREE phase templates (not one). Each phase has different exercises, rep schemes, and conditioning.
 
 RULES:
-- Design for the user's specific equipment, goals, time constraints, injuries, and experience
-- Each training day must fit within their session duration
-- Use proper periodization (accumulation → intensification → realization)
+- Design for the user's specific equipment, goals, time, injuries, experience, and body metrics
 - Follow exercise sequencing: power → compound → accessory → core → conditioning
 - Never program exercises the user can't do with their equipment
 - Respect exclusions completely
-- Include warmup blocks for every training day
-- For injury notes, avoid aggravating movements and program around them
-- Prioritize EFFICIENCY: pick exercises that hit the most muscle per movement. Prefer big compound lifts (squat, deadlift, press, row, pull-up) over isolation. Only add isolation work to address weak points or fill volume gaps.
-- No redundant exercises — if bench press and dumbbell press are in the same session, one is wasted. Each exercise should earn its slot by targeting something the others don't.
-- NEVER use "BW" for weighted carries (farmer's walk, suitcase carry, etc.) — always prescribe actual weight based on user's equipment
-- WEIGHT RULES: Dumbbell weights must NEVER exceed the user's max dumbbell weight per hand. Barbell weights must never exceed the user's barbell max. If the user says they bench 100 lbs, that's barbell — a dumbbell equivalent would be ~35-40 lb per hand, NOT 100.
-- If the user asks for same-weight dumbbell exercises, pick a single weight and use it for ALL dumbbell movements in that session
-- BODY METRICS RULES: Scale programming to the user's body. BMI > 30: limit running to 10-15 min walks/jogs, prioritize low-impact cardio (rower, bike), use bodyweight scaling. BMI 25-30: moderate cardio, build up run distance gradually. Heavier users need more recovery between sets and lower-impact exercise choices.
-- Spartan/OCR goals MUST include 1-2 dedicated RUN days per week with a block named "RUN" and type set to one of: EASY, TEMPO, INTERVALS, FARTLEK, LONG_RUN, RACE_PACE
-- Run blocks should have "isRun": true in the block object
-- Spartan goals should also include obstacle-specific training (carries, grip work, crawls)
-- For conditioning/WOD days, you can program a named WOD from the AVAILABLE WODS list. Use the WOD name as the block name and "WOD" as the type. Include the WOD's movements as exercises. Match WOD difficulty to user's experience level.
+- Prioritize EFFICIENCY: compound lifts first, isolation only for gaps
+- No redundant exercises in the same session (e.g. bench press + DB bench)
+- PUSH/PULL BALANCE: every push day needs equal pulling volume. Count horizontal push (bench) vs horizontal pull (row), vertical push (OHP) vs vertical pull (pull-up). Ratio must be close to 1:1.
+- WEIGHT RULES: DB weights never exceed user's max DB per hand. Barbell never exceeds user's barbell max.
+- BODY METRICS: BMI > 30: limit running to walks/jogs, low-impact cardio. BMI 25-30: gradual cardio buildup.
+- Spartan/OCR goals: include 1-2 run days + obstacle training
+- Run blocks: set "isRun": true, type must be EASY/TEMPO/INTERVALS/FARTLEK/LONG_RUN/RACE_PACE
+
+PHASE DESIGN:
+- ACCUMULATION (weeks 1-4): Higher volume, moderate intensity. 4x10, 3x12, 3x15. RPE 6-7. Longer rest (90-120s). Build work capacity.
+- INTENSIFICATION (weeks 5-8): Moderate volume, higher intensity. 4x8, 5x5, 3x6. RPE 7-8. Moderate rest (60-90s). Different accessories than accumulation.
+- REALIZATION (weeks 9-12): Low volume, high intensity. 5x3, 4x5, 3x3. RPE 8-9. Long rest (2-3 min). Peak compounds, minimal accessories.
+- Each phase MUST have different exercises for accessories and conditioning. Main lifts can stay but rep scheme must change.
+
+CONDITIONING EVOLUTION:
+- Each phase must have DIFFERENT WODs/conditioning. Do NOT repeat the same WOD across phases.
+- Accumulation: longer, aerobic WODs (12-20 min AMRAPs, chippers)
+- Intensification: moderate WODs (8-12 min, heavier weights)
+- Realization: short, intense WODs (< 8 min, sprint efforts)
+
+VOLUME BY SESSION DURATION:
+- 30 min: 1 block of 3-4 supersets, no warmup, short WOD or skip
+- 45 min: brief warmup, 2-3 compounds, 1-2 accessories, short WOD
+- 60 min: warmup, 3-4 compounds, 2-3 accessories, WOD, cooldown
+- 90 min: warmup, 3-4 compounds, 3-4 accessories, full WOD, core, cooldown
+- 120 min: everything + skill work, extra volume
+
+EVERY TRAINING DAY (60+ min) must end with:
+- COOLDOWN block: 3-4 mobility/stretching moves (hip flexor stretch, shoulder stretch, thoracic rotation, foam roll)
+
+CORE WORK must include variety: anti-extension (ab wheel, hollow hold), anti-rotation (pallof press, bird dog), loaded carries (farmer walk, suitcase carry), and hip flexion (hanging leg raise, V-ups). Progress core over phases.
+
+RPE NOTES: Add "RPE X" in the notes field for main compound lifts.
 
 RESPONSE FORMAT — valid JSON only:
 {
-  "planName": "Short catchy name for the program",
-  "weeklyTemplate": [
-    {
-      "dayIndex": 0,
-      "title": "PUSH POWER",
-      "type": "upper_push",
-      "focus": "Chest, shoulders, triceps",
-      "blocks": [
+  "planName": "Program name",
+  "phases": {
+    "accumulation": {
+      "weeklyTemplate": [
         {
-          "name": "WARM-UP",
-          "type": "MOVEMENT PREP",
-          "duration": "8 min",
-          "exercises": [
-            { "name": "Band Pull-Aparts", "sets": "2", "reps": "15", "weight": "BW", "rest": null, "notes": null }
-          ]
-        },
-        {
-          "name": "MAIN LIFTS",
-          "type": "COMPOUND",
-          "duration": "25 min",
-          "exercises": [
-            { "name": "Bench Press", "sets": "4", "reps": "6", "weight": "135 lb", "rest": "120s", "notes": "Tempo: 3110" }
-          ]
-        },
-        {
-          "name": "RUN",
-          "type": "INTERVALS",
-          "isRun": true,
-          "duration": "25 min",
-          "exercises": [
-            { "name": "Easy Jog", "sets": "1", "reps": "5 min", "weight": "Warm-up pace", "rest": null, "notes": null },
-            { "name": "Interval Run", "sets": "6", "reps": "2 min hard / 1 min easy", "weight": "80% effort", "rest": null, "notes": "Target: 3 mi" }
+          "dayIndex": 0,
+          "title": "LOWER POWER",
+          "focus": "Quads, glutes, hamstrings",
+          "blocks": [
+            {"name": "WARM-UP", "type": "MOVEMENT PREP", "duration": "8 min", "exercises": [...]},
+            {"name": "MAIN LIFTS", "type": "COMPOUND", "duration": "25 min", "exercises": [
+              {"name": "Back Squat", "sets": "4", "reps": "10", "weight": "95 lb", "rest": "90s", "notes": "RPE 7"}
+            ]},
+            {"name": "ACCESSORIES", "type": "ISOLATION", "duration": "12 min", "exercises": [...]},
+            {"name": "CINDY", "type": "WOD", "duration": "20 min", "exercises": [...]},
+            {"name": "COOLDOWN", "type": "MOBILITY", "duration": "5 min", "exercises": [...]}
           ]
         }
       ]
-    }
-  ],
-  "restDayAdvice": "Light walking, foam rolling, mobility work",
-  "programNotes": "Brief explanation of why you designed the plan this way"
+    },
+    "intensification": { "weeklyTemplate": [...] },
+    "realization": { "weeklyTemplate": [...] }
+  },
+  "restDayAdvice": "Light walking, foam rolling, mobility",
+  "programNotes": "Why you designed it this way"
 }
 
 IMPORTANT:
-- dayIndex corresponds to the user's selected training days (0 = first training day, 1 = second, etc.)
-- Only include training days, not rest days
-- Exercise names should be common names that can be fuzzy-matched to a database
-- Weight should be realistic for the user's experience level and equipment
-- Sets/reps should match the body comp goal and mesocycle phase
-- Use COMMON exercise names: "Back Squat", "Bench Press", "Deadlift", "Pull Up", "Overhead Press", "Bent Over Row", "Lunges", "Romanian Deadlift", "Bicep Curl", "Tricep Pushdown", "Lat Pulldown", "Leg Press", "Farmer Walk", "Plank", "Push Up". Do NOT prefix with equipment (say "Bench Press" not "Barbell Bench Press")
-- SCALE VOLUME TO SESSION DURATION. The user's time is the hard constraint:
-  * 30 min: skip warmup block. 1 block of 3-4 supersetted compounds, short rest. No accessories. Pick a short WOD (<8 min) or skip WOD.
-  * 45 min: brief warmup (2 moves). 2-3 main compounds. 1-2 accessories. Short WOD or finisher circuit.
-  * 60 min: full warmup (3-4 moves). 3-4 main compounds. 2-3 accessories. WOD or conditioning block.
-  * 90 min: full warmup. 3-4 main compounds with longer rest. 3-4 accessories. Full WOD. Can add core/carry work.
-  * 120 min: everything above plus skill work, extra volume, longer WODs.
-- WOD/CONDITIONING: use a REAL named WOD from the AVAILABLE WODS list, or a multi-exercise circuit with 3+ movements. NEVER a single exercise.
-- WARMUP: 3-4 dynamic movements (skip for 30 min sessions)
-- WODs must use the exact WOD name and movements from the AVAILABLE WODS list. Do NOT invent fake WODs.
-- Keep "notes" and "rest" fields null unless truly needed
-- Do NOT add explanatory text outside the JSON — return ONLY valid JSON`;
+- dayIndex = index into user's training days (0 = first training day)
+- Only training days, not rest days
+- Use COMMON exercise names from the AVAILABLE EXERCISES list
+- Each phase's accessories and WODs must be DIFFERENT from other phases
+- WODs must be REAL named WODs from AVAILABLE WODS list
+- Do NOT add text outside JSON`;
 
 export async function generateAIPlan(userProfile, onStatus) {
   const apiKey = getApiKey();
 
   if (onStatus) onStatus('Analyzing your goals and equipment...');
 
-  // Preload exercise pool so we can send names to Claude
   const exercisePool = await loadExercisePool(userProfile);
-
-  // Build the user context for Claude, including available exercise names
   const prompt = buildPlanPrompt(userProfile, exercisePool);
 
   if (onStatus) onStatus('Designing your personalized program...');
 
-  // Call Claude
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60000); // 60s timeout for plan generation
+  const timer = setTimeout(() => controller.abort(), 90000); // 90s for 3 phase templates
 
   try {
     const response = await fetch(ANTHROPIC_API_URL, {
@@ -129,7 +119,7 @@ export async function generateAIPlan(userProfile, onStatus) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 8000,
+        max_tokens: 12000, // 3 phases need more tokens
         system: PLAN_SYSTEM_PROMPT,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -146,11 +136,9 @@ export async function generateAIPlan(userProfile, onStatus) {
 
     const result = await response.json();
     let rawText = result.content?.[0]?.text || '';
-
     const usage = result.usage || {};
     console.log(`[AI Plan] Tokens — in: ${usage.input_tokens || '?'}, out: ${usage.output_tokens || '?'}, response: ${rawText.length} chars`);
 
-    // Strip markdown fences
     rawText = rawText.trim();
     if (rawText.startsWith('```')) {
       rawText = rawText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
@@ -160,7 +148,6 @@ export async function generateAIPlan(userProfile, onStatus) {
 
     if (onStatus) onStatus('Matching exercises to our database...');
 
-    // Now convert AI plan to DB records using the already-loaded pool
     return await saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool);
 
   } catch (e) {
@@ -173,7 +160,7 @@ export async function generateAIPlan(userProfile, onStatus) {
 function buildPlanPrompt(profile, exercisePool) {
   const parts = [];
 
-  parts.push('Design a weekly workout template for this user:\n');
+  parts.push('Design a 3-phase periodized program for this user:\n');
   parts.push(`GOALS: ${(profile.goals || [profile.goal]).join(', ')}`);
   if (profile.sex) parts.push(`SEX: ${profile.sex}`);
   if (profile.height) parts.push(`HEIGHT: ${profile.height}`);
@@ -186,37 +173,25 @@ function buildPlanPrompt(profile, exercisePool) {
   parts.push(`BODY COMP GOALS: ${(profile.bodyCompGoals || [profile.bodyCompGoal]).join(', ')}`);
 
   if (profile.equipment && profile.equipment.length > 0) {
-    parts.push(`\nEQUIPMENT AVAILABLE: ${profile.equipment.join(', ')}`);
+    parts.push(`\nEQUIPMENT: ${profile.equipment.join(', ')}`);
   }
   if (profile.equipmentDetails) {
-    if (profile.equipmentDetails.barbell?.maxWeight) {
-      parts.push(`  Barbell max load: ${profile.equipmentDetails.barbell.maxWeight} lbs`);
-    }
-    if (profile.equipmentDetails.kettlebell?.weights) {
-      parts.push(`  Kettlebell weights: ${profile.equipmentDetails.kettlebell.weights} lbs`);
-    }
-    if (profile.equipmentDetails.dumbbells?.maxWeight) {
-      parts.push(`  Dumbbells: adjustable up to ${profile.equipmentDetails.dumbbells.maxWeight} lbs per hand`);
-    } else if (profile.equipmentDetails.dumbbells?.weights) {
-      parts.push(`  Dumbbell weights: ${profile.equipmentDetails.dumbbells.weights} lbs`);
-    }
+    if (profile.equipmentDetails.barbell?.maxWeight) parts.push(`  Barbell max: ${profile.equipmentDetails.barbell.maxWeight} lbs`);
+    if (profile.equipmentDetails.kettlebell?.weights) parts.push(`  KBs: ${profile.equipmentDetails.kettlebell.weights} lbs`);
+    if (profile.equipmentDetails.dumbbells?.maxWeight) parts.push(`  DBs: up to ${profile.equipmentDetails.dumbbells.maxWeight} lbs/hand`);
+    else if (profile.equipmentDetails.dumbbells?.weights) parts.push(`  DBs: ${profile.equipmentDetails.dumbbells.weights} lbs`);
   }
 
   if (profile.exclusions && profile.exclusions.length > 0) {
-    parts.push(`\nEXCLUSIONS (do NOT program these): ${profile.exclusions.join(', ')}`);
+    parts.push(`\nEXCLUSIONS: ${profile.exclusions.join(', ')}`);
   }
 
   const trainingDayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   if (profile.trainingDays) {
-    const dayNames = profile.trainingDays.map(d => trainingDayNames[d]);
-    parts.push(`\nTRAINING DAYS: ${dayNames.join(', ')}`);
+    parts.push(`\nTRAINING DAYS: ${profile.trainingDays.map(d => trainingDayNames[d]).join(', ')}`);
   }
 
-  if (profile.eventDate) {
-    parts.push(`\nEVENT DATE: ${profile.eventDate}`);
-  }
-
-  // Base user notes (not adjustments)
+  // Base user notes
   let baseNotes = '';
   let adjustments = '';
   if (profile.additionalNotes) {
@@ -231,41 +206,42 @@ function buildPlanPrompt(profile, exercisePool) {
     if (baseNotes) parts.push(`\nUSER NOTES: ${baseNotes}`);
   }
 
-  // Send available exercise names so Claude picks from real exercises
+  // Exercise list
   if (exercisePool && exercisePool.all.length > 0) {
     const seeds = exercisePool.all.filter(e => e.source === 'seed' || !e.source);
     const apiExercises = exercisePool.all.filter(e => e.source === 'exercisedb');
     const exerciseList = [
       ...seeds.map(e => e.name),
-      ...apiExercises.slice(0, Math.max(0, 100 - seeds.length)).map(e => e.name),
+      ...apiExercises.slice(0, Math.max(0, 80 - seeds.length)).map(e => e.name),
     ];
-    parts.push(`\nAVAILABLE EXERCISES (use exact names):\n${exerciseList.join(', ')}`);
+    parts.push(`\nAVAILABLE EXERCISES:\n${exerciseList.join(', ')}`);
   }
 
-  // Send WOD options for conditioning days
+  // WOD list
   try {
     const wods = getWods();
-    const filteredWods = wods.filter(w => {
-      const levels = { beginner: 1, intermediate: 2, advanced: 3, elite: 4 };
-      const userLevel = levels[profile.experience] || 2;
-      const wodLevel = levels[w.difficulty] || 2;
-      return wodLevel <= userLevel;
-    });
-    const wodList = filteredWods.slice(0, 40).map(w =>
-      `${w.name} (${w.type}, ${w.difficulty}, ${w.estimatedTime}): ${w.movements.join(', ')}`
+    const levels = { beginner: 1, intermediate: 2, advanced: 3, elite: 4 };
+    const userLevel = levels[profile.experience] || 2;
+    const filteredWods = wods.filter(w => (levels[w.difficulty] || 2) <= userLevel);
+    const wodList = filteredWods.slice(0, 30).map(w =>
+      `${w.name} (${w.type}, ${w.estimatedTime}): ${w.movements.join(', ')}`
     );
     if (wodList.length > 0) {
-      parts.push(`\nAVAILABLE WODS (use on conditioning days):\n${wodList.join('\n')}`);
+      parts.push(`\nAVAILABLE WODS:\n${wodList.join('\n')}`);
     }
   } catch {}
 
-  // ADJUSTMENTS GO LAST — this is the absolute last thing Claude reads
+  // Adjustments last
   if (adjustments) {
-    parts.push(`\n\n=== MANDATORY CHANGES — DO NOT IGNORE ===\nThe user reviewed the plan and is requesting these specific changes. You MUST follow ALL of them:\n${adjustments}\n=== END MANDATORY CHANGES ===`);
+    parts.push(`\n\n=== MANDATORY CHANGES ===\n${adjustments}\n=== END ===`);
   }
 
   return parts.join('\n');
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Save AI Plan to DB with week-over-week variation
+// ═══════════════════════════════════════════════════════════════
 
 async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
   const planId = generateUUID();
@@ -275,7 +251,13 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
   const { totalWeeks, phases } = phaseData;
 
   const trainingDays = userProfile.trainingDays || [0, 1, 2, 3, 4];
-  const template = aiPlan.weeklyTemplate || [];
+
+  // Get phase templates — support both old (weeklyTemplate) and new (phases) format
+  const phaseTemplates = aiPlan.phases || {
+    accumulation: { weeklyTemplate: aiPlan.weeklyTemplate || [] },
+    intensification: { weeklyTemplate: aiPlan.weeklyTemplate || [] },
+    realization: { weeklyTemplate: aiPlan.weeklyTemplate || [] },
+  };
 
   if (onStatus) onStatus('Building your multi-week plan...');
 
@@ -286,6 +268,17 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
     const weekStartDate = addDays(startDate, (week - 1) * 7);
     const mesoPhase = getMesocyclePhase(week);
     const stimulus = STIMULUS_TYPES[mesoPhase.defaultStimulus];
+
+    // Pick the right phase template
+    const cycleWeek = ((week - 1) % 12) + 1;
+    let phaseKey = 'accumulation';
+    if (cycleWeek > 8) phaseKey = 'realization';
+    else if (cycleWeek > 4) phaseKey = 'intensification';
+    const template = phaseTemplates[phaseKey]?.weeklyTemplate || phaseTemplates.accumulation?.weeklyTemplate || [];
+
+    // Week within the 4-week block (1-4)
+    const weekInBlock = ((cycleWeek - 1) % 4) + 1;
+    const isDeload = weekInBlock === 4;
 
     for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
       const date = addDays(weekStartDate, dayOfWeek);
@@ -302,7 +295,6 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
         continue;
       }
 
-      // Get the AI template for this training day
       const dayTemplate = template[trainingDayIndex % template.length];
       if (!dayTemplate) continue;
 
@@ -314,18 +306,12 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
         color: phase.color, emoji: '', isRestDay: false,
       });
 
-      // Create blocks
       for (let blockIdx = 0; blockIdx < (dayTemplate.blocks || []).length; blockIdx++) {
         const block = dayTemplate.blocks[blockIdx];
 
-        // Detect run blocks — set GPS tracking
         const RUN_TYPES = ['EASY', 'TEMPO', 'INTERVALS', 'FARTLEK', 'LONG_RUN', 'RACE_PACE'];
         const blockTypeUpper = (block.type || '').toUpperCase();
-        const isRunBlock = block.isRun
-          || block.name?.toUpperCase() === 'RUN'
-          || RUN_TYPES.includes(blockTypeUpper);
-
-        // Normalize run block type to match RUN_CONFIGS keys in RunTracker
+        const isRunBlock = block.isRun || block.name?.toUpperCase() === 'RUN' || RUN_TYPES.includes(blockTypeUpper);
         const blockType = isRunBlock
           ? (RUN_TYPES.includes(blockTypeUpper) ? blockTypeUpper : 'INTERVALS')
           : block.type;
@@ -336,30 +322,26 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
           timeCap: block.duration, isAmrap: false, hasGps: isRunBlock,
         });
 
-        // Match and save exercises
         for (let exIdx = 0; exIdx < (block.exercises || []).length; exIdx++) {
           const aiEx = block.exercises[exIdx];
           const matchedId = fuzzyMatchExercise(aiEx.name, exercisePool);
-
-          // Look up matched exercise to get its category
           const matchedExercise = exercisePool.all.find(e => e.id === matchedId);
           const category = matchedExercise?.category || null;
 
-          // Validate weight against equipment limits using DB category
-          let baseWeight = aiEx.weight || 'BW';
-          baseWeight = capWeightToEquipment(baseWeight, category, userProfile);
-
-          const progWeight = applyWeeklyProgression(baseWeight, week, phase.phase);
+          // Apply week-over-week variation
+          let { sets, reps, weight, rest, notes } = applyWeekVariation(
+            aiEx, weekInBlock, isDeload, phaseKey, category, userProfile
+          );
 
           await savePlanExercise({
             planBlockId: blockId,
             exerciseId: matchedId,
             sortOrder: exIdx,
-            sets: `${aiEx.sets}x${aiEx.reps}`,
-            reps: aiEx.reps,
-            weight: progWeight,
-            rest: aiEx.rest || null,
-            notes: aiEx.notes || null,
+            sets: `${sets}x${reps}`,
+            reps,
+            weight,
+            rest,
+            notes,
           });
         }
       }
@@ -373,81 +355,86 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
   return { planId, totalWeeks, phases, startDate, eventDate, planName: aiPlan.planName, programNotes: aiPlan.programNotes };
 }
 
-// Fuzzy match an exercise name to our DB
-function fuzzyMatchExercise(name, pool) {
-  if (!name) return 'air_squats';
+// ═══════════════════════════════════════════════════════════════
+// Week-over-week variation within a 4-week block
+// ═══════════════════════════════════════════════════════════════
 
-  const query = name.toLowerCase().trim();
+function applyWeekVariation(aiEx, weekInBlock, isDeload, phaseKey, category, profile) {
+  let sets = parseInt(aiEx.sets) || 3;
+  let reps = aiEx.reps || '8';
+  let weight = aiEx.weight || 'BW';
+  let rest = aiEx.rest || null;
+  let notes = aiEx.notes || null;
 
-  // 1. Exact match
-  const exact = pool.all.find(e => e.name.toLowerCase() === query);
-  if (exact) return exact.id;
-
-  // 2. One name contains the other entirely
-  const containsMatch = pool.all.find(e => {
-    const eName = e.name.toLowerCase();
-    return eName.includes(query) || query.includes(eName);
-  });
-  if (containsMatch) return containsMatch.id;
-
-  // 3. Score-based matching — weight meaningful words higher than generic ones
-  const GENERIC_WORDS = new Set(['barbell', 'dumbbell', 'cable', 'machine', 'band', 'seated', 'standing', 'weighted', 'single', 'double', 'arm', 'leg', 'with', 'the', 'and', 'for']);
-  const queryWords = query.split(/\s+/).filter(w => w.length >= 2);
-
-  let bestScore = 0;
-  let bestMatch = null;
-
-  for (const ex of pool.all) {
-    const exName = ex.name.toLowerCase();
-    const exWords = exName.split(/\s+/);
-
-    let score = 0;
-    let meaningfulMatches = 0;
-    let totalMeaningful = 0;
-
-    for (const word of queryWords) {
-      const isGeneric = GENERIC_WORDS.has(word);
-      const matched = exWords.some(w => w === word || (w.length > 3 && word.length > 3 && (w.startsWith(word) || word.startsWith(w))));
-
-      if (matched) {
-        score += isGeneric ? 0.5 : 3; // meaningful words worth 6x more
-        if (!isGeneric) meaningfulMatches++;
-      }
-      if (!isGeneric) totalMeaningful++;
-    }
-
-    // Bonus: proportion of meaningful words matched
-    if (totalMeaningful > 0) {
-      score += (meaningfulMatches / totalMeaningful) * 5;
-    }
-
-    // Penalty: big length difference suggests wrong exercise
-    const lenDiff = Math.abs(exWords.length - queryWords.length);
-    score -= lenDiff * 0.3;
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = ex;
-    }
+  // Don't modify run/cardio exercises
+  const lower = (aiEx.name || '').toLowerCase();
+  if (lower.includes('run') || lower.includes('jog') || lower.includes('row') || lower.includes('bike')) {
+    return { sets: aiEx.sets, reps, weight, rest, notes };
   }
 
-  if (bestMatch && bestScore >= 3) {
-    console.log(`[AI Plan] Matched "${name}" → "${bestMatch.name}" (score: ${bestScore.toFixed(1)})`);
-    return bestMatch.id;
+  // Don't modify warmup/cooldown/stretching
+  if (lower.includes('stretch') || lower.includes('foam') || lower.includes('mobility') || lower.includes('warm')) {
+    return { sets: aiEx.sets, reps, weight, rest, notes };
   }
 
-  // 4. Last resort: try to match by seed exercise ID (e.g. "bench_press" → "bench_press")
-  const idGuess = query.replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-  const idMatch = pool.all.find(e => e.id === idGuess);
-  if (idMatch) return idMatch.id;
+  const baseWeight = parseFloat(weight);
+  const hasNumericWeight = !isNaN(baseWeight) && baseWeight > 0;
+  const numReps = parseInt(reps);
+  const hasNumericReps = !isNaN(numReps);
 
-  console.warn(`[AI Plan] No match for "${name}" — using fallback`);
-  // Pick a random seed exercise as fallback (prefer seed over API exercises)
-  const seeds = pool.all.filter(e => e.source === 'seed' || !e.source);
-  return (seeds.length > 0 ? seeds[Math.floor(Math.random() * seeds.length)] : pool.all[0])?.id || 'air_squats';
+  if (isDeload) {
+    // Deload week: reduce volume and intensity
+    sets = Math.max(2, sets - 1);
+    if (hasNumericReps) reps = `${Math.max(5, numReps - 2)}`;
+    if (hasNumericWeight) weight = `${Math.round(baseWeight * 0.7 / 5) * 5} lb`;
+    rest = rest || '90s';
+    notes = notes ? `${notes} | DELOAD` : 'DELOAD — lighter, focus on form';
+  } else {
+    // Wave within the 3 working weeks
+    const WAVE = {
+      accumulation: {
+        // Wk1: moderate vol, Wk2: higher vol, Wk3: peak vol
+        1: { setsAdj: 0, repsAdj: 0, weightMult: 1.0, restAdj: null },
+        2: { setsAdj: 0, repsAdj: 2, weightMult: 0.97, restAdj: null },
+        3: { setsAdj: 1, repsAdj: 0, weightMult: 1.03, restAdj: null },
+      },
+      intensification: {
+        // Wk1: moderate, Wk2: heavier/fewer reps, Wk3: heaviest
+        1: { setsAdj: 0, repsAdj: 0, weightMult: 1.0, restAdj: null },
+        2: { setsAdj: 0, repsAdj: -2, weightMult: 1.05, restAdj: '120s' },
+        3: { setsAdj: 1, repsAdj: -2, weightMult: 1.08, restAdj: '150s' },
+      },
+      realization: {
+        // Wk1: working up, Wk2: near peak, Wk3: peak
+        1: { setsAdj: 0, repsAdj: 0, weightMult: 1.0, restAdj: '120s' },
+        2: { setsAdj: 0, repsAdj: -1, weightMult: 1.05, restAdj: '150s' },
+        3: { setsAdj: 0, repsAdj: -2, weightMult: 1.10, restAdj: '180s' },
+      },
+    };
+
+    const wave = WAVE[phaseKey]?.[weekInBlock] || WAVE.accumulation[1];
+
+    sets = Math.max(2, sets + wave.setsAdj);
+    if (hasNumericReps) {
+      reps = `${Math.max(3, numReps + wave.repsAdj)}`;
+    }
+    if (hasNumericWeight) {
+      let adjusted = Math.round(baseWeight * wave.weightMult / 5) * 5;
+      weight = `${adjusted} lb`;
+    }
+    if (wave.restAdj) rest = wave.restAdj;
+  }
+
+  // Cap to equipment
+  weight = capWeightToEquipment(weight, category, profile);
+
+  return { sets: `${sets}`, reps, weight, rest, notes };
 }
 
-// Validate and cap weights to user's actual equipment using exercise category from DB
+// ═══════════════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════════════
+
 function capWeightToEquipment(weight, category, profile) {
   if (!weight || weight === 'BW' || weight === 'bodyweight') return weight;
   const numWeight = parseFloat(weight);
@@ -455,7 +442,6 @@ function capWeightToEquipment(weight, category, profile) {
   if (!category) return weight;
 
   const details = profile.equipmentDetails || {};
-
   const limits = {
     dumbbell: details.dumbbells?.maxWeight ? parseFloat(details.dumbbells.maxWeight) : null,
     barbell: details.barbell?.maxWeight ? parseFloat(details.barbell.maxWeight) : null,
@@ -466,18 +452,13 @@ function capWeightToEquipment(weight, category, profile) {
 
   const maxWeight = limits[category];
   if (maxWeight && numWeight > maxWeight) {
-    const capped = Math.round(maxWeight / 5) * 5;
-    console.log(`[AI Plan] Capped ${category} weight: ${numWeight} → ${capped} lb`);
-    return `${capped} lb`;
+    return `${Math.round(maxWeight / 5) * 5} lb`;
   }
-
   return weight;
 }
 
 function applyWeeklyProgression(baseWeight, weekNumber, phase) {
   if (!baseWeight || baseWeight === 'BW' || baseWeight === 'bodyweight') return baseWeight;
-
-  // Don't apply progression to non-weight values (pace, effort, etc.)
   const lower = baseWeight.toLowerCase();
   if (lower.includes('%') || lower.includes('pace') || lower.includes('effort')
       || lower.includes('min') || lower.includes('easy') || lower.includes('warm')
@@ -485,19 +466,68 @@ function applyWeeklyProgression(baseWeight, weekNumber, phase) {
       || lower.includes('speed') || lower.includes('target')) {
     return baseWeight;
   }
-
   const numWeight = parseFloat(baseWeight);
   if (isNaN(numWeight) || numWeight === 0) return baseWeight;
-
-  // 2% weekly progression
   const weekProgression = 1 + ((weekNumber - 1) * 0.02);
-
-  // Deload every 4th week
   const isDeload = weekNumber > 1 && weekNumber % 4 === 0;
   const deloadMultiplier = isDeload ? 0.85 : 1;
-
   let weight = Math.round((numWeight * weekProgression * deloadMultiplier) / 5) * 5;
   return `${weight} lb`;
+}
+
+function fuzzyMatchExercise(name, pool) {
+  if (!name) return 'air_squats';
+  const query = name.toLowerCase().trim();
+
+  const exact = pool.all.find(e => e.name.toLowerCase() === query);
+  if (exact) return exact.id;
+
+  const containsMatch = pool.all.find(e => {
+    const eName = e.name.toLowerCase();
+    return eName.includes(query) || query.includes(eName);
+  });
+  if (containsMatch) return containsMatch.id;
+
+  const GENERIC_WORDS = new Set(['barbell', 'dumbbell', 'cable', 'machine', 'band', 'seated', 'standing', 'weighted', 'single', 'double', 'arm', 'leg', 'with', 'the', 'and', 'for']);
+  const queryWords = query.split(/\s+/).filter(w => w.length >= 2);
+
+  let bestScore = 0;
+  let bestMatch = null;
+
+  for (const ex of pool.all) {
+    const exWords = ex.name.toLowerCase().split(/\s+/);
+    let score = 0;
+    let meaningfulMatches = 0;
+    let totalMeaningful = 0;
+
+    for (const word of queryWords) {
+      const isGeneric = GENERIC_WORDS.has(word);
+      const matched = exWords.some(w => w === word || (w.length > 3 && word.length > 3 && (w.startsWith(word) || word.startsWith(w))));
+      if (matched) {
+        score += isGeneric ? 0.5 : 3;
+        if (!isGeneric) meaningfulMatches++;
+      }
+      if (!isGeneric) totalMeaningful++;
+    }
+
+    if (totalMeaningful > 0) score += (meaningfulMatches / totalMeaningful) * 5;
+    score -= Math.abs(exWords.length - queryWords.length) * 0.3;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = ex;
+    }
+  }
+
+  if (bestMatch && bestScore >= 3) return bestMatch.id;
+
+  const idGuess = query.replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+  const idMatch = pool.all.find(e => e.id === idGuess);
+  if (idMatch) return idMatch.id;
+
+  console.warn(`[AI Plan] No match for "${name}"`);
+  const seeds = pool.all.filter(e => e.source === 'seed' || !e.source);
+  return (seeds.length > 0 ? seeds[Math.floor(Math.random() * seeds.length)] : pool.all[0])?.id || 'air_squats';
 }
 
 async function loadExercisePool(userProfile) {
@@ -511,23 +541,18 @@ async function loadExercisePool(userProfile) {
       equipment: userProfile.equipment || [],
       difficulty: userProfile.experience || 'intermediate',
     });
-    for (const ex of exercises) {
-      exerciseMap.set(ex.id, ex);
-    }
+    for (const ex of exercises) exerciseMap.set(ex.id, ex);
   }
 
   const all = Array.from(exerciseMap.values());
-  console.log(`[AI Plan] Exercise pool: ${all.length} exercises. Barbell: ${all.filter(e => e.category === 'barbell').length}, DB: ${all.filter(e => e.category === 'dumbbell').length}`);
-  // Log if bench press is in pool
+  console.log(`[AI Plan] Pool: ${all.length} exercises. Barbell: ${all.filter(e => e.category === 'barbell').length}, DB: ${all.filter(e => e.category === 'dumbbell').length}`);
   const hasBench = all.find(e => e.id === 'bench_press');
-  console.log(`[AI Plan] Bench Press in pool: ${hasBench ? 'YES' : 'NO — check equipment filter'}`);
+  console.log(`[AI Plan] Bench Press in pool: ${hasBench ? 'YES' : 'NO'}`);
   return { all };
 }
 
 function generateUUID() {
-  return 'xxxx-xxxx-xxxx'.replace(/x/g, () =>
-    Math.floor(Math.random() * 16).toString(16)
-  );
+  return 'xxxx-xxxx-xxxx'.replace(/x/g, () => Math.floor(Math.random() * 16).toString(16));
 }
 
 function addDays(dateStr, days) {
@@ -545,8 +570,5 @@ function getNextMonday() {
   const day = now.getDay();
   const daysUntilMonday = day === 0 ? 1 : day === 1 ? 0 : 8 - day;
   now.setDate(now.getDate() + daysUntilMonday);
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
