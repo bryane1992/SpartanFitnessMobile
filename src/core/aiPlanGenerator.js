@@ -29,6 +29,10 @@ RULES:
 - Include warmup blocks for every training day
 - For injury notes, avoid aggravating movements and program around them
 - Be creative with exercise selection — don't just pick the obvious choices
+- NEVER use "BW" for weighted carries (farmer's walk, suitcase carry, etc.) — always prescribe actual weight based on user's equipment
+- Spartan/OCR goals MUST include 1-2 dedicated RUN days per week with a block named "RUN" and type set to one of: EASY, TEMPO, INTERVALS, FARTLEK, LONG_RUN, RACE_PACE
+- Run blocks should have "isRun": true in the block object
+- Spartan goals should also include obstacle-specific training (carries, grip work, crawls)
 
 RESPONSE FORMAT — valid JSON only:
 {
@@ -53,7 +57,17 @@ RESPONSE FORMAT — valid JSON only:
           "type": "COMPOUND",
           "duration": "25 min",
           "exercises": [
-            { "name": "Barbell Bench Press", "sets": "4", "reps": "6", "weight": "135 lb", "rest": "120s", "notes": "Tempo: 3110" }
+            { "name": "Bench Press", "sets": "4", "reps": "6", "weight": "135 lb", "rest": "120s", "notes": "Tempo: 3110" }
+          ]
+        },
+        {
+          "name": "RUN",
+          "type": "INTERVALS",
+          "isRun": true,
+          "duration": "25 min",
+          "exercises": [
+            { "name": "Easy Jog", "sets": "1", "reps": "5 min", "weight": "Warm-up pace", "rest": null, "notes": null },
+            { "name": "Interval Run", "sets": "6", "reps": "2 min hard / 1 min easy", "weight": "80% effort", "rest": null, "notes": "Target: 3 mi" }
           ]
         }
       ]
@@ -239,10 +253,15 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus) {
       for (let blockIdx = 0; blockIdx < (dayTemplate.blocks || []).length; blockIdx++) {
         const block = dayTemplate.blocks[blockIdx];
 
+        // Detect run blocks — set GPS tracking
+        const isRunBlock = block.isRun
+          || block.name?.toUpperCase() === 'RUN'
+          || ['EASY', 'TEMPO', 'INTERVALS', 'FARTLEK', 'LONG_RUN', 'RACE_PACE'].includes(block.type?.toUpperCase());
+
         const blockId = await savePlanBlock({
           planDayId: dayId, sortOrder: blockIdx,
           name: block.name, type: block.type,
-          timeCap: block.duration, isAmrap: false, hasGps: false,
+          timeCap: block.duration, isAmrap: false, hasGps: isRunBlock,
         });
 
         // Match and save exercises
