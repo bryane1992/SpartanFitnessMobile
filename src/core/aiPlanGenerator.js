@@ -31,6 +31,8 @@ RULES:
 - Prioritize EFFICIENCY: pick exercises that hit the most muscle per movement. Prefer big compound lifts (squat, deadlift, press, row, pull-up) over isolation. Only add isolation work to address weak points or fill volume gaps.
 - No redundant exercises — if bench press and dumbbell press are in the same session, one is wasted. Each exercise should earn its slot by targeting something the others don't.
 - NEVER use "BW" for weighted carries (farmer's walk, suitcase carry, etc.) — always prescribe actual weight based on user's equipment
+- WEIGHT RULES: Dumbbell weights must NEVER exceed the user's max dumbbell weight per hand. Barbell weights must never exceed the user's barbell max. If the user says they bench 100 lbs, that's barbell — a dumbbell equivalent would be ~35-40 lb per hand, NOT 100.
+- If the user asks for same-weight dumbbell exercises, pick a single weight and use it for ALL dumbbell movements in that session
 - Spartan/OCR goals MUST include 1-2 dedicated RUN days per week with a block named "RUN" and type set to one of: EASY, TEMPO, INTERVALS, FARTLEK, LONG_RUN, RACE_PACE
 - Run blocks should have "isRun": true in the block object
 - Spartan goals should also include obstacle-specific training (carries, grip work, crawls)
@@ -189,12 +191,6 @@ function buildPlanPrompt(profile, exercisePool) {
     parts.push(`\nEXCLUSIONS (do NOT program these): ${profile.exclusions.join(', ')}`);
   }
 
-  if (profile.additionalNotes) {
-    // Cap notes at 300 chars to control token spend
-    const notes = profile.additionalNotes.substring(0, 300);
-    parts.push(`\nUSER NOTES: ${notes}`);
-  }
-
   const trainingDayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   if (profile.trainingDays) {
     const dayNames = profile.trainingDays.map(d => trainingDayNames[d]);
@@ -203,6 +199,21 @@ function buildPlanPrompt(profile, exercisePool) {
 
   if (profile.eventDate) {
     parts.push(`\nEVENT DATE: ${profile.eventDate}`);
+  }
+
+  // User notes and adjustments — placed last so they're freshest in context
+  if (profile.additionalNotes) {
+    const fullNotes = profile.additionalNotes.substring(0, 500);
+    // Split out adjustments if present
+    const adjustIdx = fullNotes.indexOf('ADJUSTMENTS:');
+    if (adjustIdx >= 0) {
+      const base = fullNotes.substring(0, adjustIdx).trim();
+      const adjustments = fullNotes.substring(adjustIdx).trim();
+      if (base) parts.push(`\nUSER NOTES: ${base}`);
+      parts.push(`\nCRITICAL — USER REQUESTED CHANGES (you MUST follow these):\n${adjustments.replace('ADJUSTMENTS:', '').trim()}`);
+    } else {
+      parts.push(`\nUSER NOTES: ${fullNotes}`);
+    }
   }
 
   // Send available exercise names so Claude picks from real exercises
@@ -289,14 +300,17 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
           timeCap: block.duration, isAmrap: false, hasGps: isRunBlock,
         });
 
-        // For run blocks, don't apply weight progression to exercises
         // Match and save exercises
         for (let exIdx = 0; exIdx < (block.exercises || []).length; exIdx++) {
           const aiEx = block.exercises[exIdx];
           const matchedId = fuzzyMatchExercise(aiEx.name, exercisePool);
 
           // Apply weekly progression to weight
-          const baseWeight = aiEx.weight || 'BW';
+          let baseWeight = aiEx.weight || 'BW';
+
+          // Validate weight against equipment limits
+          baseWeight = capWeightToEquipment(baseWeight, aiEx.name, userProfile);
+
           const progWeight = applyWeeklyProgression(baseWeight, week, phase.phase);
 
           await savePlanExercise({
@@ -393,6 +407,36 @@ function fuzzyMatchExercise(name, pool) {
   // Pick a random seed exercise as fallback (prefer seed over API exercises)
   const seeds = pool.all.filter(e => e.source === 'seed' || !e.source);
   return (seeds.length > 0 ? seeds[Math.floor(Math.random() * seeds.length)] : pool.all[0])?.id || 'air_squats';
+}
+
+// Validate and cap weights to user's actual equipment
+function capWeightToEquipment(weight, exerciseName, profile) {
+  if (!weight || weight === 'BW' || weight === 'bodyweight') return weight;
+  const numWeight = parseFloat(weight);
+  if (isNaN(numWeight) || numWeight === 0) return weight;
+
+  const name = (exerciseName || '').toLowerCase();
+  const details = profile.equipmentDetails || {};
+
+  // Detect if this is a dumbbell exercise
+  const isDumbbell = name.includes('db') || name.includes('dumbbell') || name.includes('dumbell');
+  if (isDumbbell && details.dumbbells?.maxWeight) {
+    const maxDb = parseFloat(details.dumbbells.maxWeight);
+    if (numWeight > maxDb) {
+      return `${Math.round(maxDb / 5) * 5} lb`;
+    }
+  }
+
+  // Detect barbell exercise
+  const isBarbell = name.includes('barbell') || name.includes('bar ') || name.includes('bench press') || name.includes('squat') || name.includes('deadlift');
+  if (isBarbell && details.barbell?.maxWeight) {
+    const maxBar = parseFloat(details.barbell.maxWeight);
+    if (numWeight > maxBar) {
+      return `${Math.round(maxBar / 5) * 5} lb`;
+    }
+  }
+
+  return weight;
 }
 
 function applyWeeklyProgression(baseWeight, weekNumber, phase) {
