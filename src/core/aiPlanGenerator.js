@@ -94,6 +94,7 @@ IMPORTANT:
 - Use COMMON exercise names from the AVAILABLE EXERCISES list
 - Each phase's accessories and WODs must be DIFFERENT from other phases
 - WODs must be REAL named WODs from AVAILABLE WODS list
+- WOD FORMAT: Each movement in the WOD must be a SEPARATE exercise entry. For EMOMs, each minute is a separate exercise (e.g. {"name": "Air Squats", "sets": "1", "reps": "15", "notes": "Min 1"}, {"name": "Push Ups", "sets": "1", "reps": "12", "notes": "Min 2"}). For AMRAPs, list each movement separately with the round scheme in the block name. NEVER put multiple movements in one exercise entry.
 - Do NOT add text outside JSON`;
 
 export async function generateAIPlan(userProfile, onStatus) {
@@ -383,24 +384,41 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
           timeCap: block.duration, isAmrap: false, hasGps: isRunBlock,
         });
 
+        const isWodBlock = blockType === 'WOD' || block.name?.toUpperCase().includes('WOD')
+          || block.type?.toUpperCase() === 'AMRAP' || block.type?.toUpperCase() === 'EMOM'
+          || block.type?.toUpperCase() === 'FOR TIME';
+
         for (let exIdx = 0; exIdx < (block.exercises || []).length; exIdx++) {
           const aiEx = block.exercises[exIdx];
-          const matchedId = fuzzyMatchExercise(aiEx.name, exercisePool);
+
+          // For WOD blocks: each movement is its own exercise entry
+          // Don't fuzzy match WOD names (ANNIE, CINDY, etc.)
+          const exName = (aiEx.name || '').trim();
+          const matchedId = fuzzyMatchExercise(exName, exercisePool);
           const matchedExercise = exercisePool.all.find(e => e.id === matchedId);
           const category = matchedExercise?.category || null;
 
-          // Apply week-over-week variation
-          let { sets, reps, weight, rest, notes } = applyWeekVariation(
-            aiEx, weekInBlock, isDeload, phaseKey, category, userProfile
-          );
+          // Don't apply week variation to WOD exercises (they have their own scheme)
+          let sets, reps, weight, rest, notes;
+          if (isWodBlock) {
+            sets = aiEx.sets || '1';
+            reps = aiEx.reps || '';
+            weight = aiEx.weight || 'BW';
+            rest = aiEx.rest || null;
+            notes = aiEx.notes || null;
+          } else {
+            ({ sets, reps, weight, rest, notes } = applyWeekVariation(
+              aiEx, weekInBlock, isDeload, phaseKey, category, userProfile
+            ));
+          }
 
           await savePlanExercise({
             planBlockId: blockId,
             exerciseId: matchedId,
             sortOrder: exIdx,
             sets: `${sets}x${reps}`,
-            reps,
-            weight,
+            reps: reps || '',
+            weight: weight || 'BW',
             rest,
             notes,
           });
@@ -430,12 +448,12 @@ function applyWeekVariation(aiEx, weekInBlock, isDeload, phaseKey, category, pro
   // Don't modify run/cardio exercises
   const lower = (aiEx.name || '').toLowerCase();
   if (lower.includes('run') || lower.includes('jog') || lower.includes('row') || lower.includes('bike')) {
-    return { sets: aiEx.sets, reps, weight, rest, notes };
+    return { sets: `${sets}`, reps, weight, rest, notes };
   }
 
   // Don't modify warmup/cooldown/stretching
   if (lower.includes('stretch') || lower.includes('foam') || lower.includes('mobility') || lower.includes('warm')) {
-    return { sets: aiEx.sets, reps, weight, rest, notes };
+    return { sets: `${sets}`, reps, weight, rest, notes };
   }
 
   const baseWeight = parseFloat(weight);
