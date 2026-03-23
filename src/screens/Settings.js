@@ -171,6 +171,15 @@ export default function Settings({ navigation }) {
               <ProfileRow label="Experience" value={profile.experience?.charAt(0).toUpperCase() + profile.experience?.slice(1)} />
               <ProfileRow label="Days/Week" value={`${profile.trainingDaysPerWeek} days`} />
               <ProfileRow label="Equipment" value={profile.equipment?.join(', ')} />
+              {profile.equipmentDetails?.barbell?.maxWeight ? (
+                <ProfileRow label="Barbell Max" value={`${profile.equipmentDetails.barbell.maxWeight} lbs`} />
+              ) : null}
+              {profile.equipmentDetails?.kettlebell?.weights ? (
+                <ProfileRow label="Kettlebells" value={`${profile.equipmentDetails.kettlebell.weights} lbs`} />
+              ) : null}
+              {profile.equipmentDetails?.dumbbells?.weights ? (
+                <ProfileRow label="Dumbbells" value={`${profile.equipmentDetails.dumbbells.weights} lbs`} />
+              ) : null}
               {profile.exclusions?.length > 0 && (
                 <ProfileRow label="Exclusions" value={profile.exclusions.join(', ')} />
               )}

@@ -124,6 +124,16 @@ export async function initDatabase() {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS user_equipment (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      equipment_type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      max_weight REAL,
+      available_weights TEXT,
+      notes TEXT,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_wod_history_wod ON wod_history(wod_id);
     CREATE INDEX IF NOT EXISTS idx_plan_days_date ON plan_days(date);
     CREATE INDEX IF NOT EXISTS idx_plan_days_plan_id ON plan_days(plan_id);
@@ -728,6 +738,35 @@ export async function getWodBestScore(wodId) {
     'SELECT * FROM wod_history WHERE wod_id = ? ORDER BY date DESC LIMIT 1',
     [wodId]
   );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// User Equipment
+// ═══════════════════════════════════════════════════════════════
+
+export async function saveUserEquipment(items) {
+  const database = await getDatabase();
+  await database.runAsync('DELETE FROM user_equipment');
+  for (const item of items) {
+    await database.runAsync(
+      'INSERT INTO user_equipment (equipment_type, name, max_weight, available_weights, notes) VALUES (?, ?, ?, ?, ?)',
+      [item.type, item.name, item.maxWeight || null, JSON.stringify(item.availableWeights || []), item.notes || null]
+    );
+  }
+}
+
+export async function getUserEquipment() {
+  const database = await getDatabase();
+  return database.getAllAsync('SELECT * FROM user_equipment ORDER BY equipment_type');
+}
+
+export async function getMaxWeightForEquipment(equipmentType) {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync(
+    'SELECT max_weight, available_weights FROM user_equipment WHERE equipment_type = ? LIMIT 1',
+    [equipmentType]
+  );
+  return row;
 }
 
 export async function deleteAllPlanData() {

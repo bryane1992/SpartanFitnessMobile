@@ -10,10 +10,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { initDatabase } from '../data/database';
+import { initDatabase, saveUserEquipment } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 
-const TOTAL_STEPS = 7;
+const TOTAL_STEPS = 8;
 
 // ═══════════════════════════════════════════════════════════════
 // Step Data
@@ -92,6 +92,8 @@ export default function Onboarding({ navigation }) {
   const [selectedGoal, setSelectedGoal] = useState(null);
   // Step 2: Equipment
   const [selectedEquipment, setSelectedEquipment] = useState([]);
+  // Step 2b: Equipment Details (specific weights)
+  const [equipmentDetails, setEquipmentDetails] = useState({});
   // Step 3: Experience
   const [selectedExperience, setSelectedExperience] = useState(null);
   // Step 4: Event Date
@@ -173,6 +175,7 @@ export default function Onboarding({ navigation }) {
       const profile = {
         goal: selectedGoal,
         equipment: selectedEquipment,
+        equipmentDetails: equipmentDetails,
         experience: selectedExperience,
         eventDate: getEventDate(),
         trainingDaysPerWeek: daysPerWeek,
@@ -183,7 +186,7 @@ export default function Onboarding({ navigation }) {
         bodyCompGoals: bodyCompGoals,
         bodyCompGoal: bodyCompGoals[0] || 'maintain',
         createdAt: new Date().toISOString(),
-        onboardingVersion: 2,
+        onboardingVersion: 3,
       };
 
       // Save profile
@@ -192,6 +195,30 @@ export default function Onboarding({ navigation }) {
 
       // Init database and generate plan
       await initDatabase();
+
+      // Save equipment details to DB
+      const equipItems = [];
+      if (equipmentDetails.barbell?.maxWeight) {
+        equipItems.push({ type: 'barbell', name: 'Barbell', maxWeight: parseFloat(equipmentDetails.barbell.maxWeight), availableWeights: [] });
+      }
+      if (equipmentDetails.kettlebell?.weights) {
+        const kbWeights = equipmentDetails.kettlebell.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0);
+        equipItems.push({ type: 'kettlebell', name: 'Kettlebells', maxWeight: Math.max(...kbWeights, 0), availableWeights: kbWeights });
+      }
+      if (equipmentDetails.dumbbells?.weights) {
+        const dbWeights = equipmentDetails.dumbbells.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0);
+        equipItems.push({ type: 'dumbbell', name: 'Dumbbells', maxWeight: Math.max(...dbWeights, 0), availableWeights: dbWeights });
+      }
+      // Add non-weighted equipment
+      for (const eq of selectedEquipment) {
+        if (!['barbell', 'kettlebell', 'dumbbells'].includes(eq)) {
+          equipItems.push({ type: eq, name: eq.replace(/_/g, ' '), maxWeight: null, availableWeights: [] });
+        }
+      }
+      if (equipItems.length > 0) {
+        await saveUserEquipment(equipItems);
+      }
+
       await generateNewPlan(profile);
 
       // Navigate to main app
@@ -265,7 +292,14 @@ export default function Onboarding({ navigation }) {
         <TouchableOpacity
           style={[styles.nextButton, selectedEquipment.length === 0 && styles.nextButtonDisabled]}
           disabled={selectedEquipment.length === 0}
-          onPress={() => setStep(3)}
+          onPress={() => {
+            // If user has barbell or kettlebells, go to equipment details
+            if (selectedEquipment.some(e => ['barbell', 'kettlebell', 'dumbbells'].includes(e))) {
+              setStep(3);
+            } else {
+              setStep(4);
+            }
+          }}
         >
           <Text style={styles.nextButtonText}>NEXT</Text>
         </TouchableOpacity>
@@ -273,7 +307,84 @@ export default function Onboarding({ navigation }) {
     </View>
   );
 
-  const renderStep3 = () => (
+  // Step 3: Equipment Details (weights)
+  const renderStep3 = () => {
+    const updateDetail = (equipId, field, value) => {
+      setEquipmentDetails(prev => ({
+        ...prev,
+        [equipId]: { ...(prev[equipId] || {}), [field]: value },
+      }));
+    };
+
+    return (
+      <View style={styles.stepContainer}>
+        <Text style={styles.stepTitle}>Equipment details</Text>
+        <Text style={styles.stepSubtitle}>What weights do you have? This helps us scale your workouts.</Text>
+
+        <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll}>
+          {selectedEquipment.includes('barbell') && (
+            <View style={styles.detailCard}>
+              <Text style={styles.detailLabel}>BARBELL</Text>
+              <Text style={styles.detailDesc}>Max weight you can load (including bar)</Text>
+              <TextInput
+                style={styles.detailInput}
+                placeholder="e.g. 110"
+                placeholderTextColor="rgba(255,255,255,0.2)"
+                keyboardType="numeric"
+                value={equipmentDetails.barbell?.maxWeight || ''}
+                onChangeText={(v) => updateDetail('barbell', 'maxWeight', v)}
+              />
+              <Text style={styles.detailUnit}>lbs total</Text>
+            </View>
+          )}
+
+          {selectedEquipment.includes('kettlebell') && (
+            <View style={styles.detailCard}>
+              <Text style={styles.detailLabel}>KETTLEBELLS</Text>
+              <Text style={styles.detailDesc}>List each KB weight (comma separated)</Text>
+              <TextInput
+                style={styles.detailInput}
+                placeholder="e.g. 53, 35, 25"
+                placeholderTextColor="rgba(255,255,255,0.2)"
+                value={equipmentDetails.kettlebell?.weights || ''}
+                onChangeText={(v) => updateDetail('kettlebell', 'weights', v)}
+              />
+              <Text style={styles.detailUnit}>lbs each</Text>
+            </View>
+          )}
+
+          {selectedEquipment.includes('dumbbells') && (
+            <View style={styles.detailCard}>
+              <Text style={styles.detailLabel}>DUMBBELLS</Text>
+              <Text style={styles.detailDesc}>List your DB weights or max weight per hand</Text>
+              <TextInput
+                style={styles.detailInput}
+                placeholder="e.g. 50, 35, 25, 15"
+                placeholderTextColor="rgba(255,255,255,0.2)"
+                value={equipmentDetails.dumbbells?.weights || ''}
+                onChangeText={(v) => updateDetail('dumbbells', 'weights', v)}
+              />
+              <Text style={styles.detailUnit}>lbs each</Text>
+            </View>
+          )}
+        </ScrollView>
+
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
+            <Text style={styles.backButtonText}>BACK</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.nextButton}
+            onPress={() => setStep(4)}
+          >
+            <Text style={styles.nextButtonText}>NEXT</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  const renderStep4 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Experience level?</Text>
       <Text style={styles.stepSubtitle}>Be honest — we'll scale everything for you</Text>
@@ -295,13 +406,13 @@ export default function Onboarding({ navigation }) {
       </ScrollView>
 
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(3)}>
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.nextButton, !selectedExperience && styles.nextButtonDisabled]}
           disabled={!selectedExperience}
-          onPress={() => setStep(4)}
+          onPress={() => setStep(5)}
         >
           <Text style={styles.nextButtonText}>NEXT</Text>
         </TouchableOpacity>
@@ -309,7 +420,7 @@ export default function Onboarding({ navigation }) {
     </View>
   );
 
-  const renderStep4 = () => {
+  const renderStep5 = () => {
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
@@ -390,13 +501,13 @@ export default function Onboarding({ navigation }) {
         </ScrollView>
 
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.backButton} onPress={() => setStep(3)}>
+          <TouchableOpacity style={styles.backButton} onPress={() => setStep(4)}>
             <Text style={styles.backButtonText}>BACK</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.nextButton, !isDateValid && styles.nextButtonDisabled]}
             disabled={!isDateValid}
-            onPress={() => setStep(5)}
+            onPress={() => setStep(6)}
           >
             <Text style={styles.nextButtonText}>NEXT</Text>
           </TouchableOpacity>
@@ -405,7 +516,7 @@ export default function Onboarding({ navigation }) {
     );
   };
 
-  const renderStep5 = () => (
+  const renderStep6 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Training schedule</Text>
       <Text style={styles.stepSubtitle}>How many days per week?</Text>
@@ -455,13 +566,13 @@ export default function Onboarding({ navigation }) {
       )}
 
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(4)}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(5)}>
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.nextButton, trainingDays.length !== daysPerWeek && styles.nextButtonDisabled]}
           disabled={trainingDays.length !== daysPerWeek}
-          onPress={() => setStep(6)}
+          onPress={() => setStep(7)}
         >
           <Text style={styles.nextButtonText}>NEXT</Text>
         </TouchableOpacity>
@@ -469,7 +580,7 @@ export default function Onboarding({ navigation }) {
     </View>
   );
 
-  const renderStep6 = () => (
+  const renderStep7 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Training style?</Text>
       <Text style={styles.stepSubtitle}>Pick one or mix styles together</Text>
@@ -491,13 +602,13 @@ export default function Onboarding({ navigation }) {
       </ScrollView>
 
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(5)}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(6)}>
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.nextButton, workoutStyles.length === 0 && styles.nextButtonDisabled]}
           disabled={workoutStyles.length === 0}
-          onPress={() => setStep(7)}
+          onPress={() => setStep(8)}
         >
           <Text style={styles.nextButtonText}>NEXT</Text>
         </TouchableOpacity>
@@ -505,7 +616,7 @@ export default function Onboarding({ navigation }) {
     </View>
   );
 
-  const renderStep7 = () => (
+  const renderStep8 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Final touches</Text>
 
@@ -548,7 +659,7 @@ export default function Onboarding({ navigation }) {
       </ScrollView>
 
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(6)}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(7)}>
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -604,6 +715,7 @@ export default function Onboarding({ navigation }) {
       {step === 5 && renderStep5()}
       {step === 6 && renderStep6()}
       {step === 7 && renderStep7()}
+      {step === 8 && renderStep8()}
     </SafeAreaView>
   );
 }
@@ -735,6 +847,45 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 13,
     marginBottom: 12,
+  },
+  // Equipment details
+  detailCard: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 14,
+    padding: 18,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#222',
+  },
+  detailLabel: {
+    color: '#FF4136',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  detailDesc: {
+    color: '#666',
+    fontSize: 12,
+    marginBottom: 12,
+  },
+  detailInput: {
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+  },
+  detailUnit: {
+    color: '#666',
+    fontSize: 11,
+    marginTop: 6,
+    fontFamily: 'monospace',
   },
   // Date picker styles
   divider: {
