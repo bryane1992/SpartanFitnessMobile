@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, saveUserEquipment, getWorkoutForDate } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 
-const TOTAL_STEPS = 7;
+const TOTAL_STEPS = 8;
 
 // ═══════════════════════════════════════════════════════════════
 // Step Data
@@ -99,21 +99,26 @@ export default function Onboarding({ navigation }) {
 
   // Step 1: Goals (multi-select)
   const [selectedGoals, setSelectedGoals] = useState([]);
-  // Step 2: Experience
+  // Step 2: Body metrics
+  const [sex, setSex] = useState(null);
+  const [heightFt, setHeightFt] = useState('');
+  const [heightIn, setHeightIn] = useState('');
+  const [bodyWeight, setBodyWeight] = useState('');
+  // Step 3: Experience
   const [selectedExperience, setSelectedExperience] = useState(null);
-  // Step 3: Equipment
+  // Step 4: Equipment
   const [selectedEquipment, setSelectedEquipment] = useState([]);
-  // Step 4: Equipment Details (specific weights)
+  // Step 5: Equipment Details (specific weights)
   const [equipmentDetails, setEquipmentDetails] = useState({});
-  // Step 5: Schedule (days + duration)
+  // Step 6: Schedule (days + duration)
   const [daysPerWeek, setDaysPerWeek] = useState(null);
   const [trainingDays, setTrainingDays] = useState([]);
   const [sessionDuration, setSessionDuration] = useState(null);
-  // Step 6: Preferences (style + body comp + exclusions)
+  // Step 7: Preferences (style + body comp + exclusions)
   const [workoutStyles, setWorkoutStyles] = useState([]);
   const [exclusions, setExclusions] = useState([]);
   const [bodyCompGoals, setBodyCompGoals] = useState([]);
-  // Step 7: AI Notes
+  // Step 8: AI Notes
   const [additionalNotes, setAdditionalNotes] = useState('');
 
   // Loading state for plan generation
@@ -224,9 +229,21 @@ export default function Onboarding({ navigation }) {
       const eventDate = new Date();
       eventDate.setDate(eventDate.getDate() + 16 * 7);
 
+      // Calculate BMI
+      const totalInches = (parseInt(heightFt) || 0) * 12 + (parseInt(heightIn) || 0);
+      const weightNum = parseFloat(bodyWeight) || 0;
+      const bmi = totalInches > 0 && weightNum > 0
+        ? Math.round((weightNum / (totalInches * totalInches)) * 703 * 10) / 10
+        : null;
+
       const profile = {
         goals: selectedGoals,
         goal: selectedGoals[0] || 'general_fitness',
+        sex: sex,
+        height: totalInches > 0 ? `${heightFt}'${heightIn}"` : null,
+        heightInches: totalInches || null,
+        weight: weightNum || null,
+        bmi: bmi,
         equipment: selectedEquipment,
         equipmentDetails: equipmentDetails,
         experience: selectedExperience,
@@ -342,6 +359,81 @@ export default function Onboarding({ navigation }) {
 
   const renderStep2 = () => (
     <View style={styles.stepContainer}>
+      <Text style={styles.stepTitle}>About you</Text>
+      <Text style={styles.stepSubtitle}>Helps us tailor weights, cardio, and recovery</Text>
+
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll}>
+        <Text style={styles.sectionLabel}>Sex</Text>
+        <View style={styles.daysCountRow}>
+          {[{ id: 'male', label: 'Male' }, { id: 'female', label: 'Female' }].map(s => (
+            <TouchableOpacity
+              key={s.id}
+              style={[styles.dayCountButton, sex === s.id && styles.dayCountSelected, { width: 100 }]}
+              onPress={() => setSex(s.id)}
+            >
+              <Text style={[styles.dayCountText, sex === s.id && styles.dayCountTextSelected, { fontSize: 16 }]}>{s.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.sectionLabel}>Height</Text>
+        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
+          <View style={{ flex: 1 }}>
+            <TextInput
+              style={styles.detailInput}
+              placeholder="5"
+              placeholderTextColor="rgba(255,255,255,0.2)"
+              keyboardType="numeric"
+              value={heightFt}
+              onChangeText={setHeightFt}
+              maxLength={1}
+            />
+            <Text style={styles.detailUnit}>feet</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <TextInput
+              style={styles.detailInput}
+              placeholder="10"
+              placeholderTextColor="rgba(255,255,255,0.2)"
+              keyboardType="numeric"
+              value={heightIn}
+              onChangeText={setHeightIn}
+              maxLength={2}
+            />
+            <Text style={styles.detailUnit}>inches</Text>
+          </View>
+        </View>
+
+        <Text style={styles.sectionLabel}>Weight</Text>
+        <TextInput
+          style={styles.detailInput}
+          placeholder="175"
+          placeholderTextColor="rgba(255,255,255,0.2)"
+          keyboardType="numeric"
+          value={bodyWeight}
+          onChangeText={setBodyWeight}
+          maxLength={3}
+        />
+        <Text style={styles.detailUnit}>lbs</Text>
+      </ScrollView>
+
+      <View style={styles.buttonRow}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)}>
+          <Text style={styles.backButtonText}>BACK</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.nextButton, (!sex || !heightFt || !bodyWeight) && styles.nextButtonDisabled]}
+          disabled={!sex || !heightFt || !bodyWeight}
+          onPress={() => setStep(3)}
+        >
+          <Text style={styles.nextButtonText}>NEXT</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderStep3 = () => (
+    <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Experience level?</Text>
       <Text style={styles.stepSubtitle}>Be honest — we'll scale everything for you</Text>
 
@@ -362,13 +454,13 @@ export default function Onboarding({ navigation }) {
       </ScrollView>
 
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.nextButton, !selectedExperience && styles.nextButtonDisabled]}
           disabled={!selectedExperience}
-          onPress={() => setStep(3)}
+          onPress={() => setStep(4)}
         >
           <Text style={styles.nextButtonText}>NEXT</Text>
         </TouchableOpacity>
@@ -376,7 +468,7 @@ export default function Onboarding({ navigation }) {
     </View>
   );
 
-  const renderStep3 = () => (
+  const renderStep4 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>What equipment do you have?</Text>
       <Text style={styles.stepSubtitle}>Select all that apply</Text>
@@ -398,7 +490,7 @@ export default function Onboarding({ navigation }) {
       </ScrollView>
 
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(3)}>
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -406,9 +498,9 @@ export default function Onboarding({ navigation }) {
           disabled={selectedEquipment.length === 0}
           onPress={() => {
             if (selectedEquipment.some(e => ['barbell', 'kettlebell', 'dumbbells'].includes(e))) {
-              setStep(4);
-            } else {
               setStep(5);
+            } else {
+              setStep(6);
             }
           }}
         >
@@ -418,7 +510,7 @@ export default function Onboarding({ navigation }) {
     </View>
   );
 
-  const renderStep4 = () => {
+  const renderStep5 = () => {
     const updateDetail = (equipId, field, value) => {
       setEquipmentDetails(prev => ({
         ...prev,
@@ -481,12 +573,12 @@ export default function Onboarding({ navigation }) {
         </ScrollView>
 
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.backButton} onPress={() => setStep(3)}>
+          <TouchableOpacity style={styles.backButton} onPress={() => setStep(4)}>
             <Text style={styles.backButtonText}>BACK</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.nextButton}
-            onPress={() => setStep(5)}
+            onPress={() => setStep(6)}
           >
             <Text style={styles.nextButtonText}>NEXT</Text>
           </TouchableOpacity>
@@ -495,7 +587,7 @@ export default function Onboarding({ navigation }) {
     );
   };
 
-  const renderStep5 = () => (
+  const renderStep6 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Training schedule</Text>
       <Text style={styles.stepSubtitle}>How many days per week?</Text>
@@ -565,9 +657,9 @@ export default function Onboarding({ navigation }) {
       <View style={styles.buttonRow}>
         <TouchableOpacity style={styles.backButton} onPress={() => {
           if (selectedEquipment.some(e => ['barbell', 'kettlebell', 'dumbbells'].includes(e))) {
-            setStep(4);
+            setStep(5);
           } else {
-            setStep(3);
+            setStep(4);
           }
         }}>
           <Text style={styles.backButtonText}>BACK</Text>
@@ -575,7 +667,7 @@ export default function Onboarding({ navigation }) {
         <TouchableOpacity
           style={[styles.nextButton, (trainingDays.length !== daysPerWeek || !sessionDuration) && styles.nextButtonDisabled]}
           disabled={trainingDays.length !== daysPerWeek || !sessionDuration}
-          onPress={() => setStep(6)}
+          onPress={() => setStep(7)}
         >
           <Text style={styles.nextButtonText}>NEXT</Text>
         </TouchableOpacity>
@@ -583,7 +675,7 @@ export default function Onboarding({ navigation }) {
     </View>
   );
 
-  const renderStep6 = () => (
+  const renderStep7 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Training preferences</Text>
       <Text style={styles.stepSubtitle}>How do you like to train?</Text>
@@ -638,13 +730,13 @@ export default function Onboarding({ navigation }) {
       </ScrollView>
 
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(5)}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(6)}>
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.nextButton, workoutStyles.length === 0 && styles.nextButtonDisabled]}
           disabled={workoutStyles.length === 0}
-          onPress={() => setStep(7)}
+          onPress={() => setStep(8)}
         >
           <Text style={styles.nextButtonText}>NEXT</Text>
         </TouchableOpacity>
@@ -652,7 +744,7 @@ export default function Onboarding({ navigation }) {
     </View>
   );
 
-  const renderStep7 = () => (
+  const renderStep8 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Anything else?</Text>
       <Text style={styles.stepSubtitle}>Tell our AI coach what matters to you</Text>
@@ -674,7 +766,7 @@ export default function Onboarding({ navigation }) {
       </ScrollView>
 
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(6)}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(7)}>
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -918,6 +1010,7 @@ export default function Onboarding({ navigation }) {
       {step === 5 && renderStep5()}
       {step === 6 && renderStep6()}
       {step === 7 && renderStep7()}
+      {step === 8 && renderStep8()}
     </SafeAreaView>
   );
 }

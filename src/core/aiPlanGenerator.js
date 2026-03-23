@@ -6,6 +6,7 @@ import Constants from 'expo-constants';
 import { calculatePhases, getPhaseForWeek } from './phaseCalculator';
 import { getMesocyclePhase, STIMULUS_TYPES } from './progressionRules';
 import { getDatabase, savePlanDay, savePlanBlock, savePlanExercise, getExercisesByFilter } from '../data/database';
+import { getWods } from '../data/wodSeed';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-haiku-4-5-20251001'; // Haiku for structured plan output — fast & cheap
@@ -33,9 +34,11 @@ RULES:
 - NEVER use "BW" for weighted carries (farmer's walk, suitcase carry, etc.) — always prescribe actual weight based on user's equipment
 - WEIGHT RULES: Dumbbell weights must NEVER exceed the user's max dumbbell weight per hand. Barbell weights must never exceed the user's barbell max. If the user says they bench 100 lbs, that's barbell — a dumbbell equivalent would be ~35-40 lb per hand, NOT 100.
 - If the user asks for same-weight dumbbell exercises, pick a single weight and use it for ALL dumbbell movements in that session
+- BODY METRICS RULES: Scale programming to the user's body. BMI > 30: limit running to 10-15 min walks/jogs, prioritize low-impact cardio (rower, bike), use bodyweight scaling. BMI 25-30: moderate cardio, build up run distance gradually. Heavier users need more recovery between sets and lower-impact exercise choices.
 - Spartan/OCR goals MUST include 1-2 dedicated RUN days per week with a block named "RUN" and type set to one of: EASY, TEMPO, INTERVALS, FARTLEK, LONG_RUN, RACE_PACE
 - Run blocks should have "isRun": true in the block object
 - Spartan goals should also include obstacle-specific training (carries, grip work, crawls)
+- For conditioning/WOD days, you can program a named WOD from the AVAILABLE WODS list. Use the WOD name as the block name and "WOD" as the type. Include the WOD's movements as exercises. Match WOD difficulty to user's experience level.
 
 RESPONSE FORMAT — valid JSON only:
 {
@@ -164,6 +167,10 @@ function buildPlanPrompt(profile, exercisePool) {
 
   parts.push('Design a weekly workout template for this user:\n');
   parts.push(`GOALS: ${(profile.goals || [profile.goal]).join(', ')}`);
+  if (profile.sex) parts.push(`SEX: ${profile.sex}`);
+  if (profile.height) parts.push(`HEIGHT: ${profile.height}`);
+  if (profile.weight) parts.push(`WEIGHT: ${profile.weight} lbs`);
+  if (profile.bmi) parts.push(`BMI: ${profile.bmi}`);
   parts.push(`EXPERIENCE: ${profile.experience}`);
   parts.push(`TRAINING DAYS PER WEEK: ${profile.trainingDaysPerWeek}`);
   parts.push(`SESSION DURATION: ${profile.sessionDuration || 60} minutes`);
@@ -226,6 +233,23 @@ function buildPlanPrompt(profile, exercisePool) {
     ];
     parts.push(`\nAVAILABLE EXERCISES (use exact names):\n${exerciseList.join(', ')}`);
   }
+
+  // Send WOD options for conditioning days
+  try {
+    const wods = getWods();
+    const filteredWods = wods.filter(w => {
+      const levels = { beginner: 1, intermediate: 2, advanced: 3, elite: 4 };
+      const userLevel = levels[profile.experience] || 2;
+      const wodLevel = levels[w.difficulty] || 2;
+      return wodLevel <= userLevel;
+    });
+    const wodList = filteredWods.slice(0, 40).map(w =>
+      `${w.name} (${w.type}, ${w.difficulty}, ${w.estimatedTime}): ${w.movements.join(', ')}`
+    );
+    if (wodList.length > 0) {
+      parts.push(`\nAVAILABLE WODS (use on conditioning days):\n${wodList.join('\n')}`);
+    }
+  } catch {}
 
   // ADJUSTMENTS GO LAST — this is the absolute last thing Claude reads
   if (adjustments) {
