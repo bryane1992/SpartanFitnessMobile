@@ -8,7 +8,7 @@ import { getMesocyclePhase, STIMULUS_TYPES } from './progressionRules';
 import { getDatabase, savePlanDay, savePlanBlock, savePlanExercise, getExercisesByFilter } from '../data/database';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = 'claude-haiku-4-5-20251001'; // Haiku for structured plan output — fast & cheap
 
 function getApiKey() {
   return Constants.expoConfig?.extra?.claudeApiKey
@@ -201,31 +201,35 @@ function buildPlanPrompt(profile, exercisePool) {
     parts.push(`\nEVENT DATE: ${profile.eventDate}`);
   }
 
-  // User notes and adjustments — placed last so they're freshest in context
+  // Base user notes (not adjustments)
+  let baseNotes = '';
+  let adjustments = '';
   if (profile.additionalNotes) {
     const fullNotes = profile.additionalNotes.substring(0, 500);
-    // Split out adjustments if present
     const adjustIdx = fullNotes.indexOf('ADJUSTMENTS:');
     if (adjustIdx >= 0) {
-      const base = fullNotes.substring(0, adjustIdx).trim();
-      const adjustments = fullNotes.substring(adjustIdx).trim();
-      if (base) parts.push(`\nUSER NOTES: ${base}`);
-      parts.push(`\nCRITICAL — USER REQUESTED CHANGES (you MUST follow these):\n${adjustments.replace('ADJUSTMENTS:', '').trim()}`);
+      baseNotes = fullNotes.substring(0, adjustIdx).trim();
+      adjustments = fullNotes.substring(adjustIdx).replace('ADJUSTMENTS:', '').trim();
     } else {
-      parts.push(`\nUSER NOTES: ${fullNotes}`);
+      baseNotes = fullNotes;
     }
+    if (baseNotes) parts.push(`\nUSER NOTES: ${baseNotes}`);
   }
 
   // Send available exercise names so Claude picks from real exercises
   if (exercisePool && exercisePool.all.length > 0) {
-    // Prefer seed exercises (curated), limit to 120 names to control tokens
     const seeds = exercisePool.all.filter(e => e.source === 'seed' || !e.source);
     const apiExercises = exercisePool.all.filter(e => e.source === 'exercisedb');
     const exerciseList = [
       ...seeds.map(e => e.name),
-      ...apiExercises.slice(0, Math.max(0, 120 - seeds.length)).map(e => e.name),
+      ...apiExercises.slice(0, Math.max(0, 100 - seeds.length)).map(e => e.name),
     ];
-    parts.push(`\nAVAILABLE EXERCISES (use these exact names when possible):\n${exerciseList.join(', ')}`);
+    parts.push(`\nAVAILABLE EXERCISES (use exact names):\n${exerciseList.join(', ')}`);
+  }
+
+  // ADJUSTMENTS GO LAST — this is the absolute last thing Claude reads
+  if (adjustments) {
+    parts.push(`\n\n=== MANDATORY CHANGES — DO NOT IGNORE ===\nThe user reviewed the plan and is requesting these specific changes. You MUST follow ALL of them:\n${adjustments}\n=== END MANDATORY CHANGES ===`);
   }
 
   return parts.join('\n');

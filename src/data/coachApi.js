@@ -4,8 +4,8 @@
 import Constants from 'expo-constants';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-sonnet-4-6';
-const TIMEOUT = 15000;
+const MODEL = 'claude-haiku-4-5-20251001'; // Haiku for fast, cheap coaching responses
+const TIMEOUT = 10000; // Haiku is faster, shorter timeout
 
 // Read from app config (sourced from .env), fallback to bundled key
 const BUNDLED_API_KEY = Constants.expoConfig?.extra?.claudeApiKey

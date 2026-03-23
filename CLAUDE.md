@@ -48,7 +48,7 @@ src/
 - expo-sqlite for structured data
 - expo-location for GPS/run tracking
 - ExerciseDB API for exercise catalog
-- **Planned**: Anthropic API (Claude Sonnet 4.6) for AI Coach
+- Anthropic API — Haiku 4.5 (coach + plan gen), Sonnet 4.6 (elite analysis)
 
 ## Navigation
 
@@ -107,7 +107,7 @@ Stack Navigator
 
 ## Claude AI Coach (LIVE)
 
-- **Model**: Claude Sonnet 4.6 via Anthropic API
+- **Models**: Haiku 4.5 for coach chat + plan generation (fast, cheap), Sonnet 4.6 reserved for Elite tier deep analysis
 - **API client**: `src/data/coachApi.js` with bundled API key
 - **Chat UI**: `src/components/CoachChat.js` — bottom sheet, quick action chips, action cards
 - **Entry point**: Floating "AI" button on workout screen
