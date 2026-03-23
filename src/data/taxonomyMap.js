@@ -1,4 +1,5 @@
 // Maps ExerciseDB API data to our local exercises table schema
+// RapidAPI format: fields are strings (not arrays like the vercel version)
 
 const BODY_PART_MAP = {
   'chest': 'chest',
@@ -75,27 +76,37 @@ const DEFAULTS_BY_CATEGORY = {
 };
 
 export function mapExerciseDbToLocal(apiExercise) {
-  const bodyPart = apiExercise.bodyParts?.[0] || '';
+  // RapidAPI format: bodyPart/equipment/target are strings, not arrays
+  const bodyPart = apiExercise.bodyPart || '';
   const muscleGroup = BODY_PART_MAP[bodyPart.toLowerCase()] || 'full_body';
 
-  const primaryEquip = apiExercise.equipments?.[0] || 'body weight';
+  const primaryEquip = apiExercise.equipment || 'body weight';
   const mappedEquip = EQUIPMENT_MAP[primaryEquip.toLowerCase()];
   const equipmentRequired = mappedEquip ? [mappedEquip] : [];
   const category = CATEGORY_FROM_EQUIPMENT[mappedEquip] || 'bodyweight';
 
   const styleTags = STYLE_TAGS_FROM_CATEGORY[category] || ['hybrid'];
 
-  const targetCount = (apiExercise.targetMuscles?.length || 0) + (apiExercise.secondaryMuscles?.length || 0);
+  // RapidAPI: target is string, secondaryMuscles is array
+  const secondaryMuscles = apiExercise.secondaryMuscles || [];
+  const targetMuscle = apiExercise.target || '';
+  const targetCount = 1 + secondaryMuscles.length;
   const isCompound = targetCount >= 3 ? 1 : 0;
 
   const defaults = DEFAULTS_BY_CATEGORY[category] || DEFAULTS_BY_CATEGORY.bodyweight;
 
+  // RapidAPI exercise id is a 4-digit string like "0001"
+  const exerciseId = apiExercise.id || apiExercise.exerciseId;
+
+  // Use API difficulty if available, otherwise estimate
+  const difficulty = apiExercise.difficulty || 'intermediate';
+
   return {
-    id: apiExercise.exerciseId,
-    name: apiExercise.name || 'Unknown Exercise',
+    id: `exdb_${exerciseId}`,
+    name: titleCase(apiExercise.name || 'Unknown Exercise'),
     emoji: '',
     muscle_group: muscleGroup,
-    secondary_muscles: JSON.stringify(apiExercise.secondaryMuscles || []),
+    secondary_muscles: JSON.stringify(secondaryMuscles),
     category,
     style_tags: JSON.stringify(styleTags),
     exclusion_tags: JSON.stringify([]),
@@ -104,13 +115,17 @@ export function mapExerciseDbToLocal(apiExercise) {
     default_reps: defaults.reps,
     default_weight: defaults.weight,
     is_compound: isCompound,
-    difficulty: 'intermediate',
-    // New columns
+    difficulty,
     source: 'exercisedb',
     gif_url: apiExercise.gifUrl || null,
     instructions: JSON.stringify(apiExercise.instructions || []),
-    target_muscles: JSON.stringify(apiExercise.targetMuscles || []),
-    body_parts: JSON.stringify(apiExercise.bodyParts || []),
-    api_id: apiExercise.exerciseId,
+    target_muscles: JSON.stringify(targetMuscle ? [targetMuscle] : []),
+    body_parts: JSON.stringify(bodyPart ? [bodyPart] : []),
+    api_id: exerciseId,
+    description: apiExercise.description || null,
   };
+}
+
+function titleCase(str) {
+  return str.replace(/\b\w/g, c => c.toUpperCase());
 }

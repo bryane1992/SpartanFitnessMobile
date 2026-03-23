@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, saveUserEquipment } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 
 // ═══════════════════════════════════════════════════════════════
 // Step Data
@@ -72,6 +72,14 @@ const BODY_COMP_GOALS = [
   { id: 'endurance', label: 'Endurance', icon: '', desc: 'High rep, stamina focused' },
 ];
 
+const SESSION_DURATIONS = [
+  { id: 30, label: '30 min', desc: 'Quick & intense' },
+  { id: 45, label: '45 min', desc: 'Focused session' },
+  { id: 60, label: '60 min', desc: 'Standard workout' },
+  { id: 90, label: '90 min', desc: 'Full training session' },
+  { id: 120, label: '2 hours', desc: 'Extended programming' },
+];
+
 const DAYS_OF_WEEK = [
   { id: 0, label: 'Mon', icon: '' },
   { id: 1, label: 'Tue', icon: '' },
@@ -104,15 +112,18 @@ export default function Onboarding({ navigation }) {
   // Step 5: Training Days
   const [daysPerWeek, setDaysPerWeek] = useState(null);
   const [trainingDays, setTrainingDays] = useState([]);
-  // Step 6: Workout Styles (multi-select)
+  // Step 6: Session Duration
+  const [sessionDuration, setSessionDuration] = useState(null);
+  // Step 7: Workout Styles (multi-select)
   const [workoutStyles, setWorkoutStyles] = useState([]);
-  // Step 7: Exclusions + Body Comp
+  // Step 8: Exclusions + Body Comp
   const [exclusions, setExclusions] = useState([]);
   const [bodyCompGoals, setBodyCompGoals] = useState([]);
   const [additionalNotes, setAdditionalNotes] = useState('');
 
   // Loading state for plan generation
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingStatus, setGeneratingStatus] = useState('');
 
   const generateNewPlan = useWorkoutStore(s => s.generateNewPlan);
 
@@ -182,6 +193,7 @@ export default function Onboarding({ navigation }) {
         eventDate: getEventDate(),
         trainingDaysPerWeek: daysPerWeek,
         trainingDays: trainingDays,
+        sessionDuration: sessionDuration,
         workoutStyles: workoutStyles,
         workoutStyle: workoutStyles.length === 1 ? workoutStyles[0] : 'hybrid',
         exclusions: exclusions,
@@ -189,7 +201,7 @@ export default function Onboarding({ navigation }) {
         bodyCompGoal: bodyCompGoals[0] || 'maintain',
         additionalNotes: additionalNotes.trim(),
         createdAt: new Date().toISOString(),
-        onboardingVersion: 4,
+        onboardingVersion: 5,
       };
 
       // Save profile
@@ -222,7 +234,7 @@ export default function Onboarding({ navigation }) {
         await saveUserEquipment(equipItems);
       }
 
-      await generateNewPlan(profile);
+      await generateNewPlan(profile, setGeneratingStatus);
 
       // Navigate to main app
       navigation.replace('Main');
@@ -585,6 +597,39 @@ export default function Onboarding({ navigation }) {
 
   const renderStep7 = () => (
     <View style={styles.stepContainer}>
+      <Text style={styles.stepTitle}>How long per session?</Text>
+      <Text style={styles.stepSubtitle}>How much time do you have to train each day?</Text>
+
+      <View style={styles.daysCountRow}>
+        {SESSION_DURATIONS.map(dur => (
+          <TouchableOpacity
+            key={dur.id}
+            style={[styles.dayCountButton, sessionDuration === dur.id && styles.dayCountSelected, { width: 'auto', paddingHorizontal: 14 }]}
+            onPress={() => setSessionDuration(dur.id)}
+          >
+            <Text style={[styles.dayCountText, sessionDuration === dur.id && styles.dayCountTextSelected]}>{dur.label}</Text>
+            <Text style={[styles.dayCountLabel, sessionDuration === dur.id && styles.dayCountLabelSelected]}>{dur.desc}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <View style={styles.buttonRow}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(6)}>
+          <Text style={styles.backButtonText}>BACK</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.nextButton, !sessionDuration && styles.nextButtonDisabled]}
+          disabled={!sessionDuration}
+          onPress={() => setStep(8)}
+        >
+          <Text style={styles.nextButtonText}>NEXT</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderStep8 = () => (
+    <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Training style?</Text>
       <Text style={styles.stepSubtitle}>Pick one or mix styles together</Text>
 
@@ -605,13 +650,13 @@ export default function Onboarding({ navigation }) {
       </ScrollView>
 
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(6)}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(7)}>
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.nextButton, workoutStyles.length === 0 && styles.nextButtonDisabled]}
           disabled={workoutStyles.length === 0}
-          onPress={() => setStep(8)}
+          onPress={() => setStep(9)}
         >
           <Text style={styles.nextButtonText}>NEXT</Text>
         </TouchableOpacity>
@@ -619,7 +664,7 @@ export default function Onboarding({ navigation }) {
     </View>
   );
 
-  const renderStep8 = () => (
+  const renderStep9 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Final touches</Text>
 
@@ -676,7 +721,7 @@ export default function Onboarding({ navigation }) {
       </ScrollView>
 
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(7)}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(8)}>
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -690,19 +735,71 @@ export default function Onboarding({ navigation }) {
     </View>
   );
 
-  const renderGenerating = () => (
-    <View style={styles.generatingContainer}>
-      <Text style={styles.generatingTitle}>Building Your Plan</Text>
-      <ActivityIndicator size="large" color="#FF4136" style={{ marginTop: 20 }} />
-      <Text style={styles.generatingSubtitle}>Creating your custom workout program...</Text>
-      <View style={styles.generatingDetails}>
-        <Text style={styles.generatingDetail}>Selecting exercises for your style</Text>
-        <Text style={styles.generatingDetail}>Calculating progression & weights</Text>
-        <Text style={styles.generatingDetail}>Planning {daysPerWeek} days/week to your event</Text>
-        <Text style={styles.generatingDetail}>Optimizing for {bodyCompGoals.join(' + ')} goals</Text>
+  const GENERATING_STEPS = [
+    { label: 'Analyzing your goals', done: false },
+    { label: 'Reviewing your equipment', done: false },
+    { label: 'Designing weekly structure', done: false },
+    { label: 'Selecting exercises', done: false },
+    { label: 'Calculating weights & progression', done: false },
+    { label: 'Building multi-week plan', done: false },
+  ];
+
+  const getCompletedSteps = () => {
+    const status = generatingStatus.toLowerCase();
+    if (status.includes('building week') || status.includes('multi-week')) return 6;
+    if (status.includes('matching') || status.includes('calculating')) return 5;
+    if (status.includes('selecting') || status.includes('exercise')) return 4;
+    if (status.includes('designing') || status.includes('personalized')) return 3;
+    if (status.includes('equipment') || status.includes('reviewing')) return 2;
+    if (status.includes('analyzing') || status.includes('connecting') || status.includes('goals')) return 1;
+    return 0;
+  };
+
+  const renderGenerating = () => {
+    const completedCount = getCompletedSteps();
+
+    return (
+      <View style={styles.generatingContainer}>
+        <Text style={styles.generatingTitle}>AI IS BUILDING</Text>
+        <Text style={styles.generatingTitle}>YOUR PLAN</Text>
+
+        <View style={styles.genProgressBar}>
+          <View style={[styles.genProgressFill, { width: `${Math.min(100, (completedCount / 6) * 100)}%` }]} />
+        </View>
+
+        <View style={styles.generatingDetails}>
+          {GENERATING_STEPS.map((s, i) => {
+            const isDone = i < completedCount;
+            const isActive = i === completedCount;
+            return (
+              <View key={i} style={styles.genStepRow}>
+                <View style={[styles.genDot, isDone && styles.genDotDone, isActive && styles.genDotActive]}>
+                  {isDone ? (
+                    <Text style={styles.genCheckText}>{'✓'}</Text>
+                  ) : isActive ? (
+                    <ActivityIndicator size="small" color="#FF4136" />
+                  ) : null}
+                </View>
+                <Text style={[
+                  styles.genStepText,
+                  isDone && styles.genStepDone,
+                  isActive && styles.genStepActive,
+                ]}>{s.label}</Text>
+              </View>
+            );
+          })}
+        </View>
+
+        {generatingStatus ? (
+          <Text style={styles.genLiveStatus}>{generatingStatus}</Text>
+        ) : null}
+
+        <Text style={styles.generatingSubtitle}>
+          Our AI coach is crafting a program{'\n'}tailored to your goals and equipment
+        </Text>
       </View>
-    </View>
-  );
+    );
+  };
 
   // ═══════════════════════════════════════════════════════════
   // Main Render
@@ -733,6 +830,7 @@ export default function Onboarding({ navigation }) {
       {step === 6 && renderStep6()}
       {step === 7 && renderStep7()}
       {step === 8 && renderStep8()}
+      {step === 9 && renderStep9()}
     </SafeAreaView>
   );
 }
@@ -1122,25 +1220,86 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    padding: 30,
   },
   generatingTitle: {
     color: '#fff',
     fontSize: 28,
-    fontWeight: '800',
-  },
-  generatingSubtitle: {
-    color: '#888',
-    fontSize: 15,
-    marginTop: 15,
+    fontWeight: '900',
+    letterSpacing: 2,
     textAlign: 'center',
   },
-  generatingDetails: {
-    marginTop: 30,
-    gap: 10,
+  genProgressBar: {
+    width: '80%',
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 2,
+    marginTop: 24,
+    marginBottom: 30,
+    overflow: 'hidden',
   },
-  generatingDetail: {
-    color: '#666',
+  genProgressFill: {
+    height: '100%',
+    backgroundColor: '#FF4136',
+    borderRadius: 2,
+  },
+  generatingDetails: {
+    width: '100%',
+    gap: 16,
+    paddingHorizontal: 20,
+  },
+  genStepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  genDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  genDotDone: {
+    borderColor: '#01FF70',
+    backgroundColor: 'rgba(1,255,112,0.1)',
+  },
+  genDotActive: {
+    borderColor: '#FF4136',
+    backgroundColor: 'rgba(255,65,54,0.1)',
+  },
+  genCheckText: {
+    color: '#01FF70',
     fontSize: 14,
+    fontWeight: '800',
+  },
+  genStepText: {
+    color: 'rgba(255,255,255,0.25)',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  genStepDone: {
+    color: 'rgba(255,255,255,0.6)',
+  },
+  genStepActive: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  genLiveStatus: {
+    color: '#FF4136',
+    fontSize: 12,
+    fontFamily: 'monospace',
+    marginTop: 24,
+    textAlign: 'center',
+    letterSpacing: 0.5,
+  },
+  generatingSubtitle: {
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 14,
+    marginTop: 20,
+    textAlign: 'center',
+    lineHeight: 22,
   },
 });

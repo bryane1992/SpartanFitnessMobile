@@ -201,6 +201,7 @@ export async function initDatabase() {
     "ALTER TABLE exercises ADD COLUMN target_muscles TEXT",
     "ALTER TABLE exercises ADD COLUMN body_parts TEXT",
     "ALTER TABLE exercises ADD COLUMN api_id TEXT",
+    "ALTER TABLE exercises ADD COLUMN description TEXT",
   ];
   for (const sql of newColumns) {
     try { await database.runAsync(sql); } catch (e) { /* column already exists */ }
@@ -718,14 +719,14 @@ async function insertExerciseBatch(database, apiExercises) {
         `INSERT OR REPLACE INTO exercises
          (id, name, emoji, muscle_group, secondary_muscles, category, style_tags,
           exclusion_tags, equipment_required, default_sets, default_reps, default_weight,
-          is_compound, difficulty, source, gif_url, instructions, target_muscles, body_parts, api_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          is_compound, difficulty, source, gif_url, instructions, target_muscles, body_parts, api_id, description)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           ex.id, ex.name, ex.emoji, ex.muscle_group, ex.secondary_muscles,
           ex.category, ex.style_tags, ex.exclusion_tags, ex.equipment_required,
           ex.default_sets, ex.default_reps, ex.default_weight, ex.is_compound,
           ex.difficulty, ex.source, ex.gif_url, ex.instructions,
-          ex.target_muscles, ex.body_parts, ex.api_id,
+          ex.target_muscles, ex.body_parts, ex.api_id, ex.description || null,
         ]
       );
       count++;

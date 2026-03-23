@@ -12,6 +12,7 @@ import {
   deletePlan,
 } from '../data/database';
 import { generatePlan } from '../core/planGenerator';
+import { generateAIPlan } from '../core/aiPlanGenerator';
 
 const useWorkoutStore = create((set, get) => ({
   // Plan metadata
@@ -155,7 +156,7 @@ const useWorkoutStore = create((set, get) => ({
     }
   },
 
-  generateNewPlan: async (userProfile) => {
+  generateNewPlan: async (userProfile, onStatus) => {
     set({ isGenerating: true });
     try {
       // Delete old plan if exists
@@ -164,8 +165,17 @@ const useWorkoutStore = create((set, get) => ({
         await deletePlan(currentPlanId);
       }
 
-      // Generate new plan
-      const result = await generatePlan(userProfile);
+      let result;
+      try {
+        // Try AI-powered generation first
+        if (onStatus) onStatus('Connecting to AI coach...');
+        result = await generateAIPlan(userProfile, onStatus);
+      } catch (aiError) {
+        // Fall back to algorithmic generation
+        console.warn('[Plan] AI generation failed, falling back to algorithmic:', aiError.message);
+        if (onStatus) onStatus('Building plan with training engine...');
+        result = await generatePlan(userProfile);
+      }
 
       // Save plan metadata
       await AsyncStorage.setItem('planMeta', JSON.stringify(result));

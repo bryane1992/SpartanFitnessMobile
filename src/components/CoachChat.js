@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendCoachMessage } from '../data/coachApi';
-import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury } from '../data/database';
+import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 
 const QUICK_ACTIONS = [
@@ -74,12 +74,29 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
 
       // Build context
       const profile = await AsyncStorage.getItem('userProfile');
+      const parsedProfile = profile ? JSON.parse(profile) : null;
       const injuries = await getActiveInjuries();
 
+      // Gather alternatives for each exercise in today's workout
+      const alternatives = {};
+      if (workout?.blocks) {
+        for (const block of workout.blocks) {
+          for (const ex of (block.exercises || [])) {
+            try {
+              const alts = await getAlternatives(ex.exercise_id || ex.id, parsedProfile);
+              if (alts && alts.length > 0) {
+                alternatives[ex.id] = alts.slice(0, 5).map(a => ({ id: a.id, name: a.name, muscle_group: a.muscle_group }));
+              }
+            } catch {}
+          }
+        }
+      }
+
       const context = {
-        profile: profile ? JSON.parse(profile) : null,
+        profile: parsedProfile,
         workout: workout,
         injuries: injuries,
+        alternatives: alternatives,
       };
 
       // Send to Claude (last 6 messages for context)
@@ -90,7 +107,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
       // Save assistant response
       await saveCoachMessage(sessionId, 'assistant', response.message, response.actions);
 
-      // Execute actions
+      // Execute immediate actions (non-option ones like flagInjury)
       if (response.actions.length > 0) {
         await executeActions(response.actions);
       }
@@ -99,6 +116,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         role: 'assistant',
         content: response.message,
         actions: response.actions,
+        options: response.options || [],
       }]);
     } catch (e) {
       console.error('Coach error:', e);
@@ -123,16 +141,64 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
               await store.swapExercise(action.planExerciseId, action.newExerciseId, null);
             }
             break;
+          case 'adjustWeight':
+            if (action.planExerciseId && action.newWeight) {
+              await updateExerciseLog(action.planExerciseId, null, action.newWeight, action.reason || null);
+              await store.loadTodayWorkout();
+            }
+            break;
+          case 'adjustReps':
+            if (action.planExerciseId) {
+              const setsReps = action.newSets && action.newReps ? `${action.newSets}x${action.newReps}` : null;
+              await updateExerciseLog(action.planExerciseId, setsReps, null, action.reason || null);
+              await store.loadTodayWorkout();
+            }
+            break;
+          case 'removeExercise':
+            if (action.planExerciseId) {
+              await updateExerciseLog(action.planExerciseId, 'SKIP', null, action.reason || 'Removed by AI Coach');
+              await store.loadTodayWorkout();
+            }
+            break;
+          case 'addNote':
+            if (action.planExerciseId && action.note) {
+              await updateExerciseLog(action.planExerciseId, null, null, action.note);
+              await store.loadTodayWorkout();
+            }
+            break;
           case 'flagInjury':
             if (action.bodyPart) {
               await saveInjury(action.bodyPart, action.severity || 'mild', null);
             }
             break;
-          // Other actions can be added later
         }
       } catch (e) {
         console.error('Error executing action:', action.type, e);
       }
+    }
+  };
+
+  const selectOption = async (option, msgIndex) => {
+    try {
+      // Execute the action from the selected option
+      if (option.action) {
+        await executeActions([option.action]);
+      }
+
+      // Remove options from this message (already chosen)
+      setMessages(prev => prev.map((m, i) =>
+        i === msgIndex ? { ...m, options: [], chosenOption: option.label } : m
+      ));
+
+      // Add a confirmation message
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Done — ${option.label.toLowerCase()}. ${option.action?.reason || 'Updated your workout.'}`,
+        actions: [],
+        options: [],
+      }]);
+    } catch (e) {
+      console.error('Error executing option:', e);
     }
   };
 
@@ -183,6 +249,28 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
                         <Text style={styles.actionReason}>{a.reason || a.bodyPart || a.newWeight || ''}</Text>
                       </View>
                     ))}
+                  </View>
+                ) : null}
+                {msg.options && msg.options.length > 0 ? (
+                  <View style={styles.optionsList}>
+                    {msg.options.map((opt, j) => (
+                      <TouchableOpacity
+                        key={j}
+                        style={[styles.optionButton, opt.recommended && styles.optionButtonRecommended]}
+                        onPress={() => selectOption(opt, i)}
+                      >
+                        {opt.recommended ? (
+                          <Text style={styles.optionRecommendedTag}>RECOMMENDED</Text>
+                        ) : null}
+                        <Text style={styles.optionLabel}>{opt.label}</Text>
+                        <Text style={styles.optionDesc}>{opt.description}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
+                {msg.chosenOption ? (
+                  <View style={styles.chosenTag}>
+                    <Text style={styles.chosenTagText}>You chose: {msg.chosenOption}</Text>
                   </View>
                 ) : null}
               </View>
@@ -260,6 +348,39 @@ const styles = StyleSheet.create({
   actionCard: { backgroundColor: 'rgba(1,255,112,0.08)', borderWidth: 1, borderColor: 'rgba(1,255,112,0.2)', borderRadius: 8, padding: 8, marginBottom: 4 },
   actionType: { color: '#01FF70', fontSize: 9, fontWeight: '800', letterSpacing: 1, fontFamily: 'monospace' },
   actionReason: { color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 2 },
+
+  // Option buttons
+  optionsList: { marginTop: 8, gap: 6 },
+  optionButton: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 12,
+    padding: 12,
+  },
+  optionButtonRecommended: {
+    borderColor: '#FF4136',
+    backgroundColor: 'rgba(255,65,54,0.08)',
+  },
+  optionRecommendedTag: {
+    color: '#FF4136',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginBottom: 4,
+    fontFamily: 'monospace',
+  },
+  optionLabel: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  optionDesc: { color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 3, lineHeight: 17 },
+  chosenTag: {
+    marginTop: 6,
+    backgroundColor: 'rgba(1,255,112,0.08)',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    alignSelf: 'flex-start',
+  },
+  chosenTagText: { color: '#01FF70', fontSize: 11, fontWeight: '700', fontFamily: 'monospace' },
 
   loadingRow: { flexDirection: 'row', alignItems: 'center', padding: 12 },
   loadingText: { color: 'rgba(255,255,255,0.3)', fontSize: 12, marginLeft: 8, fontFamily: 'monospace' },

@@ -1,0 +1,68 @@
+import 'dotenv/config';
+
+export default {
+  expo: {
+    name: 'Spartan Fitness',
+    slug: 'spartan-fitness',
+    version: '1.0.0',
+    orientation: 'portrait',
+    icon: './assets/icon.png',
+    userInterfaceStyle: 'dark',
+    splash: {
+      image: './assets/splash-icon.png',
+      resizeMode: 'contain',
+      backgroundColor: '#0A0A0A',
+    },
+    ios: {
+      supportsTablet: false,
+      bundleIdentifier: 'com.spartanfitness.app',
+      buildNumber: '1',
+      infoPlist: {
+        NSLocationAlwaysAndWhenInUseUsageDescription:
+          'Spartan Fitness tracks your runs and workouts with GPS to measure distance, pace, and route - even when the app is in the background.',
+        NSLocationWhenInUseUsageDescription:
+          'Spartan Fitness uses GPS to track your runs and measure distance and pace.',
+        NSMotionUsageDescription:
+          'Spartan Fitness uses motion data to track your workouts and improve accuracy.',
+        UIBackgroundModes: ['location', 'audio'],
+        BGTaskSchedulerPermittedIdentifiers: ['com.spartanfitness.app.refresh'],
+      },
+      config: {
+        usesNonExemptEncryption: false,
+      },
+    },
+    android: {
+      adaptiveIcon: {
+        backgroundColor: '#0A0A0A',
+        foregroundImage: './assets/android-icon-foreground.png',
+      },
+      package: 'com.spartanfitness.app',
+      versionCode: 1,
+      permissions: [
+        'ACCESS_COARSE_LOCATION',
+        'ACCESS_FINE_LOCATION',
+        'ACCESS_BACKGROUND_LOCATION',
+        'FOREGROUND_SERVICE',
+        'WAKE_LOCK',
+      ],
+    },
+    plugins: [
+      [
+        'expo-location',
+        {
+          locationAlwaysAndWhenInUsePermission:
+            'Spartan Fitness tracks your runs with GPS to measure distance and pace.',
+          isBackgroundLocationEnabled: true,
+        },
+      ],
+      'expo-sqlite',
+    ],
+    extra: {
+      eas: {
+        projectId: 'spartan-fitness-2025',
+      },
+      exerciseDbApiKey: process.env.EXERCISE_DB_KEY,
+      claudeApiKey: process.env.CLAUDE_TOKEN,
+    },
+  },
+};

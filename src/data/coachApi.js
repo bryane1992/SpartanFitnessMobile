@@ -1,13 +1,15 @@
 // Claude AI Coach API Client
 // Uses Claude Sonnet 4.6 via Anthropic API
 
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-sonnet-4-6-20250514';
-const TIMEOUT = 8000;
+import Constants from 'expo-constants';
 
-// Bundled API key — in production this will be proxied through your backend
-// so the key is never exposed in the client bundle
-const BUNDLED_API_KEY = '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';
+const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const MODEL = 'claude-sonnet-4-6';
+const TIMEOUT = 15000;
+
+// Read from app config (sourced from .env), fallback to bundled key
+const BUNDLED_API_KEY = Constants.expoConfig?.extra?.claudeApiKey
+  || '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';
 
 // System prompt cached across all conversations
 const SYSTEM_PROMPT = `You are the Spartan Fitness AI Coach — a concise, knowledgeable, motivating personal trainer.
@@ -17,16 +19,30 @@ RULES:
 - Be direct and actionable, like a real coach talking between sets
 - Never diagnose injuries — suggest alternatives and recommend seeing a medical professional for persistent/sharp pain
 - Use the user's actual workout context to give specific advice
-- When suggesting exercise swaps, pick from the available alternatives provided
+- When suggesting exercise swaps, you MUST use an exercise ID from the SWAP OPTIONS listed next to each exercise. Never invent exercise IDs.
+- INJURY MODIFICATION RULES — try these IN ORDER, use the first one that works:
+  1. REDUCE VOLUME — fewer sets/reps first (use adjustReps action). Still trains the muscle with less stress.
+  2. LIGHTEN LOAD — drop weight to 40-60% of current (use adjustWeight). Can still build strength at lower intensity.
+  3. LIMIT RANGE OF MOTION — suggest pain-free ROM via addNote (e.g. half squats instead of deep squats, hang cleans instead of power cleans).
+  4. SLOW DOWN / CHANGE TEMPO — add a note to move slowly and controlled, especially through the painful range.
+  5. CHANGE POSITIONING — suggest grip/stance/angle adjustments via addNote (e.g. wider squat stance, neutral grip instead of supinated).
+  6. SUBSTITUTE SIMILAR MOVEMENT — swap to a same-muscle-group variation from SWAP OPTIONS (e.g. trap bar deadlift for conventional, incline press for flat bench, band-assisted pullup for strict). MUST target the same muscles.
+  7. UNILATERAL/ISOLATED WORK — if one side hurts, suggest single-arm/leg variation to train the non-injured side.
+  8. CROSS TRAIN — suggest a different exercise mode that trains similar fitness (e.g. rower instead of running for knee pain).
+  9. SKIP THE EXERCISE — use "removeExercise" ONLY as last resort when nothing above is safe.
+  NEVER swap to a different muscle group. Always flag the injury with "flagInjury" action.
+  When modifying for injury, also suggest LONGER REST between sets (1-3 min for strength, 30-60s for endurance).
+  Always recommend seeing a medical professional if pain is sharp or persistent.
 
 RESPONSE FORMAT:
 Always respond with valid JSON:
 {
   "message": "Your coaching text here (shown to user)",
-  "actions": []
+  "actions": [],
+  "options": []
 }
 
-Available action types:
+ACTIONS — executed immediately (use for non-injury things like general weight/rep tweaks, or after the user picks an option):
 - {"type": "swap", "planExerciseId": N, "newExerciseId": "id", "reason": "text"}
 - {"type": "adjustWeight", "planExerciseId": N, "newWeight": "X lb", "reason": "text"}
 - {"type": "adjustReps", "planExerciseId": N, "newSets": "3", "newReps": "8", "reason": "text"}
@@ -34,7 +50,12 @@ Available action types:
 - {"type": "removeExercise", "planExerciseId": N, "reason": "text"}
 - {"type": "addNote", "planExerciseId": N, "note": "text"}
 
-If no actions needed, return empty actions array.`;
+OPTIONS — presented as buttons for the user to choose (use for injury modifications):
+Each option: {"label": "short button text", "description": "why this helps", "recommended": true/false, "action": {action object}}
+Mark your top recommendation with "recommended": true.
+Give 2-4 options when the user reports pain/injury. Always include flagInjury in the actions array alongside options.
+
+If no actions or options needed, return empty arrays.`;
 
 export async function sendCoachMessage(apiKey, messages, context) {
   // Use bundled key if none provided
@@ -46,10 +67,14 @@ export async function sendCoachMessage(apiKey, messages, context) {
     content: m.content,
   }));
 
-  // Prepend context as first user message if not already there
-  if (anthropicMessages.length === 1) {
-    anthropicMessages[0].content = `${userContext}\n\nUser says: ${anthropicMessages[0].content}`;
+  // Always prepend context to the latest user message so Claude has workout state
+  const lastIdx = anthropicMessages.length - 1;
+  if (lastIdx >= 0 && anthropicMessages[lastIdx].role === 'user') {
+    anthropicMessages[lastIdx].content = `${userContext}\n\nUser says: ${anthropicMessages[lastIdx].content}`;
   }
+
+  console.log('[AI Coach] Context sent:', userContext.substring(0, 500));
+  console.log('[AI Coach] Messages count:', anthropicMessages.length);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT);
@@ -75,22 +100,34 @@ export async function sendCoachMessage(apiKey, messages, context) {
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('[AI Coach] API error:', response.status, errorText);
       throw new Error(`API ${response.status}: ${errorText}`);
     }
 
     const result = await response.json();
-    const text = result.content?.[0]?.text || '';
+    const rawText = result.content?.[0]?.text || '';
+
+    console.log('[AI Coach] Raw response:', rawText);
+
+    // Strip markdown code fences if present (```json ... ```)
+    let text = rawText.trim();
+    if (text.startsWith('```')) {
+      text = text.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
+    }
 
     // Parse JSON response
     try {
       const parsed = JSON.parse(text);
+      console.log('[AI Coach] Parsed actions:', JSON.stringify(parsed.actions));
+      console.log('[AI Coach] Parsed options:', JSON.stringify(parsed.options));
       return {
         message: parsed.message || text,
         actions: Array.isArray(parsed.actions) ? parsed.actions : [],
+        options: Array.isArray(parsed.options) ? parsed.options : [],
       };
-    } catch {
-      // If not valid JSON, return as plain text
-      return { message: text, actions: [] };
+    } catch (parseErr) {
+      console.warn('[AI Coach] JSON parse failed, returning as plain text:', parseErr.message);
+      return { message: rawText, actions: [] };
     }
   } catch (e) {
     clearTimeout(timer);
@@ -124,7 +161,13 @@ function buildContext(context) {
         if (block.exercises) {
           for (const ex of block.exercises) {
             const status = ex.is_completed ? 'DONE' : 'TODO';
-            parts.push(`  [${status}] ${ex.name} — ${ex.sets} @ ${ex.weight || 'BW'}${ex.notes ? ' (' + ex.notes + ')' : ''} (planExerciseId: ${ex.id})`);
+            let line = `  [${status}] ${ex.name} — ${ex.sets} @ ${ex.weight || 'BW'}${ex.notes ? ' (' + ex.notes + ')' : ''} (planExerciseId: ${ex.id})`;
+            // Add available alternatives for swapping
+            if (context.alternatives && context.alternatives[ex.id]) {
+              const altNames = context.alternatives[ex.id].map(a => `${a.name} (id:${a.id})`).join(', ');
+              line += `\n    SWAP OPTIONS: ${altNames}`;
+            }
+            parts.push(line);
           }
         }
       }
