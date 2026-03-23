@@ -220,26 +220,10 @@ export default function Settings({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>AI Coach</Text>
           <View style={styles.profileCard}>
-            <ProfileRow label="Status" value={hasClaudeKey ? 'Active' : 'Not configured'} />
+            <ProfileRow label="Status" value="Active" />
+            <ProfileRow label="Model" value="Claude Sonnet 4.6" />
+            <ProfileRow label="Access" value="Tap AI button on any workout" />
           </View>
-          {!hasClaudeKey ? (
-            <View style={{ marginTop: 8 }}>
-              <TextInput
-                style={styles.apiKeyInput}
-                placeholder="Paste Claude API key (sk-ant-...)"
-                placeholderTextColor="#555"
-                value={claudeKey}
-                onChangeText={setClaudeKey}
-                secureTextEntry
-              />
-              <TouchableOpacity style={styles.actionButton} onPress={saveClaudeKey}>
-                <View style={styles.actionContent}>
-                  <Text style={styles.actionLabel}>Save API Key</Text>
-                  <Text style={styles.actionDesc}>Enables AI Coach on workout screen</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          ) : null}
         </View>
 
         {/* Exercise Library */}

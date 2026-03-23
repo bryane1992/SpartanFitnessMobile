@@ -105,14 +105,23 @@ Stack Navigator
 - Cache locally in SQLite after sync. App works offline after first sync.
 - GIFs load on-demand via Image component (not pre-downloaded)
 
-## Claude AI Coach (Planned)
+## Claude AI Coach (LIVE)
 
 - **Model**: Claude Sonnet 4.6 via Anthropic API
-- **API Key**: In `.env` as `CLAUDE_TOKEN`
-- **Use case**: In-app conversational coach that can modify active workouts in real-time
-- **Response format**: JSON with `message` (text) + `actions` (executable workout changes)
-- **Context per message**: user profile, current workout, injury flags, 14-day training summary, last 6 messages (~2-3K tokens)
+- **API client**: `src/data/coachApi.js` with bundled API key
+- **Chat UI**: `src/components/CoachChat.js` — bottom sheet, quick action chips, action cards
+- **Entry point**: Floating "AI" button on workout screen
+- **Response format**: JSON with `message` + `actions` (swap, adjustWeight, flagInjury, etc.)
+- **Context per message**: user profile + equipment, workout state, injuries, last 6 messages
 - **Full spec**: See `COACHING_SPEC.md`
+
+### Production Architecture (TODO)
+Currently the API key is **bundled in the client** (`src/data/coachApi.js`). Before shipping to consumers:
+1. **Build a backend proxy** (e.g., Vercel serverless function or Railway) that holds the API key
+2. **Client calls your proxy**, proxy calls Anthropic. Key never leaves your server.
+3. **Gate behind subscription** — proxy checks user's Pro/Elite status before forwarding to Claude
+4. **Rate limit per user** — 3 msgs/week free, 25/week Pro, unlimited Elite
+5. **Use RevenueCat** for subscription management (App Store + Google Play billing)
 
 ## Elite Programming Principles
 

@@ -29,7 +29,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [apiKey, setApiKey] = useState(null);
+  const [apiKey, setApiKey] = useState('bundled'); // Always available, uses bundled key
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -40,9 +40,10 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
 
   const loadState = async () => {
     try {
-      // Load API key from storage
-      const key = await AsyncStorage.getItem('claudeApiKey');
-      setApiKey(key);
+      // API key is bundled — no need to load from storage
+      // In production, override with user's own key if they have one
+      const customKey = await AsyncStorage.getItem('claudeApiKey');
+      setApiKey(customKey || 'bundled');
 
       // Load previous messages for this session
       if (sessionId) {
@@ -83,7 +84,8 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
 
       // Send to Claude (last 6 messages for context)
       const recentMsgs = newMessages.slice(-6).map(m => ({ role: m.role, content: m.content }));
-      const response = await sendCoachMessage(apiKey, recentMsgs, context);
+      const keyToUse = apiKey === 'bundled' ? null : apiKey; // null = use bundled key
+      const response = await sendCoachMessage(keyToUse, recentMsgs, context);
 
       // Save assistant response
       await saveCoachMessage(sessionId, 'assistant', response.message, response.actions);
@@ -224,11 +226,6 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
             </TouchableOpacity>
           </View>
 
-          {!apiKey ? (
-            <View style={styles.noKeyBanner}>
-              <Text style={styles.noKeyText}>Add CLAUDE_TOKEN to .env to enable AI Coach</Text>
-            </View>
-          ) : null}
         </View>
       </KeyboardAvoidingView>
     </Modal>

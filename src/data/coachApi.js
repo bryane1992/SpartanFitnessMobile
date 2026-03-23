@@ -5,6 +5,10 @@ const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-4-6-20250514';
 const TIMEOUT = 8000;
 
+// Bundled API key — in production this will be proxied through your backend
+// so the key is never exposed in the client bundle
+const BUNDLED_API_KEY = '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';
+
 // System prompt cached across all conversations
 const SYSTEM_PROMPT = `You are the Spartan Fitness AI Coach — a concise, knowledgeable, motivating personal trainer.
 
@@ -33,6 +37,8 @@ Available action types:
 If no actions needed, return empty actions array.`;
 
 export async function sendCoachMessage(apiKey, messages, context) {
+  // Use bundled key if none provided
+  if (!apiKey) apiKey = BUNDLED_API_KEY;
   const userContext = buildContext(context);
 
   const anthropicMessages = messages.map(m => ({
