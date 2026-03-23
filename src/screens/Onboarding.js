@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -736,31 +736,46 @@ export default function Onboarding({ navigation }) {
   );
 
   const GENERATING_STEPS = [
-    { label: 'Analyzing your goals', done: false },
-    { label: 'Reviewing your equipment', done: false },
-    { label: 'Designing weekly structure', done: false },
-    { label: 'Selecting exercises', done: false },
-    { label: 'Calculating weights & progression', done: false },
-    { label: 'Building multi-week plan', done: false },
+    'Analyzing your goals',
+    'Reviewing your equipment',
+    'Designing weekly structure',
+    'Selecting exercises',
+    'Calculating weights & progression',
+    'Building multi-week plan',
   ];
 
-  const getCompletedSteps = () => {
-    const status = generatingStatus.toLowerCase();
-    if (status.includes('building week') || status.includes('multi-week')) return 6;
-    if (status.includes('matching') || status.includes('calculating')) return 5;
-    if (status.includes('selecting') || status.includes('exercise')) return 4;
-    if (status.includes('designing') || status.includes('personalized')) return 3;
-    if (status.includes('equipment') || status.includes('reviewing')) return 2;
-    if (status.includes('analyzing') || status.includes('connecting') || status.includes('goals')) return 1;
-    return 0;
-  };
+  // Stagger step completions on a timer so it feels alive
+  const [visibleStep, setVisibleStep] = useState(0);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    if (!isGenerating) {
+      setVisibleStep(0);
+      return;
+    }
+
+    // Step delays in ms — early steps are quick, middle ones linger
+    const delays = [2000, 3000, 4000, 8000, 6000, 5000];
+    let current = 0;
+
+    const advance = () => {
+      current++;
+      setVisibleStep(current);
+      if (current < GENERATING_STEPS.length) {
+        timerRef.current = setTimeout(advance, delays[current] || 4000);
+      }
+    };
+
+    timerRef.current = setTimeout(advance, delays[0]);
+    return () => clearTimeout(timerRef.current);
+  }, [isGenerating]);
 
   const renderGenerating = () => {
-    const completedCount = getCompletedSteps();
+    const completedCount = visibleStep;
 
     return (
       <View style={styles.generatingContainer}>
-        <Text style={styles.generatingTitle}>AI IS BUILDING</Text>
+        <Text style={styles.generatingTitle}>WE ARE BUILDING</Text>
         <Text style={styles.generatingTitle}>YOUR PLAN</Text>
 
         <View style={styles.genProgressBar}>
@@ -768,9 +783,9 @@ export default function Onboarding({ navigation }) {
         </View>
 
         <View style={styles.generatingDetails}>
-          {GENERATING_STEPS.map((s, i) => {
+          {GENERATING_STEPS.map((label, i) => {
             const isDone = i < completedCount;
-            const isActive = i === completedCount;
+            const isActive = i === completedCount && completedCount < GENERATING_STEPS.length;
             return (
               <View key={i} style={styles.genStepRow}>
                 <View style={[styles.genDot, isDone && styles.genDotDone, isActive && styles.genDotActive]}>
@@ -784,15 +799,11 @@ export default function Onboarding({ navigation }) {
                   styles.genStepText,
                   isDone && styles.genStepDone,
                   isActive && styles.genStepActive,
-                ]}>{s.label}</Text>
+                ]}>{label}</Text>
               </View>
             );
           })}
         </View>
-
-        {generatingStatus ? (
-          <Text style={styles.genLiveStatus}>{generatingStatus}</Text>
-        ) : null}
 
         <Text style={styles.generatingSubtitle}>
           Our AI coach is crafting a program{'\n'}tailored to your goals and equipment
