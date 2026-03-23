@@ -721,6 +721,24 @@ export async function updateBlockRunType(blockId, runType) {
   );
 }
 
+export async function getRunExercisesForDate(date) {
+  const database = await getDatabase();
+  const block = await database.getFirstAsync(
+    `SELECT pb.id FROM plan_blocks pb
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     WHERE pd.date = ? AND pb.has_gps = 1
+     LIMIT 1`,
+    [date]
+  );
+  if (!block) return null;
+  return database.getAllAsync(
+    `SELECT pe.*, e.name FROM plan_exercises pe
+     JOIN exercises e ON e.id = pe.exercise_id
+     WHERE pe.plan_block_id = ? ORDER BY pe.sort_order`,
+    [block.id]
+  );
+}
+
 export async function getRunTypeForDate(date) {
   const database = await getDatabase();
   const block = await database.getFirstAsync(

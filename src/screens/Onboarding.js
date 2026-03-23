@@ -119,6 +119,7 @@ export default function Onboarding({ navigation }) {
   // Loading state for plan generation
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingStatus, setGeneratingStatus] = useState('');
+  const [planSummary, setPlanSummary] = useState(null);
 
   const generateNewPlan = useWorkoutStore(s => s.generateNewPlan);
 
@@ -228,10 +229,17 @@ export default function Onboarding({ navigation }) {
         await saveUserEquipment(equipItems);
       }
 
-      await generateNewPlan(profile, setGeneratingStatus);
+      const result = await generateNewPlan(profile, setGeneratingStatus);
 
-      // Navigate to main app
-      navigation.replace('Main');
+      // Show plan summary before navigating
+      setIsGenerating(false);
+      setPlanSummary({
+        planName: result.planName || 'Your Custom Plan',
+        totalWeeks: result.totalWeeks,
+        notes: result.programNotes || null,
+        daysPerWeek: profile.trainingDaysPerWeek,
+        goals: selectedGoals,
+      });
     } catch (error) {
       console.error('Error completing onboarding:', error);
       setIsGenerating(false);
@@ -715,6 +723,68 @@ export default function Onboarding({ navigation }) {
     return (
       <SafeAreaView style={styles.container}>
         {renderGenerating()}
+      </SafeAreaView>
+    );
+  }
+
+  if (planSummary) {
+    const goalLabels = {
+      build_muscle: 'Build Muscle', lose_fat: 'Lose Fat', get_stronger: 'Get Stronger',
+      endurance: 'Endurance', athletic: 'Athletic Performance', general_fitness: 'General Fitness',
+    };
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.summaryContainer}>
+          <Text style={styles.summaryTitle}>YOUR PLAN IS READY</Text>
+          <Text style={styles.summaryName}>{planSummary.planName}</Text>
+
+          <View style={styles.summaryStats}>
+            <View style={styles.summaryStat}>
+              <Text style={styles.summaryStatNum}>{planSummary.totalWeeks}</Text>
+              <Text style={styles.summaryStatLabel}>WEEKS</Text>
+            </View>
+            <View style={styles.summaryStat}>
+              <Text style={styles.summaryStatNum}>{planSummary.daysPerWeek}</Text>
+              <Text style={styles.summaryStatLabel}>DAYS/WK</Text>
+            </View>
+            <View style={styles.summaryStat}>
+              <Text style={styles.summaryStatNum}>{sessionDuration || 60}</Text>
+              <Text style={styles.summaryStatLabel}>MIN/DAY</Text>
+            </View>
+          </View>
+
+          <View style={styles.summaryGoals}>
+            {planSummary.goals.map(g => (
+              <View key={g} style={styles.summaryGoalChip}>
+                <Text style={styles.summaryGoalText}>{goalLabels[g] || g}</Text>
+              </View>
+            ))}
+          </View>
+
+          {planSummary.notes ? (
+            <View style={styles.summaryNotesCard}>
+              <Text style={styles.summaryNotesTitle}>COACH NOTES</Text>
+              <Text style={styles.summaryNotesText}>{planSummary.notes}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.summaryProgression}>
+            <Text style={styles.summaryNotesTitle}>PROGRESSION</Text>
+            <Text style={styles.summaryNotesText}>
+              Weeks 1-4: Accumulation — building work capacity with moderate intensity{'\n\n'}
+              Weeks 5-8: Intensification — heavier loads, lower volume{'\n\n'}
+              Weeks 9-12: Realization — peak performance, testing benchmarks{'\n\n'}
+              Every 4th week is a deload for recovery.
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.buildButton}
+            onPress={() => navigation.replace('Main')}
+          >
+            <Text style={styles.buildButtonText}>LET'S GO</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -1205,5 +1275,102 @@ const styles = StyleSheet.create({
     marginTop: 20,
     textAlign: 'center',
     lineHeight: 22,
+  },
+  // Plan summary
+  summaryContainer: {
+    padding: 24,
+    alignItems: 'center',
+    paddingBottom: 40,
+  },
+  summaryTitle: {
+    color: '#01FF70',
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 3,
+    marginTop: 40,
+    marginBottom: 8,
+  },
+  summaryName: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  summaryStats: {
+    flexDirection: 'row',
+    gap: 20,
+    marginBottom: 20,
+  },
+  summaryStat: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+    minWidth: 90,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+  summaryStatNum: {
+    color: '#FF4136',
+    fontSize: 28,
+    fontWeight: '900',
+  },
+  summaryStatLabel: {
+    color: '#666',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginTop: 4,
+  },
+  summaryGoals: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 24,
+  },
+  summaryGoalChip: {
+    backgroundColor: 'rgba(255,65,54,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,65,54,0.3)',
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+  },
+  summaryGoalText: {
+    color: '#FF4136',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  summaryNotesCard: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 14,
+    padding: 18,
+    width: '100%',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+  summaryNotesTitle: {
+    color: '#FF4136',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  summaryNotesText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  summaryProgression: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 14,
+    padding: 18,
+    width: '100%',
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#222',
   },
 });

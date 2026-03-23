@@ -35,14 +35,12 @@ RULES:
   Always recommend seeing a medical professional if pain is sharp or persistent.
 
 RESPONSE FORMAT:
-Always respond with valid JSON:
-{
-  "message": "Your coaching text here (shown to user)",
-  "actions": [],
-  "options": []
-}
+- For general questions, advice, or conversation: respond with PLAIN TEXT only. No JSON.
+- ONLY use JSON when you need to perform an ACTION (swap, adjust weight, flag injury, etc.)
+- JSON format (only when actions/options are needed):
+{"message": "text", "actions": [...], "options": [...]}
 
-ACTIONS — executed immediately (use for non-injury things like general weight/rep tweaks, or after the user picks an option):
+ACTION TYPES (only in JSON responses):
 - {"type": "swap", "planExerciseId": N, "newExerciseId": "id", "reason": "text"}
 - {"type": "adjustWeight", "planExerciseId": N, "newWeight": "X lb", "reason": "text"}
 - {"type": "adjustReps", "planExerciseId": N, "newSets": "3", "newReps": "8", "reason": "text"}
@@ -50,12 +48,9 @@ ACTIONS — executed immediately (use for non-injury things like general weight/
 - {"type": "removeExercise", "planExerciseId": N, "reason": "text"}
 - {"type": "addNote", "planExerciseId": N, "note": "text"}
 
-OPTIONS — presented as buttons for the user to choose (use for injury modifications):
-Each option: {"label": "short button text", "description": "why this helps", "recommended": true/false, "action": {action object}}
-Mark your top recommendation with "recommended": true.
-Give 2-4 options when the user reports pain/injury. Always include flagInjury in the actions array alongside options.
-
-If no actions or options needed, return empty arrays.`;
+OPTIONS (only for injury modifications, presented as buttons):
+Each: {"label": "short text", "description": "why", "recommended": true/false, "action": {action}}
+Give 2-4 options for injuries. Include flagInjury in actions alongside options.`;
 
 // Sanitize user input — cap length, strip weird chars
 function sanitizeInput(text, maxLen = 500) {
@@ -127,26 +122,29 @@ export async function sendCoachMessage(apiKey, messages, context) {
 
     console.log(`[AI Coach] Tokens — in: ${usage.input_tokens || '?'}, out: ${usage.output_tokens || '?'}`);
 
-    // Strip markdown code fences if present (```json ... ```)
+    // Strip markdown code fences if present
     let text = rawText.trim();
     if (text.startsWith('```')) {
       text = text.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
     }
 
-    // Parse JSON response
-    try {
-      const parsed = JSON.parse(text);
-      console.log('[AI Coach] Parsed actions:', JSON.stringify(parsed.actions));
-      console.log('[AI Coach] Parsed options:', JSON.stringify(parsed.options));
-      return {
-        message: parsed.message || text,
-        actions: Array.isArray(parsed.actions) ? parsed.actions : [],
-        options: Array.isArray(parsed.options) ? parsed.options : [],
-      };
-    } catch (parseErr) {
-      console.warn('[AI Coach] JSON parse failed, returning as plain text:', parseErr.message);
-      return { message: rawText, actions: [] };
+    // Try JSON parse — if it fails, it's a plain text response (which is fine)
+    if (text.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(text);
+        console.log('[AI Coach] JSON response with actions:', parsed.actions?.length || 0);
+        return {
+          message: parsed.message || text,
+          actions: Array.isArray(parsed.actions) ? parsed.actions : [],
+          options: Array.isArray(parsed.options) ? parsed.options : [],
+        };
+      } catch (parseErr) {
+        console.warn('[AI Coach] JSON parse failed:', parseErr.message);
+      }
     }
+
+    // Plain text response — no actions needed
+    return { message: rawText, actions: [], options: [] };
   } catch (e) {
     clearTimeout(timer);
     if (e.name === 'AbortError') {

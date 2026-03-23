@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { useIsFocused } from '@react-navigation/native';
-import { saveRunHistory, getRunTypeForDate } from '../data/database';
+import { saveRunHistory, getRunTypeForDate, getRunExercisesForDate } from '../data/database';
 
 // Run type configurations with auto-segments
 const RUN_CONFIGS = {
@@ -100,13 +100,26 @@ export default function RunTracker({ route, navigation }) {
   const segmentDistance = useRef(0);
   const timerRef = useRef(null);
 
-  // Auto-detect planned run type for the given date (or today)
+  const [planSegments, setPlanSegments] = useState(null);
+
+  // Auto-detect planned run type and exercises for the given date
   useEffect(() => {
     if (!isFocused) return;
     (async () => {
       try {
         const date = passedDate || new Date().toISOString().split('T')[0];
         const runType = await getRunTypeForDate(date);
+        const runExercises = await getRunExercisesForDate(date);
+
+        if (runExercises && runExercises.length > 0) {
+          // Build segments from actual plan exercises
+          const segs = buildSegmentsFromPlan(runExercises);
+          if (segs.length > 0) {
+            setPlanSegments(segs);
+            setBuiltSegments(segs);
+          }
+        }
+
         if (runType && RUN_CONFIGS[runType]) {
           setSelectedRunType(runType);
           setTodayRunType(runType);
@@ -117,10 +130,74 @@ export default function RunTracker({ route, navigation }) {
     })();
   }, [isFocused, passedDate]);
 
-  // Build segment list when run type or rounds change
+  // Build segment list when run type or rounds change (only if no plan segments)
   useEffect(() => {
-    buildSegments();
+    if (!planSegments) buildSegments();
   }, [selectedRunType, rounds]);
+
+  // Parse plan exercises into GPS segments
+  const buildSegmentsFromPlan = (exercises) => {
+    const segs = [];
+    for (const ex of exercises) {
+      const name = (ex.name || '').toLowerCase();
+      const reps = (ex.reps || '').toLowerCase();
+      const sets = (ex.sets || '').toLowerCase();
+      const weight = (ex.weight || '').toLowerCase();
+
+      // Parse duration from reps/sets (e.g. "5 min", "90 sec", "400m")
+      let duration = 300; // default 5 min
+      let segType = 'easy';
+
+      // Detect segment type from name/weight
+      if (name.includes('warm') || name.includes('easy jog') || name.includes('cool')) {
+        segType = 'easy';
+        duration = parseDuration(reps) || parseDuration(sets) || 300;
+        segs.push({ name: ex.name, duration, type: segType });
+      } else if (name.includes('interval') || name.includes('400m') || name.includes('sprint') || name.includes('repeat')) {
+        // Repeating intervals — parse count from sets
+        const count = parseInt(sets) || parseInt(reps) || 4;
+        const intervalDur = parseDuration(reps) || 90; // default 90s
+        const recoveryDur = Math.round(intervalDur * 0.67); // 2:1 work:rest or match
+
+        // Check if rest info is in weight/notes
+        const restMatch = (weight + ' ' + (ex.notes || '')).match(/(\d+)\s*(?:sec|s)\s*(?:rest|easy|recovery)/i);
+        const actualRecovery = restMatch ? parseInt(restMatch[1]) : recoveryDur;
+
+        for (let i = 0; i < count; i++) {
+          segs.push({ name: `Hard ${i + 1}/${count}`, duration: intervalDur, type: 'hard', round: i + 1 });
+          if (i < count - 1 || exercises.indexOf(ex) < exercises.length - 1) {
+            segs.push({ name: `Recovery ${i + 1}/${count}`, duration: actualRecovery, type: 'recovery', round: i + 1 });
+          }
+        }
+      } else if (name.includes('tempo')) {
+        segType = 'tempo';
+        duration = parseDuration(reps) || parseDuration(sets) || 1200;
+        segs.push({ name: ex.name, duration, type: segType });
+      } else if (name.includes('run') || name.includes('jog')) {
+        duration = parseDuration(reps) || parseDuration(sets) || 600;
+        segType = weight.includes('race') || weight.includes('hard') ? 'hard' : 'easy';
+        segs.push({ name: ex.name, duration, type: segType });
+      } else {
+        // Generic — just add it
+        duration = parseDuration(reps) || parseDuration(sets) || 300;
+        segs.push({ name: ex.name, duration, type: 'easy' });
+      }
+    }
+    return segs;
+  };
+
+  // Parse "5 min", "90 sec", "90s", "20-30 min" into seconds
+  const parseDuration = (str) => {
+    if (!str) return null;
+    const minMatch = str.match(/(\d+)\s*min/i);
+    if (minMatch) return parseInt(minMatch[1]) * 60;
+    const secMatch = str.match(/(\d+)\s*(?:sec|s\b)/i);
+    if (secMatch) return parseInt(secMatch[1]);
+    // "400m" ≈ 2 min
+    const meterMatch = str.match(/(\d+)\s*m\b/i);
+    if (meterMatch) return Math.round(parseInt(meterMatch[1]) / 200 * 60);
+    return null;
+  };
 
   const buildSegments = () => {
     const config = RUN_CONFIGS[selectedRunType];
@@ -128,14 +205,11 @@ export default function RunTracker({ route, navigation }) {
 
     const segs = [];
     if (selectedRunType === 'INTERVALS') {
-      // Warm-up
       segs.push({ ...config.segments[0] });
-      // Repeated intervals
       for (let i = 0; i < rounds; i++) {
         segs.push({ ...config.segments[1], name: `Hard ${i + 1}/${rounds}`, round: i + 1 });
         segs.push({ ...config.segments[2], name: `Recovery ${i + 1}/${rounds}`, round: i + 1 });
       }
-      // Cool-down
       segs.push({ ...config.segments[3] });
     } else {
       config.segments.forEach(seg => segs.push({ ...seg }));

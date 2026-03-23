@@ -318,7 +318,7 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
     }
   }
 
-  return { planId, totalWeeks, phases, startDate, eventDate, planName: aiPlan.planName };
+  return { planId, totalWeeks, phases, startDate, eventDate, planName: aiPlan.planName, programNotes: aiPlan.programNotes };
 }
 
 // Fuzzy match an exercise name to our DB
