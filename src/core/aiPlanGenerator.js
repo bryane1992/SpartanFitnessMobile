@@ -484,7 +484,12 @@ async function loadExercisePool(userProfile) {
     }
   }
 
-  return { all: Array.from(exerciseMap.values()) };
+  const all = Array.from(exerciseMap.values());
+  console.log(`[AI Plan] Exercise pool: ${all.length} exercises. Barbell: ${all.filter(e => e.category === 'barbell').length}, DB: ${all.filter(e => e.category === 'dumbbell').length}`);
+  // Log if bench press is in pool
+  const hasBench = all.find(e => e.id === 'bench_press');
+  console.log(`[AI Plan] Bench Press in pool: ${hasBench ? 'YES' : 'NO — check equipment filter'}`);
+  return { all };
 }
 
 function generateUUID() {

@@ -299,10 +299,10 @@ export async function getExercisesByFilter({ muscleGroups, style, exclusions, eq
       const equipmentMap = {
         // New specific equipment IDs
         dumbbells: ['dumbbell'],
-        barbell: ['barbell'],
-        squat_rack: ['rack'],
+        barbell: ['barbell', 'bench'],  // barbell implies bench access
+        squat_rack: ['rack', 'barbell'], // rack implies barbell
         bench: ['bench'],
-        pull_up_bar: [],
+        pull_up_bar: ['pull_up_bar'],
         kettlebell: ['kettlebell'],
         cables: ['cable'],
         machines: ['machine'],
