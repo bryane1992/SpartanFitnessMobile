@@ -14,19 +14,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, saveUserEquipment } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 
-const TOTAL_STEPS = 9;
+const TOTAL_STEPS = 7;
 
 // ═══════════════════════════════════════════════════════════════
 // Step Data
 // ═══════════════════════════════════════════════════════════════
 
 const GOALS = [
-  { id: 'spartan_sprint', label: 'Spartan Sprint (5K)', icon: '', desc: '5K with 20+ obstacles' },
-  { id: 'spartan_super', label: 'Spartan Super (10K)', icon: '', desc: '10K with 25+ obstacles' },
-  { id: 'spartan_beast', label: 'Spartan Beast (21K)', icon: '', desc: 'Half marathon, 30+ obstacles' },
-  { id: 'general_fitness', label: 'General Fitness', icon: '', desc: 'Overall strength & conditioning' },
-  { id: 'weight_loss', label: 'Weight Loss', icon: '', desc: 'Burn fat, build lean muscle' },
-  { id: 'muscle_building', label: 'Build Muscle', icon: '', desc: 'Hypertrophy & mass building' },
+  { id: 'build_muscle', label: 'Build Muscle', icon: '', desc: 'Hypertrophy, size, and strength gains' },
+  { id: 'lose_fat', label: 'Lose Fat', icon: '', desc: 'Burn fat while preserving muscle' },
+  { id: 'get_stronger', label: 'Get Stronger', icon: '', desc: 'Increase max lifts and power output' },
+  { id: 'endurance', label: 'Improve Endurance', icon: '', desc: 'Cardio, stamina, and work capacity' },
+  { id: 'athletic', label: 'Athletic Performance', icon: '', desc: 'Speed, agility, sport-specific training' },
+  { id: 'general_fitness', label: 'General Fitness', icon: '', desc: 'Well-rounded health and conditioning' },
 ];
 
 const EQUIPMENT = [
@@ -99,26 +99,21 @@ export default function Onboarding({ navigation }) {
 
   // Step 1: Goal
   const [selectedGoal, setSelectedGoal] = useState(null);
-  // Step 2: Equipment
-  const [selectedEquipment, setSelectedEquipment] = useState([]);
-  // Step 2b: Equipment Details (specific weights)
-  const [equipmentDetails, setEquipmentDetails] = useState({});
-  // Step 3: Experience
+  // Step 2: Experience
   const [selectedExperience, setSelectedExperience] = useState(null);
-  // Step 4: Event Date
-  const [eventMonth, setEventMonth] = useState(null);
-  const [eventYear, setEventYear] = useState(null);
-  const [noDeadline, setNoDeadline] = useState(false);
-  // Step 5: Training Days
+  // Step 3: Equipment
+  const [selectedEquipment, setSelectedEquipment] = useState([]);
+  // Step 4: Equipment Details (specific weights)
+  const [equipmentDetails, setEquipmentDetails] = useState({});
+  // Step 5: Schedule (days + duration)
   const [daysPerWeek, setDaysPerWeek] = useState(null);
   const [trainingDays, setTrainingDays] = useState([]);
-  // Step 6: Session Duration
   const [sessionDuration, setSessionDuration] = useState(null);
-  // Step 7: Workout Styles (multi-select)
+  // Step 6: Preferences (style + body comp + exclusions)
   const [workoutStyles, setWorkoutStyles] = useState([]);
-  // Step 8: Exclusions + Body Comp
   const [exclusions, setExclusions] = useState([]);
   const [bodyCompGoals, setBodyCompGoals] = useState([]);
+  // Step 7: AI Notes
   const [additionalNotes, setAdditionalNotes] = useState('');
 
   // Loading state for plan generation
@@ -167,30 +162,20 @@ export default function Onboarding({ navigation }) {
     }
   };
 
-  const getEventDate = () => {
-    if (noDeadline) {
-      // Default 16 weeks from now
-      const d = new Date();
-      d.setDate(d.getDate() + 16 * 7);
-      return d.toISOString().split('T')[0];
-    }
-    if (eventMonth && eventYear) {
-      // Last day of selected month
-      return `${eventYear}-${String(eventMonth).padStart(2, '0')}-15`;
-    }
-    return null;
-  };
-
   const completeOnboarding = async () => {
     setIsGenerating(true);
 
     try {
+      // Default 16-week plan
+      const eventDate = new Date();
+      eventDate.setDate(eventDate.getDate() + 16 * 7);
+
       const profile = {
         goal: selectedGoal,
         equipment: selectedEquipment,
         equipmentDetails: equipmentDetails,
         experience: selectedExperience,
-        eventDate: getEventDate(),
+        eventDate: eventDate.toISOString().split('T')[0],
         trainingDaysPerWeek: daysPerWeek,
         trainingDays: trainingDays,
         sessionDuration: sessionDuration,
@@ -201,7 +186,7 @@ export default function Onboarding({ navigation }) {
         bodyCompGoal: bodyCompGoals[0] || 'maintain',
         additionalNotes: additionalNotes.trim(),
         createdAt: new Date().toISOString(),
-        onboardingVersion: 5,
+        onboardingVersion: 6,
       };
 
       // Save profile
@@ -250,7 +235,7 @@ export default function Onboarding({ navigation }) {
 
   const renderStep1 = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>What's your primary goal?</Text>
+      <Text style={styles.stepTitle}>What's your goal?</Text>
       <Text style={styles.stepSubtitle}>We'll customize your training program</Text>
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll}>
@@ -281,6 +266,42 @@ export default function Onboarding({ navigation }) {
 
   const renderStep2 = () => (
     <View style={styles.stepContainer}>
+      <Text style={styles.stepTitle}>Experience level?</Text>
+      <Text style={styles.stepSubtitle}>Be honest — we'll scale everything for you</Text>
+
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll}>
+        {EXPERIENCE.map(exp => (
+          <TouchableOpacity
+            key={exp.id}
+            style={[styles.optionCard, selectedExperience === exp.id && styles.optionCardSelected]}
+            onPress={() => setSelectedExperience(exp.id)}
+          >
+            <View style={styles.optionContent}>
+              <Text style={[styles.optionLabel, selectedExperience === exp.id && styles.optionLabelSelected]}>{exp.label}</Text>
+              <Text style={styles.optionDesc}>{exp.desc}</Text>
+            </View>
+            {selectedExperience === exp.id && <View style={styles.checkMark} />}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      <View style={styles.buttonRow}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)}>
+          <Text style={styles.backButtonText}>BACK</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.nextButton, !selectedExperience && styles.nextButtonDisabled]}
+          disabled={!selectedExperience}
+          onPress={() => setStep(3)}
+        >
+          <Text style={styles.nextButtonText}>NEXT</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderStep3 = () => (
+    <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>What equipment do you have?</Text>
       <Text style={styles.stepSubtitle}>Select all that apply</Text>
 
@@ -301,18 +322,17 @@ export default function Onboarding({ navigation }) {
       </ScrollView>
 
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.nextButton, selectedEquipment.length === 0 && styles.nextButtonDisabled]}
           disabled={selectedEquipment.length === 0}
           onPress={() => {
-            // If user has barbell or kettlebells, go to equipment details
             if (selectedEquipment.some(e => ['barbell', 'kettlebell', 'dumbbells'].includes(e))) {
-              setStep(3);
-            } else {
               setStep(4);
+            } else {
+              setStep(5);
             }
           }}
         >
@@ -322,8 +342,7 @@ export default function Onboarding({ navigation }) {
     </View>
   );
 
-  // Step 3: Equipment Details (weights)
-  const renderStep3 = () => {
+  const renderStep4 = () => {
     const updateDetail = (equipId, field, value) => {
       setEquipmentDetails(prev => ({
         ...prev,
@@ -334,7 +353,7 @@ export default function Onboarding({ navigation }) {
     return (
       <View style={styles.stepContainer}>
         <Text style={styles.stepTitle}>Equipment details</Text>
-        <Text style={styles.stepSubtitle}>What weights do you have? This helps us scale your workouts.</Text>
+        <Text style={styles.stepSubtitle}>This helps us scale your workouts perfectly</Text>
 
         <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll}>
           {selectedEquipment.includes('barbell') && (
@@ -386,12 +405,12 @@ export default function Onboarding({ navigation }) {
         </ScrollView>
 
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
+          <TouchableOpacity style={styles.backButton} onPress={() => setStep(3)}>
             <Text style={styles.backButtonText}>BACK</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.nextButton}
-            onPress={() => setStep(4)}
+            onPress={() => setStep(5)}
           >
             <Text style={styles.nextButtonText}>NEXT</Text>
           </TouchableOpacity>
@@ -400,139 +419,7 @@ export default function Onboarding({ navigation }) {
     );
   };
 
-  const renderStep4 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Experience level?</Text>
-      <Text style={styles.stepSubtitle}>Be honest — we'll scale everything for you</Text>
-
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll}>
-        {EXPERIENCE.map(exp => (
-          <TouchableOpacity
-            key={exp.id}
-            style={[styles.optionCard, selectedExperience === exp.id && styles.optionCardSelected]}
-            onPress={() => setSelectedExperience(exp.id)}
-          >
-            <View style={styles.optionContent}>
-              <Text style={[styles.optionLabel, selectedExperience === exp.id && styles.optionLabelSelected]}>{exp.label}</Text>
-              <Text style={styles.optionDesc}>{exp.desc}</Text>
-            </View>
-            {selectedExperience === exp.id && <View style={styles.checkMark} />}
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(3)}>
-          <Text style={styles.backButtonText}>BACK</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.nextButton, !selectedExperience && styles.nextButtonDisabled]}
-          disabled={!selectedExperience}
-          onPress={() => setStep(5)}
-        >
-          <Text style={styles.nextButtonText}>NEXT</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  const renderStep5 = () => {
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    const months = [
-      { num: 1, name: 'Jan' }, { num: 2, name: 'Feb' }, { num: 3, name: 'Mar' },
-      { num: 4, name: 'Apr' }, { num: 5, name: 'May' }, { num: 6, name: 'Jun' },
-      { num: 7, name: 'Jul' }, { num: 8, name: 'Aug' }, { num: 9, name: 'Sep' },
-      { num: 10, name: 'Oct' }, { num: 11, name: 'Nov' }, { num: 12, name: 'Dec' },
-    ];
-    const years = [currentYear, currentYear + 1];
-
-    const isDateValid = noDeadline || (eventMonth && eventYear);
-
-    return (
-      <View style={styles.stepContainer}>
-        <Text style={styles.stepTitle}>When's your event?</Text>
-        <Text style={styles.stepSubtitle}>We'll build your plan backwards from race day</Text>
-
-        <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll}>
-          {/* No deadline option */}
-          <TouchableOpacity
-            style={[styles.optionCard, noDeadline && styles.optionCardSelected]}
-            onPress={() => { setNoDeadline(true); setEventMonth(null); setEventYear(null); }}
-          >
-            <View style={styles.optionContent}>
-              <Text style={[styles.optionLabel, noDeadline && styles.optionLabelSelected]}>No specific date</Text>
-              <Text style={styles.optionDesc}>16-week general training plan</Text>
-            </View>
-            {noDeadline && <View style={styles.checkMark} />}
-          </TouchableOpacity>
-
-          {/* Divider */}
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR PICK A MONTH</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Year selection */}
-          <View style={styles.yearRow}>
-            {years.map(year => (
-              <TouchableOpacity
-                key={year}
-                style={[styles.yearButton, eventYear === year && styles.yearButtonSelected]}
-                onPress={() => { setEventYear(year); setNoDeadline(false); }}
-              >
-                <Text style={[styles.yearText, eventYear === year && styles.yearTextSelected]}>{year}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Month grid */}
-          <View style={styles.monthGrid}>
-            {months.map(month => {
-              const isPast = eventYear === currentYear && month.num <= currentMonth;
-              const tooSoon = eventYear === currentYear && month.num <= currentMonth + 1;
-              const disabled = !eventYear || isPast || tooSoon;
-              return (
-                <TouchableOpacity
-                  key={month.num}
-                  style={[
-                    styles.monthButton,
-                    eventMonth === month.num && styles.monthButtonSelected,
-                    disabled && styles.monthButtonDisabled,
-                  ]}
-                  disabled={disabled}
-                  onPress={() => { setEventMonth(month.num); setNoDeadline(false); }}
-                >
-                  <Text style={[
-                    styles.monthText,
-                    eventMonth === month.num && styles.monthTextSelected,
-                    disabled && styles.monthTextDisabled,
-                  ]}>{month.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </ScrollView>
-
-        <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.backButton} onPress={() => setStep(4)}>
-            <Text style={styles.backButtonText}>BACK</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.nextButton, !isDateValid && styles.nextButtonDisabled]}
-            disabled={!isDateValid}
-            onPress={() => setStep(6)}
-          >
-            <Text style={styles.nextButtonText}>NEXT</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
-
-  const renderStep6 = () => (
+  const renderStep5 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Training schedule</Text>
       <Text style={styles.stepSubtitle}>How many days per week?</Text>
@@ -581,14 +468,38 @@ export default function Onboarding({ navigation }) {
         </>
       )}
 
+      {/* Session duration */}
+      {daysPerWeek && trainingDays.length === daysPerWeek && (
+        <>
+          <Text style={[styles.sectionLabel, { marginTop: 20 }]}>How long per session?</Text>
+          <View style={[styles.daysCountRow, { flexWrap: 'wrap' }]}>
+            {SESSION_DURATIONS.map(dur => (
+              <TouchableOpacity
+                key={dur.id}
+                style={[styles.dayCountButton, sessionDuration === dur.id && styles.dayCountSelected, { width: 'auto', paddingHorizontal: 14 }]}
+                onPress={() => setSessionDuration(dur.id)}
+              >
+                <Text style={[styles.dayCountText, sessionDuration === dur.id && styles.dayCountTextSelected, { fontSize: 16 }]}>{dur.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
+
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(5)}>
+        <TouchableOpacity style={styles.backButton} onPress={() => {
+          if (selectedEquipment.some(e => ['barbell', 'kettlebell', 'dumbbells'].includes(e))) {
+            setStep(4);
+          } else {
+            setStep(3);
+          }
+        }}>
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.nextButton, trainingDays.length !== daysPerWeek && styles.nextButtonDisabled]}
-          disabled={trainingDays.length !== daysPerWeek}
-          onPress={() => setStep(7)}
+          style={[styles.nextButton, (trainingDays.length !== daysPerWeek || !sessionDuration) && styles.nextButtonDisabled]}
+          disabled={trainingDays.length !== daysPerWeek || !sessionDuration}
+          onPress={() => setStep(6)}
         >
           <Text style={styles.nextButtonText}>NEXT</Text>
         </TouchableOpacity>
@@ -596,43 +507,10 @@ export default function Onboarding({ navigation }) {
     </View>
   );
 
-  const renderStep7 = () => (
+  const renderStep6 = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>How long per session?</Text>
-      <Text style={styles.stepSubtitle}>How much time do you have to train each day?</Text>
-
-      <View style={styles.daysCountRow}>
-        {SESSION_DURATIONS.map(dur => (
-          <TouchableOpacity
-            key={dur.id}
-            style={[styles.dayCountButton, sessionDuration === dur.id && styles.dayCountSelected, { width: 'auto', paddingHorizontal: 14 }]}
-            onPress={() => setSessionDuration(dur.id)}
-          >
-            <Text style={[styles.dayCountText, sessionDuration === dur.id && styles.dayCountTextSelected]}>{dur.label}</Text>
-            <Text style={[styles.dayCountLabel, sessionDuration === dur.id && styles.dayCountLabelSelected]}>{dur.desc}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(6)}>
-          <Text style={styles.backButtonText}>BACK</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.nextButton, !sessionDuration && styles.nextButtonDisabled]}
-          disabled={!sessionDuration}
-          onPress={() => setStep(8)}
-        >
-          <Text style={styles.nextButtonText}>NEXT</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  const renderStep8 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Training style?</Text>
-      <Text style={styles.stepSubtitle}>Pick one or mix styles together</Text>
+      <Text style={styles.stepTitle}>Training preferences</Text>
+      <Text style={styles.stepSubtitle}>How do you like to train?</Text>
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll}>
         {WORKOUT_STYLES.map(ws => (
@@ -650,30 +528,25 @@ export default function Onboarding({ navigation }) {
         ))}
       </ScrollView>
 
-      <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(7)}>
-          <Text style={styles.backButtonText}>BACK</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.nextButton, workoutStyles.length === 0 && styles.nextButtonDisabled]}
-          disabled={workoutStyles.length === 0}
-          onPress={() => setStep(9)}
-        >
-          <Text style={styles.nextButtonText}>NEXT</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+        {/* Body Comp */}
+        <Text style={[styles.sectionLabel, { marginTop: 25 }]}>Body composition focus?</Text>
+        {BODY_COMP_GOALS.map(bcg => (
+          <TouchableOpacity
+            key={bcg.id}
+            style={[styles.smallCard, bodyCompGoals.includes(bcg.id) && styles.smallCardSelected]}
+            onPress={() => toggleBodyCompGoal(bcg.id)}
+          >
+            <View style={styles.optionContent}>
+              <Text style={[styles.smallLabel, bodyCompGoals.includes(bcg.id) && styles.smallLabelSelected]}>{bcg.label}</Text>
+              <Text style={styles.optionDesc}>{bcg.desc}</Text>
+            </View>
+            {bodyCompGoals.includes(bcg.id) && <View style={styles.checkMark} />}
+          </TouchableOpacity>
+        ))}
 
-  const renderStep9 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Final touches</Text>
-
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll}>
         {/* Exclusions */}
-        <Text style={styles.sectionLabel}>Anything to avoid?</Text>
-        <Text style={styles.sectionDesc}>Select movements you want to skip (optional)</Text>
-
+        <Text style={[styles.sectionLabel, { marginTop: 25 }]}>Anything to avoid?</Text>
+        <Text style={styles.sectionDesc}>Optional — skip movements that don't work for you</Text>
         {EXCLUSIONS.map(ex => (
           <TouchableOpacity
             key={ex.id}
@@ -687,47 +560,50 @@ export default function Onboarding({ navigation }) {
             {exclusions.includes(ex.id) && <View style={styles.excludeMark} />}
           </TouchableOpacity>
         ))}
+      </ScrollView>
 
-        {/* Body Comp */}
-        <Text style={[styles.sectionLabel, { marginTop: 25 }]}>Body composition goals?</Text>
-        <Text style={styles.sectionDesc}>Select one or more</Text>
+      <View style={styles.buttonRow}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(5)}>
+          <Text style={styles.backButtonText}>BACK</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.nextButton, workoutStyles.length === 0 && styles.nextButtonDisabled]}
+          disabled={workoutStyles.length === 0}
+          onPress={() => setStep(7)}
+        >
+          <Text style={styles.nextButtonText}>NEXT</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
-        {BODY_COMP_GOALS.map(bcg => (
-          <TouchableOpacity
-            key={bcg.id}
-            style={[styles.optionCard, bodyCompGoals.includes(bcg.id) && styles.optionCardSelected]}
-            onPress={() => toggleBodyCompGoal(bcg.id)}
-          >
-            <View style={styles.optionContent}>
-              <Text style={[styles.optionLabel, bodyCompGoals.includes(bcg.id) && styles.optionLabelSelected]}>{bcg.label}</Text>
-              <Text style={styles.optionDesc}>{bcg.desc}</Text>
-            </View>
-            {bodyCompGoals.includes(bcg.id) && <View style={styles.checkMark} />}
-          </TouchableOpacity>
-        ))}
+  const renderStep7 = () => (
+    <View style={styles.stepContainer}>
+      <Text style={styles.stepTitle}>Anything else?</Text>
+      <Text style={styles.stepSubtitle}>Tell our AI coach what matters to you</Text>
 
-        {/* Anything else */}
-        <Text style={[styles.sectionLabel, { marginTop: 25 }]}>Anything else we should know?</Text>
-        <Text style={styles.sectionDesc}>Injuries, preferences, limitations, goals — our AI will factor this in</Text>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll}>
+        <Text style={styles.sectionDesc}>
+          Injuries, upcoming events, specific goals, preferences — anything that should shape your program. This is optional but helps our AI build a smarter plan.
+        </Text>
         <TextInput
           style={styles.notesInput}
-          placeholder="e.g. Bad left knee, training for a Spartan race in June, prefer morning workouts, hate burpees..."
+          placeholder="e.g. Training for a Spartan race in June, bad left knee, hate burpees, want to focus on pull-ups..."
           placeholderTextColor="rgba(255,255,255,0.2)"
           value={additionalNotes}
           onChangeText={setAdditionalNotes}
           multiline
-          numberOfLines={4}
+          numberOfLines={5}
           textAlignVertical="top"
         />
       </ScrollView>
 
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setStep(8)}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep(6)}>
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.buildButton, bodyCompGoals.length === 0 && styles.nextButtonDisabled]}
-          disabled={bodyCompGoals.length === 0}
+          style={styles.buildButton}
           onPress={completeOnboarding}
         >
           <Text style={styles.buildButtonText}>BUILD MY PLAN</Text>
@@ -851,8 +727,6 @@ export default function Onboarding({ navigation }) {
       {step === 5 && renderStep5()}
       {step === 6 && renderStep6()}
       {step === 7 && renderStep7()}
-      {step === 8 && renderStep8()}
-      {step === 9 && renderStep9()}
     </SafeAreaView>
   );
 }

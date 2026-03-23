@@ -10,8 +10,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
 import useWorkoutStore from '../store/useWorkoutStore';
-import { initDatabase, deleteAllPlanData, syncExerciseDb, getExerciseCount } from '../data/database';
+import { initDatabase, deleteAllPlanData, syncExerciseDb, getExerciseCount, exportPlanAsText } from '../data/database';
 
 const STYLE_LABELS = {
   crossfit: 'CrossFit',
@@ -129,6 +131,23 @@ export default function Settings({ navigation }) {
         },
       ]
     );
+  };
+
+  const handleExportPlan = async () => {
+    try {
+      const planId = currentPlanId;
+      if (!planId) {
+        Alert.alert('No Plan', 'Generate a plan first before exporting.');
+        return;
+      }
+      const text = await exportPlanAsText(planId);
+      const fileUri = FileSystem.documentDirectory + 'workout-plan.txt';
+      await FileSystem.writeAsStringAsync(fileUri, text);
+      await Sharing.shareAsync(fileUri, { mimeType: 'text/plain', dialogTitle: 'Share Workout Plan' });
+    } catch (e) {
+      console.error('Export error:', e);
+      Alert.alert('Export Failed', 'Could not export plan. Try again.');
+    }
   };
 
   const handleRestartOnboarding = () => {
@@ -262,6 +281,13 @@ export default function Settings({ navigation }) {
             <View style={styles.actionContent}>
               <Text style={styles.actionLabel}>WOD Library</Text>
               <Text style={styles.actionDesc}>Classic CrossFit WODs — track your scores</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.actionButton} onPress={handleExportPlan}>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionLabel}>Export Plan</Text>
+              <Text style={styles.actionDesc}>Download your workout plan for offline use</Text>
             </View>
           </TouchableOpacity>
 
