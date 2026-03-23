@@ -28,7 +28,8 @@ RULES:
 - Respect exclusions completely
 - Include warmup blocks for every training day
 - For injury notes, avoid aggravating movements and program around them
-- Be creative with exercise selection — don't just pick the obvious choices
+- Prioritize EFFICIENCY: pick exercises that hit the most muscle per movement. Prefer big compound lifts (squat, deadlift, press, row, pull-up) over isolation. Only add isolation work to address weak points or fill volume gaps.
+- No redundant exercises — if bench press and dumbbell press are in the same session, one is wasted. Each exercise should earn its slot by targeting something the others don't.
 - NEVER use "BW" for weighted carries (farmer's walk, suitcase carry, etc.) — always prescribe actual weight based on user's equipment
 - Spartan/OCR goals MUST include 1-2 dedicated RUN days per week with a block named "RUN" and type set to one of: EASY, TEMPO, INTERVALS, FARTLEK, LONG_RUN, RACE_PACE
 - Run blocks should have "isRun": true in the block object
