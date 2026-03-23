@@ -194,7 +194,9 @@ export default function Settings({ navigation }) {
               {profile.equipmentDetails?.kettlebell?.weights ? (
                 <ProfileRow label="Kettlebells" value={`${profile.equipmentDetails.kettlebell.weights} lbs`} />
               ) : null}
-              {profile.equipmentDetails?.dumbbells?.weights ? (
+              {profile.equipmentDetails?.dumbbells?.maxWeight ? (
+                <ProfileRow label="Dumbbells" value={`Up to ${profile.equipmentDetails.dumbbells.maxWeight} lbs each`} />
+              ) : profile.equipmentDetails?.dumbbells?.weights ? (
                 <ProfileRow label="Dumbbells" value={`${profile.equipmentDetails.dumbbells.weights} lbs`} />
               ) : null}
               {profile.exclusions?.length > 0 && (

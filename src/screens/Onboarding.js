@@ -220,9 +220,9 @@ export default function Onboarding({ navigation }) {
         const kbWeights = equipmentDetails.kettlebell.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0);
         equipItems.push({ type: 'kettlebell', name: 'Kettlebells', maxWeight: Math.max(...kbWeights, 0), availableWeights: kbWeights });
       }
-      if (equipmentDetails.dumbbells?.weights) {
-        const dbWeights = equipmentDetails.dumbbells.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0);
-        equipItems.push({ type: 'dumbbell', name: 'Dumbbells', maxWeight: Math.max(...dbWeights, 0), availableWeights: dbWeights });
+      if (equipmentDetails.dumbbells?.maxWeight) {
+        const maxDb = parseFloat(equipmentDetails.dumbbells.maxWeight);
+        equipItems.push({ type: 'dumbbell', name: 'Dumbbells', maxWeight: maxDb, availableWeights: [] });
       }
       // Add non-weighted equipment
       for (const eq of selectedEquipment) {
@@ -340,7 +340,7 @@ export default function Onboarding({ navigation }) {
           {selectedEquipment.includes('barbell') && (
             <View style={styles.detailCard}>
               <Text style={styles.detailLabel}>BARBELL</Text>
-              <Text style={styles.detailDesc}>Max weight you can load (including bar)</Text>
+              <Text style={styles.detailDesc}>Max weight you can load on the bar (including the bar)</Text>
               <TextInput
                 style={styles.detailInput}
                 placeholder="e.g. 110"
@@ -349,14 +349,14 @@ export default function Onboarding({ navigation }) {
                 value={equipmentDetails.barbell?.maxWeight || ''}
                 onChangeText={(v) => updateDetail('barbell', 'maxWeight', v)}
               />
-              <Text style={styles.detailUnit}>lbs total</Text>
+              <Text style={styles.detailUnit}>lbs total (bar + plates)</Text>
             </View>
           )}
 
           {selectedEquipment.includes('kettlebell') && (
             <View style={styles.detailCard}>
               <Text style={styles.detailLabel}>KETTLEBELLS</Text>
-              <Text style={styles.detailDesc}>List each KB weight (comma separated)</Text>
+              <Text style={styles.detailDesc}>List each kettlebell you own (comma separated)</Text>
               <TextInput
                 style={styles.detailInput}
                 placeholder="e.g. 53, 35, 25"
@@ -364,22 +364,23 @@ export default function Onboarding({ navigation }) {
                 value={equipmentDetails.kettlebell?.weights || ''}
                 onChangeText={(v) => updateDetail('kettlebell', 'weights', v)}
               />
-              <Text style={styles.detailUnit}>lbs each</Text>
+              <Text style={styles.detailUnit}>lbs per kettlebell</Text>
             </View>
           )}
 
           {selectedEquipment.includes('dumbbells') && (
             <View style={styles.detailCard}>
               <Text style={styles.detailLabel}>DUMBBELLS</Text>
-              <Text style={styles.detailDesc}>List your DB weights or max weight per hand</Text>
+              <Text style={styles.detailDesc}>Heaviest dumbbell you can use per hand (adjustable or fixed)</Text>
               <TextInput
                 style={styles.detailInput}
-                placeholder="e.g. 50, 35, 25, 15"
+                placeholder="e.g. 55"
                 placeholderTextColor="rgba(255,255,255,0.2)"
-                value={equipmentDetails.dumbbells?.weights || ''}
-                onChangeText={(v) => updateDetail('dumbbells', 'weights', v)}
+                keyboardType="numeric"
+                value={equipmentDetails.dumbbells?.maxWeight || ''}
+                onChangeText={(v) => updateDetail('dumbbells', 'maxWeight', v)}
               />
-              <Text style={styles.detailUnit}>lbs each</Text>
+              <Text style={styles.detailUnit}>lbs per hand (max)</Text>
             </View>
           )}
         </ScrollView>

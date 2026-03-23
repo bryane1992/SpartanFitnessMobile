@@ -202,11 +202,18 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
         weight = closest;
       }
     }
-    if (category === 'dumbbell' && equipmentDetails.dumbbells?.weights) {
-      const dbWeights = equipmentDetails.dumbbells.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0).sort((a, b) => a - b);
-      if (dbWeights.length > 0) {
-        const closest = dbWeights.reduce((prev, curr) => Math.abs(curr - weight) < Math.abs(prev - weight) ? curr : prev);
-        weight = closest;
+    if (category === 'dumbbell') {
+      if (equipmentDetails.dumbbells?.maxWeight) {
+        // Adjustable dumbbells — cap at max weight per hand
+        const maxDb = parseFloat(equipmentDetails.dumbbells.maxWeight);
+        if (weight > maxDb) weight = Math.round(maxDb / 5) * 5;
+      } else if (equipmentDetails.dumbbells?.weights) {
+        // Fixed dumbbells — snap to closest available
+        const dbWeights = equipmentDetails.dumbbells.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0).sort((a, b) => a - b);
+        if (dbWeights.length > 0) {
+          const closest = dbWeights.reduce((prev, curr) => Math.abs(curr - weight) < Math.abs(prev - weight) ? curr : prev);
+          weight = closest;
+        }
       }
     }
   }

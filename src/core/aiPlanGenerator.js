@@ -173,7 +173,9 @@ function buildPlanPrompt(profile) {
     if (profile.equipmentDetails.kettlebell?.weights) {
       parts.push(`  Kettlebell weights: ${profile.equipmentDetails.kettlebell.weights} lbs`);
     }
-    if (profile.equipmentDetails.dumbbells?.weights) {
+    if (profile.equipmentDetails.dumbbells?.maxWeight) {
+      parts.push(`  Dumbbells: adjustable up to ${profile.equipmentDetails.dumbbells.maxWeight} lbs per hand`);
+    } else if (profile.equipmentDetails.dumbbells?.weights) {
       parts.push(`  Dumbbell weights: ${profile.equipmentDetails.dumbbells.weights} lbs`);
     }
   }
