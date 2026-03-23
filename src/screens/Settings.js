@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import useWorkoutStore from '../store/useWorkoutStore';
 import { initDatabase, deleteAllPlanData, syncExerciseDb, getExerciseCount, exportPlanAsText } from '../data/database';
 
