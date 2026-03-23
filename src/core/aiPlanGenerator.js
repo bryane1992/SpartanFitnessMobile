@@ -90,12 +90,14 @@ IMPORTANT:
 - Weight should be realistic for the user's experience level and equipment
 - Sets/reps should match the body comp goal and mesocycle phase
 - Use COMMON exercise names: "Back Squat", "Bench Press", "Deadlift", "Pull Up", "Overhead Press", "Bent Over Row", "Lunges", "Romanian Deadlift", "Bicep Curl", "Tricep Pushdown", "Lat Pulldown", "Leg Press", "Farmer Walk", "Plank", "Push Up". Do NOT prefix with equipment (say "Bench Press" not "Barbell Bench Press")
-- MINIMUM VOLUME per training day:
-  * MAIN LIFTS block: 3-4 compound exercises (e.g. squat, press, row)
-  * ACCESSORIES block: 2-3 isolation/support exercises
-  * WOD/CONDITIONING block: use a REAL named WOD from the AVAILABLE WODS list, or a multi-exercise circuit with 3+ movements. NEVER a single exercise.
-  * WARMUP: 3-4 dynamic movements
-- Each training day should have 3-4 blocks total and 10-16 exercises total
+- SCALE VOLUME TO SESSION DURATION. The user's time is the hard constraint:
+  * 30 min: skip warmup block. 1 block of 3-4 supersetted compounds, short rest. No accessories. Pick a short WOD (<8 min) or skip WOD.
+  * 45 min: brief warmup (2 moves). 2-3 main compounds. 1-2 accessories. Short WOD or finisher circuit.
+  * 60 min: full warmup (3-4 moves). 3-4 main compounds. 2-3 accessories. WOD or conditioning block.
+  * 90 min: full warmup. 3-4 main compounds with longer rest. 3-4 accessories. Full WOD. Can add core/carry work.
+  * 120 min: everything above plus skill work, extra volume, longer WODs.
+- WOD/CONDITIONING: use a REAL named WOD from the AVAILABLE WODS list, or a multi-exercise circuit with 3+ movements. NEVER a single exercise.
+- WARMUP: 3-4 dynamic movements (skip for 30 min sessions)
 - WODs must use the exact WOD name and movements from the AVAILABLE WODS list. Do NOT invent fake WODs.
 - Keep "notes" and "rest" fields null unless truly needed
 - Do NOT add explanatory text outside the JSON — return ONLY valid JSON`;
