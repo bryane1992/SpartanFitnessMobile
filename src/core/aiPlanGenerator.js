@@ -158,7 +158,7 @@ function buildPlanPrompt(profile) {
   const parts = [];
 
   parts.push('Design a weekly workout template for this user:\n');
-  parts.push(`GOAL: ${profile.goal}`);
+  parts.push(`GOALS: ${(profile.goals || [profile.goal]).join(', ')}`);
   parts.push(`EXPERIENCE: ${profile.experience}`);
   parts.push(`TRAINING DAYS PER WEEK: ${profile.trainingDaysPerWeek}`);
   parts.push(`SESSION DURATION: ${profile.sessionDuration || 60} minutes`);

@@ -97,8 +97,8 @@ const DAYS_OF_WEEK = [
 export default function Onboarding({ navigation }) {
   const [step, setStep] = useState(1);
 
-  // Step 1: Goal
-  const [selectedGoal, setSelectedGoal] = useState(null);
+  // Step 1: Goals (multi-select)
+  const [selectedGoals, setSelectedGoals] = useState([]);
   // Step 2: Experience
   const [selectedExperience, setSelectedExperience] = useState(null);
   // Step 3: Equipment
@@ -121,6 +121,14 @@ export default function Onboarding({ navigation }) {
   const [generatingStatus, setGeneratingStatus] = useState('');
 
   const generateNewPlan = useWorkoutStore(s => s.generateNewPlan);
+
+  const toggleGoal = (id) => {
+    if (selectedGoals.includes(id)) {
+      setSelectedGoals(selectedGoals.filter(g => g !== id));
+    } else {
+      setSelectedGoals([...selectedGoals, id]);
+    }
+  };
 
   const toggleEquipment = (id) => {
     if (selectedEquipment.includes(id)) {
@@ -171,7 +179,8 @@ export default function Onboarding({ navigation }) {
       eventDate.setDate(eventDate.getDate() + 16 * 7);
 
       const profile = {
-        goal: selectedGoal,
+        goals: selectedGoals,
+        goal: selectedGoals[0] || 'general_fitness',
         equipment: selectedEquipment,
         equipmentDetails: equipmentDetails,
         experience: selectedExperience,
@@ -235,28 +244,28 @@ export default function Onboarding({ navigation }) {
 
   const renderStep1 = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>What's your goal?</Text>
-      <Text style={styles.stepSubtitle}>We'll customize your training program</Text>
+      <Text style={styles.stepTitle}>What are your goals?</Text>
+      <Text style={styles.stepSubtitle}>Select all that apply</Text>
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll}>
         {GOALS.map(goal => (
           <TouchableOpacity
             key={goal.id}
-            style={[styles.optionCard, selectedGoal === goal.id && styles.optionCardSelected]}
-            onPress={() => setSelectedGoal(goal.id)}
+            style={[styles.optionCard, selectedGoals.includes(goal.id) && styles.optionCardSelected]}
+            onPress={() => toggleGoal(goal.id)}
           >
             <View style={styles.optionContent}>
-              <Text style={[styles.optionLabel, selectedGoal === goal.id && styles.optionLabelSelected]}>{goal.label}</Text>
+              <Text style={[styles.optionLabel, selectedGoals.includes(goal.id) && styles.optionLabelSelected]}>{goal.label}</Text>
               <Text style={styles.optionDesc}>{goal.desc}</Text>
             </View>
-            {selectedGoal === goal.id && <View style={styles.checkMark} />}
+            {selectedGoals.includes(goal.id) && <View style={styles.checkMark} />}
           </TouchableOpacity>
         ))}
       </ScrollView>
 
       <TouchableOpacity
-        style={[styles.nextButtonSolo, !selectedGoal && styles.nextButtonDisabled]}
-        disabled={!selectedGoal}
+        style={[styles.nextButtonSolo, selectedGoals.length === 0 && styles.nextButtonDisabled]}
+        disabled={selectedGoals.length === 0}
         onPress={() => setStep(2)}
       >
         <Text style={styles.nextButtonText}>NEXT</Text>

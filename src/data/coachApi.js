@@ -161,7 +161,8 @@ function buildContext(context) {
 
   if (context.profile) {
     const p = context.profile;
-    parts.push(`USER PROFILE: Goal: ${p.goal}, Experience: ${p.experience}, Style: ${p.workoutStyle}, Body comp: ${p.bodyCompGoal}`);
+    const goals = (p.goals || [p.goal]).join(', ');
+    parts.push(`USER: Goals: ${goals}, Exp: ${p.experience}, Style: ${p.workoutStyle}, Body: ${p.bodyCompGoal}`);
     if (p.additionalNotes) parts.push(`USER NOTES: ${sanitizeInput(p.additionalNotes, 300)}`);
     if (p.equipmentDetails) {
       if (p.equipmentDetails.barbell?.maxWeight) parts.push(`Barbell max: ${p.equipmentDetails.barbell.maxWeight} lbs`);
