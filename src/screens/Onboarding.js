@@ -830,6 +830,34 @@ export default function Onboarding({ navigation }) {
     'Building multi-week plan',
   ];
 
+  const FLAVOR_TEXTS = [
+    'Consulting the swole elves at the round table...',
+    'Arguing with the gains goblin about leg day...',
+    'Downloading ancient Greek training secrets...',
+    'Teaching your dumbbells to respect you...',
+    'Politely asking gravity to take it easy on you...',
+    'Calculating the exact number of burpees to ruin your day...',
+    'Debating whether pizza counts as a recovery meal...',
+    'Convincing the squat rack you deserve one more set...',
+    'Reviewing your excuse library... denied.',
+    'Scheduling rest days you probably won\'t take...',
+    'Negotiating with your muscles for one more week...',
+    'Cross-referencing gains with the council of bro science...',
+    'Warming up the playlist for your PR attempts...',
+    'Hiding the foam roller — you won\'t be needing it...',
+    'Asking ChatGPT... just kidding, we\'re better than that.',
+  ];
+
+  const [flavorIndex, setFlavorIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isGenerating) return;
+    const interval = setInterval(() => {
+      setFlavorIndex(prev => (prev + 1) % FLAVOR_TEXTS.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [isGenerating]);
+
   // Stagger step completions on a timer so it feels alive
   // Last step only completes when plan is actually done (isGenerating goes false)
   const [visibleStep, setVisibleStep] = useState(0);
@@ -901,9 +929,7 @@ export default function Onboarding({ navigation }) {
           })}
         </View>
 
-        <Text style={styles.generatingSubtitle}>
-          Our AI coach is crafting a program{'\n'}tailored to your goals and equipment
-        </Text>
+        <Text style={styles.generatingFlavor}>{FLAVOR_TEXTS[flavorIndex]}</Text>
       </View>
     );
   };
@@ -1566,6 +1592,14 @@ const styles = StyleSheet.create({
     marginTop: 20,
     textAlign: 'center',
     lineHeight: 22,
+  },
+  generatingFlavor: {
+    color: 'rgba(255,255,255,0.2)',
+    fontSize: 13,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 24,
+    paddingHorizontal: 20,
   },
   // Plan summary
   summaryContainer: {
