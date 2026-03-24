@@ -91,7 +91,8 @@ export async function generateAIPlan(userProfile, onStatus) {
       phaseTemplates[phase] = { weeklyTemplate: result.weeklyTemplate || [] };
       if (i === 0) {
         planName = result.planName || planName;
-        programNotes = result.programNotes || '';
+        const rawNotes = result.programNotes || '';
+        programNotes = typeof rawNotes === 'string' ? rawNotes : JSON.stringify(rawNotes, null, 2);
         restDayAdvice = result.restDayAdvice || restDayAdvice;
       }
       for (const day of (result.weeklyTemplate || []))

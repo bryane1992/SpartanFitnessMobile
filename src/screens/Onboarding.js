@@ -1022,7 +1022,9 @@ export default function Onboarding({ navigation }) {
           {planSummary.notes ? (
             <View style={styles.summaryNotesCard}>
               <Text style={styles.summaryNotesTitle}>COACH NOTES</Text>
-              <Text style={styles.summaryNotesText}>{planSummary.notes}</Text>
+              <Text style={styles.summaryNotesText}>
+                {typeof planSummary.notes === 'string' ? planSummary.notes : JSON.stringify(planSummary.notes, null, 2)}
+              </Text>
             </View>
           ) : null}
 
