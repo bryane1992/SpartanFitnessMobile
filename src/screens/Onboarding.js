@@ -848,14 +848,18 @@ export default function Onboarding({ navigation }) {
     'Whispering sweet nothings to your barbell...',
   ];
 
-  const [flavorIndex, setFlavorIndex] = useState(0);
+  const [flavorIndex, setFlavorIndex] = useState(-1); // -1 = show title first
 
   useEffect(() => {
-    if (!isGenerating) return;
+    if (!isGenerating) { setFlavorIndex(-1); return; }
+    // Show title for 3 seconds, then start cycling flavor texts
+    const startTimer = setTimeout(() => {
+      setFlavorIndex(0);
+    }, 3000);
     const interval = setInterval(() => {
-      setFlavorIndex(prev => (prev + 1) % FLAVOR_TEXTS.length);
-    }, 4000);
-    return () => clearInterval(interval);
+      setFlavorIndex(prev => prev < 0 ? 0 : (prev + 1) % FLAVOR_TEXTS.length);
+    }, 4500);
+    return () => { clearTimeout(startTimer); clearInterval(interval); };
   }, [isGenerating]);
 
   // Stagger step completions on a timer so it feels alive
@@ -899,8 +903,14 @@ export default function Onboarding({ navigation }) {
 
     return (
       <View style={styles.generatingContainer}>
-        <Text style={styles.generatingTitle}>WE ARE BUILDING</Text>
-        <Text style={styles.generatingTitle}>YOUR PLAN</Text>
+        {flavorIndex < 0 ? (
+          <>
+            <Text style={styles.generatingTitle}>WE ARE BUILDING</Text>
+            <Text style={styles.generatingTitle}>YOUR PLAN</Text>
+          </>
+        ) : (
+          <Text style={styles.generatingFlavor}>{FLAVOR_TEXTS[flavorIndex]}</Text>
+        )}
 
         <View style={styles.genProgressBar}>
           <View style={[styles.genProgressFill, { width: `${Math.min(100, (completedCount / 6) * 100)}%` }]} />
@@ -928,8 +938,6 @@ export default function Onboarding({ navigation }) {
             );
           })}
         </View>
-
-        <Text style={styles.generatingFlavor}>{FLAVOR_TEXTS[flavorIndex]}</Text>
       </View>
     );
   };
@@ -1594,12 +1602,14 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   generatingFlavor: {
-    color: 'rgba(255,255,255,0.2)',
-    fontSize: 13,
+    color: '#FF4136',
+    fontSize: 16,
+    fontWeight: '600',
     fontStyle: 'italic',
     textAlign: 'center',
-    marginTop: 24,
-    paddingHorizontal: 20,
+    marginBottom: 8,
+    paddingHorizontal: 16,
+    minHeight: 44,
   },
   // Plan summary
   summaryContainer: {
