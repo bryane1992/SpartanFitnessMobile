@@ -57,6 +57,10 @@ EVERY TRAINING DAY (60+ min) must end with:
 
 CORE WORK must include variety: anti-extension (ab wheel, hollow hold), anti-rotation (pallof press, bird dog), loaded carries (farmer walk, suitcase carry), and hip flexion (hanging leg raise, V-ups). Progress core over phases.
 
+WOD EXERCISE SELECTION: Only use exercises appropriate for the WOD format. Sprints use running/rowing/burpees, NOT stretches or dead bugs. AMRAPs use compound movements. EMOMs use movements that can be completed in under 40 seconds. NEVER put static stretches, mobility work, or isolation exercises in a WOD.
+
+WEIGHT CALIBRATION: The weights you set for the accumulation phase are BASELINE. The app will automatically scale them up 15% for intensification and 25% for realization. So set accumulation weights conservatively — they should feel like RPE 6-7 for the prescribed reps.
+
 RPE NOTES: Add "RPE X" in the notes field for main compound lifts.
 
 RESPONSE FORMAT — valid JSON only:
@@ -332,15 +336,30 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
     const stimulus = STIMULUS_TYPES[mesoPhase.defaultStimulus];
 
     // Pick the right phase template
-    const cycleWeek = ((week - 1) % 12) + 1;
-    let phaseKey = 'accumulation';
-    if (cycleWeek > 8) phaseKey = 'realization';
-    else if (cycleWeek > 4) phaseKey = 'intensification';
-    const template = phaseTemplates[phaseKey]?.weeklyTemplate || phaseTemplates.accumulation?.weeklyTemplate || [];
+    // Last 3-4 weeks before event = race_prep (taper), not accumulation recycled
+    const weeksFromEnd = totalWeeks - week;
+    let phaseKey;
+    let weekInBlock;
+    let isDeload;
 
-    // Week within the 4-week block (1-4)
-    const weekInBlock = ((cycleWeek - 1) % 4) + 1;
-    const isDeload = weekInBlock === 4;
+    if (weeksFromEnd < 3 && totalWeeks > 12) {
+      // RACE PREP / TAPER — last 3 weeks
+      phaseKey = 'race_prep';
+      weekInBlock = 3 - weeksFromEnd; // 1, 2, 3 counting up
+      isDeload = false; // taper IS the deload
+    } else {
+      const cycleWeek = ((week - 1) % 12) + 1;
+      if (cycleWeek <= 4) phaseKey = 'accumulation';
+      else if (cycleWeek <= 8) phaseKey = 'intensification';
+      else phaseKey = 'realization';
+      weekInBlock = ((cycleWeek - 1) % 4) + 1;
+      isDeload = weekInBlock === 4;
+    }
+
+    // Use race_prep template if available, else fall back to realization with taper adjustments
+    const template = phaseTemplates[phaseKey]?.weeklyTemplate
+      || (phaseKey === 'race_prep' ? phaseTemplates.realization?.weeklyTemplate : null)
+      || phaseTemplates.accumulation?.weeklyTemplate || [];
 
     for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
       const date = addDays(weekStartDate, dayOfWeek);
@@ -408,8 +427,13 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
             notes = aiEx.notes || null;
           } else {
             ({ sets, reps, weight, rest, notes } = applyWeekVariation(
-              aiEx, weekInBlock, isDeload, phaseKey, category, userProfile
+              aiEx, weekInBlock, isDeload, phaseKey, category, userProfile, week
             ));
+          }
+
+          // Scale run distances progressively toward race distance
+          if (isRunBlock && weight) {
+            weight = scaleRunDistance(weight, notes, week, totalWeeks, phaseKey);
           }
 
           await savePlanExercise({
@@ -438,21 +462,25 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
 // Week-over-week variation within a 4-week block
 // ═══════════════════════════════════════════════════════════════
 
-function applyWeekVariation(aiEx, weekInBlock, isDeload, phaseKey, category, profile) {
+function applyWeekVariation(aiEx, weekInBlock, isDeload, phaseKey, category, profile, absoluteWeek) {
   let sets = parseInt(aiEx.sets) || 3;
   let reps = aiEx.reps || '8';
   let weight = aiEx.weight || 'BW';
   let rest = aiEx.rest || null;
   let notes = aiEx.notes || null;
-
-  // Don't modify run/cardio exercises
   const lower = (aiEx.name || '').toLowerCase();
-  if (lower.includes('run') || lower.includes('jog') || lower.includes('row') || lower.includes('bike')) {
-    return { sets: `${sets}`, reps, weight, rest, notes };
+
+  // NEVER modify: warmup, cooldown, stretching, mobility, activation
+  const isWarmupCooldown = lower.includes('stretch') || lower.includes('foam') || lower.includes('mobility')
+    || lower.includes('warm') || lower.includes('cool') || lower.includes('circle')
+    || lower.includes('activation') || lower.includes('band pull') || lower.includes('dead hang')
+    || lower.includes('pose') || lower.includes('roller');
+  if (isWarmupCooldown) {
+    return { sets: `${sets}`, reps, weight, rest: null, notes };
   }
 
-  // Don't modify warmup/cooldown/stretching
-  if (lower.includes('stretch') || lower.includes('foam') || lower.includes('mobility') || lower.includes('warm')) {
+  // Don't modify run/cardio exercises (but DO scale distance — handled separately)
+  if (lower.includes('run') || lower.includes('jog') || lower.includes('row') || lower.includes('bike') || lower.includes('sprint')) {
     return { sets: `${sets}`, reps, weight, rest, notes };
   }
 
@@ -461,33 +489,47 @@ function applyWeekVariation(aiEx, weekInBlock, isDeload, phaseKey, category, pro
   const numReps = parseInt(reps);
   const hasNumericReps = !isNaN(numReps);
 
+  // ══════════════════════════════════════════════════
+  // CROSS-PHASE WEIGHT PROGRESSION
+  // Claude's weights are for Week 1 of that phase.
+  // We scale UP across phases so weights actually increase over 16 weeks.
+  // ══════════════════════════════════════════════════
+  const PHASE_WEIGHT_MULTIPLIER = {
+    accumulation: 1.0,        // baseline
+    intensification: 1.15,    // 15% heavier (fewer reps justify more load)
+    realization: 1.25,        // 25% heavier (triples/5s at near-max)
+    race_prep: 0.85,          // taper: 85% of baseline, maintain don't build
+  };
+  const phaseMult = PHASE_WEIGHT_MULTIPLIER[phaseKey] || 1.0;
+
   if (isDeload) {
-    // Deload week: reduce volume and intensity
     sets = Math.max(2, sets - 1);
-    if (hasNumericReps) reps = `${Math.max(5, numReps - 2)}`;
-    if (hasNumericWeight) weight = `${Math.round(baseWeight * 0.7 / 5) * 5} lb`;
-    rest = rest || '90s';
+    if (hasNumericReps) reps = `${Math.max(3, numReps - 2)}`;
+    if (hasNumericWeight) weight = `${Math.round(baseWeight * phaseMult * 0.7 / 5) * 5} lb`;
+    rest = '90s';
     notes = notes ? `${notes} | DELOAD` : 'DELOAD — lighter, focus on form';
   } else {
-    // Wave within the 3 working weeks
+    // Week wave within the 3 working weeks
     const WAVE = {
       accumulation: {
-        // Wk1: moderate vol, Wk2: higher vol, Wk3: peak vol
-        1: { setsAdj: 0, repsAdj: 0, weightMult: 1.0, restAdj: null },
-        2: { setsAdj: 0, repsAdj: 2, weightMult: 0.97, restAdj: null },
-        3: { setsAdj: 1, repsAdj: 0, weightMult: 1.03, restAdj: null },
+        1: { setsAdj: 0, repsAdj: 0, weightMult: 1.0 },
+        2: { setsAdj: 0, repsAdj: 2, weightMult: 0.97 },
+        3: { setsAdj: 1, repsAdj: 0, weightMult: 1.05 },
       },
       intensification: {
-        // Wk1: moderate, Wk2: heavier/fewer reps, Wk3: heaviest
-        1: { setsAdj: 0, repsAdj: 0, weightMult: 1.0, restAdj: null },
-        2: { setsAdj: 0, repsAdj: -2, weightMult: 1.05, restAdj: '120s' },
-        3: { setsAdj: 1, repsAdj: -2, weightMult: 1.08, restAdj: '150s' },
+        1: { setsAdj: 0, repsAdj: 0, weightMult: 1.0 },
+        2: { setsAdj: 0, repsAdj: -2, weightMult: 1.07 },
+        3: { setsAdj: 1, repsAdj: -2, weightMult: 1.12 },
       },
       realization: {
-        // Wk1: working up, Wk2: near peak, Wk3: peak
-        1: { setsAdj: 0, repsAdj: 0, weightMult: 1.0, restAdj: '120s' },
-        2: { setsAdj: 0, repsAdj: -1, weightMult: 1.05, restAdj: '150s' },
-        3: { setsAdj: 0, repsAdj: -2, weightMult: 1.10, restAdj: '180s' },
+        1: { setsAdj: 0, repsAdj: 0, weightMult: 1.0 },
+        2: { setsAdj: 0, repsAdj: -1, weightMult: 1.08 },
+        3: { setsAdj: 0, repsAdj: -2, weightMult: 1.15 },
+      },
+      race_prep: {
+        1: { setsAdj: -1, repsAdj: 0, weightMult: 1.0 },
+        2: { setsAdj: -1, repsAdj: -2, weightMult: 0.95 },
+        3: { setsAdj: -1, repsAdj: -2, weightMult: 0.90 },
       },
     };
 
@@ -495,16 +537,25 @@ function applyWeekVariation(aiEx, weekInBlock, isDeload, phaseKey, category, pro
 
     sets = Math.max(2, sets + wave.setsAdj);
     if (hasNumericReps) {
-      reps = `${Math.max(3, numReps + wave.repsAdj)}`;
+      reps = `${Math.max(2, numReps + wave.repsAdj)}`;
     }
     if (hasNumericWeight) {
-      let adjusted = Math.round(baseWeight * wave.weightMult / 5) * 5;
+      // Apply both phase progression AND week wave
+      let adjusted = Math.round(baseWeight * phaseMult * wave.weightMult / 5) * 5;
       weight = `${adjusted} lb`;
     }
-    if (wave.restAdj) rest = wave.restAdj;
+
+    // Rest periods scale with phase intensity (don't touch warmup/cooldown — already handled above)
+    const REST_BY_PHASE = {
+      accumulation: '60s',
+      intensification: '90s',
+      realization: '120s',
+      race_prep: '60s',
+    };
+    if (!rest) rest = REST_BY_PHASE[phaseKey] || '60s';
   }
 
-  // Cap to equipment
+  // Cap to equipment limits
   weight = capWeightToEquipment(weight, category, profile);
 
   return { sets: `${sets}`, reps, weight, rest, notes };
@@ -513,6 +564,31 @@ function applyWeekVariation(aiEx, weekInBlock, isDeload, phaseKey, category, pro
 // ═══════════════════════════════════════════════════════════════
 // Helpers
 // ═══════════════════════════════════════════════════════════════
+
+// Scale run distances to build toward race distance over the plan
+function scaleRunDistance(weight, notes, week, totalWeeks, phaseKey) {
+  // Only modify if the weight/notes contain distance info
+  const combined = `${weight} ${notes || ''}`.toLowerCase();
+  const miMatch = combined.match(/([\d.]+)\s*mi/);
+  if (!miMatch) return weight;
+
+  const baseDist = parseFloat(miMatch[1]);
+  if (isNaN(baseDist) || baseDist === 0) return weight;
+
+  // Progressive distance: build from base to ~1.5x by realization, then taper
+  const progress = Math.min(1, (week - 1) / Math.max(1, totalWeeks - 4));
+  const PHASE_RUN_MULT = {
+    accumulation: 1.0 + progress * 0.3,    // build slowly: 1.0→1.3x
+    intensification: 1.2 + progress * 0.4,  // 1.2→1.6x
+    realization: 1.5 + progress * 0.3,      // peak: 1.5→1.8x
+    race_prep: 1.2 - progress * 0.3,        // taper: 1.2→0.9x
+  };
+
+  const mult = PHASE_RUN_MULT[phaseKey] || 1.0;
+  const scaledDist = Math.round(baseDist * mult * 10) / 10;
+
+  return weight.replace(miMatch[0], `${scaledDist} mi`);
+}
 
 function capWeightToEquipment(weight, category, profile) {
   if (!weight || weight === 'BW' || weight === 'bodyweight') return weight;
