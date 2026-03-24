@@ -26,13 +26,13 @@ PHASES set rep schemes: accumulation=4x10,3x12 RPE6-7; intensification=4x8,5x5 R
 
 VOLUME BY TIME: 30min=3-4 supersets only; 45min=warmup+2-3 compounds+1-2 accessories+short WOD; 60min=warmup+3-4 compounds+2-3 accessories+WOD+cooldown; 90min=full+core+carries; 120min=everything+skill.
 
-Sessions 60+ min: end with COOLDOWN block (3-4 stretches). Core variety: anti-extension/anti-rotation/carries/hip flexion.
+Sessions 60+ min: end with COOLDOWN block (4-5 stretches, 6-8 min — hip flexors, shoulders, thoracic, hamstrings, glutes). Olympic/run days need longer cooldowns. Core variety: anti-extension/anti-rotation/carries/hip flexion.
 
 WEIGHTS: Set ACCUMULATION weights only at RPE 6-7. App handles ALL progression — do NOT increase weights between phases yourself. Use the SAME base weight for an exercise across all 3 phases. If working weights given, use as baseline. Else: beginner=50-60% of max equip, intermediate=65-75%, advanced=75-85%. Max equip is CEILING. For Olympic lifts, offer power/hang alternatives for beginners/intermediate.
 
-BMI>30: limit running, low-impact cardio. Run blocks: isRun=true, type=EASY/TEMPO/INTERVALS/FARTLEK/LONG_RUN/RACE_PACE.
+BMI>30: limit running, low-impact cardio. Run blocks: isRun=true, type=EASY/TEMPO/INTERVALS/FARTLEK/LONG_RUN/RACE_PACE. Run distances must be in "X mi" format (e.g. "2 mi", "3.5 mi"). For race-distance goals (10K=6.2mi), peak phase must include at least one 5mi+ continuous run.
 
-WODs: use REAL named WODs from list. Each movement=separate exercise. No stretches/isolation in WODs. EMOMs: 1 exercise per minute.
+WODs: use REAL named WODs from WODS list. Each movement=separate exercise entry with clear sets/reps. No stretches/isolation in WODs. EMOMs: 1 exercise per minute. Format clearly: "5 Pull-Ups" not "Pull-Ups 3xx3 rounds".
 
 RPE notes on main compounds. JSON only, no text outside.
 
@@ -103,6 +103,10 @@ export async function generateAIPlan(userProfile, onStatus) {
       phaseTemplates[phase] = phaseTemplates[phases[i - 1]] || { weeklyTemplate: [] };
     }
   }
+
+  // Normalize weights: use accumulation as baseline for all phases
+  // This prevents Claude from setting different base weights per phase
+  normalizePhaseWeights(phaseTemplates);
 
   if (onStatus) onStatus('Matching exercises to database...');
   return await savePlanToDb({ planName, programNotes, restDayAdvice, phases: phaseTemplates }, userProfile, onStatus, exercisePool);
@@ -211,6 +215,39 @@ async function callAPI(apiKey, prompt) {
 // ═══════════════════════════════════════════════════════════════
 // Save plan to DB with week-over-week variation
 // ═══════════════════════════════════════════════════════════════
+
+// Normalize weights across phases — accumulation is the baseline
+// If Claude set different weights per phase, override later phases with accumulation weights
+function normalizePhaseWeights(phases) {
+  const accum = phases.accumulation?.weeklyTemplate;
+  if (!accum) return;
+
+  // Build a map of exercise name → accumulation weight
+  const baseWeights = {};
+  for (const day of accum) {
+    for (const block of (day.blocks || [])) {
+      for (const ex of (block.exercises || [])) {
+        const name = (ex.name || '').toLowerCase().trim();
+        const w = parseFloat(ex.weight);
+        if (name && !isNaN(w) && w > 0) baseWeights[name] = ex.weight;
+      }
+    }
+  }
+
+  // Override later phases with accumulation weights
+  for (const phaseKey of ['intensification', 'realization']) {
+    const template = phases[phaseKey]?.weeklyTemplate;
+    if (!template) continue;
+    for (const day of template) {
+      for (const block of (day.blocks || [])) {
+        for (const ex of (block.exercises || [])) {
+          const name = (ex.name || '').toLowerCase().trim();
+          if (baseWeights[name]) ex.weight = baseWeights[name];
+        }
+      }
+    }
+  }
+}
 
 async function savePlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
   const planId = genUUID();
