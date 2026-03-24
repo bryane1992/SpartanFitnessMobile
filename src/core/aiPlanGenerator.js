@@ -20,23 +20,27 @@ function getApiKey() {
 
 const SYS = `Elite S&C coach. Design ONE phase template as valid JSON.
 
-RULES: compound-first sequencing (power→compound→accessory→core→conditioning). Push/pull 1:1 ratio. Use only exercises from AVAILABLE list. Respect equipment/exclusions. No redundant exercises per session.
+RULES: compound-first (power→compound→accessory→core→conditioning). Push/pull 1:1. Use AVAILABLE exercises. Respect equipment/exclusions. No redundant exercises. Alternate movement patterns (never squat→squat or press→press back-to-back).
 
-PHASES set rep schemes: accumulation=4x10,3x12 RPE6-7; intensification=4x8,5x5 RPE7-8; realization=5x3,3x3 RPE8-9. Different accessories+WODs per phase.
+DAY TITLES must be descriptive training names like "LOWER POWER", "UPPER PUSH-PULL", "SPRINT & CONDITIONING", "OLYMPIC STRENGTH", "FULL BODY METABOLIC". NOT weekday names.
 
-VOLUME BY TIME: 30min=3-4 supersets only; 45min=warmup+2-3 compounds+1-2 accessories+short WOD; 60min=warmup+3-4 compounds+2-3 accessories+WOD+cooldown; 90min=full+core+carries; 120min=everything+skill.
+PHASES: accumulation=4x10,3x12 RPE6-7; intensification=4x8,5x5 RPE7-8; realization=5x3,3x3 RPE8-9. Different accessories+WODs per phase. Olympic lifts: MAX 5-6 reps per set (cleans, snatches, jerks, push press). If more volume needed, add sets not reps.
 
-Sessions 60+ min: end with COOLDOWN block (4-5 stretches, 6-8 min). COOLDOWN MUST ONLY contain static stretches and mobility: hip flexor stretch, shoulder stretch, thoracic rotation, hamstring stretch, pigeon pose, child's pose, foam roll. NEVER put loaded exercises (RDL, squat, press), explosive moves (jump squat), or compound lifts in a cooldown block. Core variety: anti-extension/anti-rotation/carries/hip flexion.
+VOLUME BY TIME: 30min=supersets only; 45min=warmup+2-3 compounds+accessories+short WOD; 60min=warmup+3-4 compounds+2-3 accessories+WOD+cooldown; 90min=full+core+carries; 120min=everything+skill.
 
-WEIGHTS: Set ACCUMULATION weights only at RPE 6-7. App handles ALL progression — do NOT increase weights between phases yourself. Use the SAME base weight for an exercise across all 3 phases. If working weights given, use as baseline. Else: beginner=50-60% of max equip, intermediate=65-75%, advanced=75-85%. Max equip is CEILING. For Olympic lifts, offer power/hang alternatives for beginners/intermediate.
+COOLDOWN (60+ min sessions): ONLY static stretches/mobility (hip flexor stretch, pigeon pose, shoulder stretch, thoracic rotation, hamstring stretch, foam roll). NO loaded exercises, NO core work, NO explosive moves.
 
-BMI>30: limit running, low-impact cardio. Run blocks: isRun=true, type=EASY/TEMPO/INTERVALS/FARTLEK/LONG_RUN/RACE_PACE. Run distances in "X mi" format. RUNNING PROGRESSION: If the user has a race goal or mentions a distance in notes, build toward that distance. Accumulation long run=40-50% of target distance, intensification=60-75%, realization=80-90%, race prep=taper to 50%. Example: half marathon(13.1mi) → accum long run 5-6mi, build 8-10mi, peak 10-12mi, taper 6mi. 5K(3.1mi) → accum 1.5mi, build 2-2.5mi, peak 2.5-3mi. If no race distance mentioned, scale runs to general fitness.
+CORE BLOCKS: use anti-rotation (pallof press, single-arm farmer walk, bird dog), anti-extension (hollow hold, ab wheel), loaded carries (suitcase carry, farmer walk). NOT bench press or other compound lifts.
 
-WODs: use REAL named WODs from WODS list. Each movement=separate exercise entry with clear sets/reps. No stretches/isolation in WODs. EMOMs: 1 exercise per minute. Chippers: use 1 set per movement (1x50, 1x40, etc.) — chipper is a single pass, NOT 2 rounds. NEVER back-to-back same-pattern exercises (no squat then goblet squat — alternate push/pull/hinge).
+WEIGHTS: Set accumulation weights at RPE 6-7. App auto-scales phases. Use SAME weight across all 3 phases. Max equip is CEILING not starting point. Beginner=50-60%, intermediate=65-75%, advanced=75-85% of max.
 
-RPE notes on main compounds. JSON only, no text outside.
+RUNNING: isRun=true, type=EASY/TEMPO/INTERVALS/FARTLEK/LONG_RUN/RACE_PACE. Distances MUST use "X mi" format (e.g. "1x3 mi", NOT "3x8"). Tempo runs: "1x2 mi" at tempo pace. Intervals: "6x400m" with recovery. Long runs: "1x4 mi" easy pace. App handles week-over-week distance scaling.
 
-FORMAT: {"planName":"...","weeklyTemplate":[{"dayIndex":0,"title":"...","focus":"...","blocks":[{"name":"...","type":"...","duration":"...","exercises":[{"name":"...","sets":"4","reps":"10","weight":"95 lb","rest":"90s","notes":"RPE 7"}]}]}],"restDayAdvice":"...","programNotes":"..."}`;
+WODs: use REAL named WODs from list. Each movement=separate exercise with clear reps (e.g. "15 Pull-Ups" not "Pull-Ups 2x50"). Chippers=1 set per movement (single pass). BMI>30: low-impact cardio.
+
+RPE notes on compounds. JSON only.
+
+FORMAT: {"planName":"...","weeklyTemplate":[{"dayIndex":0,"title":"LOWER POWER","focus":"Quads, glutes, posterior chain","blocks":[{"name":"WARM-UP","type":"MOVEMENT PREP","duration":"8 min","exercises":[...]},{"name":"MAIN LIFTS","type":"COMPOUND","duration":"25 min","exercises":[{"name":"Back Squat","sets":"4","reps":"10","weight":"110 lb","rest":"90s","notes":"RPE 7"}]}]}],"restDayAdvice":"...","programNotes":"..."}`;
 
 // ═══════════════════════════════════════════════════════════════
 // Main generator — 3 sequential API calls, one per phase
@@ -370,7 +374,7 @@ function applyVariation(aiEx, weekInBlock, isDeload, phaseKey, category, profile
   const name = (aiEx.name || '').toLowerCase();
 
   // Skip warmup/cooldown/stretching — no weight or rest changes
-  if (/stretch|foam|mobil|warm|cool|circle|activ|band pull|dead hang|pose|roller|yoga/i.test(name)) {
+  if (/stretch|foam|mobil|warm|cool|circle|activ|band pull|dead hang|pose|roller|yoga|child/i.test(name)) {
     return { sets: `${sets}`, reps, weight, rest: null, notes };
   }
   // Skip cardio
