@@ -3,8 +3,7 @@
 import Constants from 'expo-constants';
 import { calculatePhases, getPhaseForWeek } from './phaseCalculator';
 import { getMesocyclePhase, STIMULUS_TYPES } from './progressionRules';
-import { getDatabase, savePlanDay, savePlanBlock, savePlanExercise, getExercisesByFilter } from '../data/database';
-import { getWods } from '../data/wodSeed';
+import { getDatabase, savePlanDay, savePlanBlock, savePlanExercise, getExercisesByFilter, getWodsFromDb } from '../data/database';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-haiku-4-5-20251001';
@@ -29,7 +28,7 @@ VOLUME BY TIME: 30min=3-4 supersets only; 45min=warmup+2-3 compounds+1-2 accesso
 
 Sessions 60+ min: end with COOLDOWN block (3-4 stretches). Core variety: anti-extension/anti-rotation/carries/hip flexion.
 
-WEIGHTS: Set for accumulation RPE 6-7. App auto-scales +15% intensification, +25% realization. If working weights provided, use as baseline. Else: beginner=50-60% of max equip, intermediate=65-75%, advanced=75-85%. Max equip weight is CEILING not starting point.
+WEIGHTS: Set ACCUMULATION weights only at RPE 6-7. App handles ALL progression — do NOT increase weights between phases yourself. Use the SAME base weight for an exercise across all 3 phases. If working weights given, use as baseline. Else: beginner=50-60% of max equip, intermediate=65-75%, advanced=75-85%. Max equip is CEILING. For Olympic lifts, offer power/hang alternatives for beginners/intermediate.
 
 BMI>30: limit running, low-impact cardio. Run blocks: isRun=true, type=EASY/TEMPO/INTERVALS/FARTLEK/LONG_RUN/RACE_PACE.
 
@@ -48,7 +47,14 @@ export async function generateAIPlan(userProfile, onStatus) {
   if (onStatus) onStatus('Analyzing your goals and equipment...');
 
   const exercisePool = await loadExercisePool(userProfile);
-  const basePrompt = buildPrompt(userProfile, exercisePool);
+  // Load WODs from DB, filtered by user experience
+  let wodList = [];
+  try {
+    wodList = await getWodsFromDb({ difficulty: userProfile.experience });
+    wodList = wodList.slice(0, 20); // Cap to save tokens
+  } catch {}
+
+  const basePrompt = buildPrompt(userProfile, exercisePool, wodList);
 
   const phases = ['accumulation', 'intensification', 'realization'];
   const phaseDesc = {
@@ -106,7 +112,7 @@ export async function generateAIPlan(userProfile, onStatus) {
 // Build user prompt — kept compact
 // ═══════════════════════════════════════════════════════════════
 
-function buildPrompt(profile, pool) {
+function buildPrompt(profile, pool, wodList) {
   const p = [];
   p.push(`GOALS: ${(profile.goals || [profile.goal]).join(', ')}`);
   if (profile.sex) p.push(`SEX: ${profile.sex}`);
@@ -161,15 +167,13 @@ function buildPrompt(profile, pool) {
     p.push(`\nEXERCISES: ${seeds.join(', ')}`);
   }
 
-  // WODs — name + type only, not full movements (save tokens)
-  try {
-    const wods = getWods();
-    const levels = { beginner: 1, intermediate: 2, advanced: 3, elite: 4 };
-    const lvl = levels[profile.experience] || 2;
-    const list = wods.filter(w => (levels[w.difficulty] || 2) <= lvl).slice(0, 25)
-      .map(w => `${w.name}(${w.type},${w.estimatedTime})`);
-    if (list.length) p.push(`\nWODS: ${list.join(', ')}`);
-  } catch {}
+  // WODs from DB — include movements so Claude programs them correctly
+  if (wodList) {
+    p.push(`\nWODS (use these exact WODs for conditioning blocks — include all listed movements as separate exercises):`);
+    for (const w of wodList) {
+      p.push(`  ${w.name}(${w.type},${w.estimated_time}): ${w.movements.join(', ')}`);
+    }
+  }
 
   // Mandatory adjustments LAST
   if (adjustments) p.push(`\n=== MANDATORY CHANGES ===\n${adjustments}\n===`);

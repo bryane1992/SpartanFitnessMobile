@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import { seedExercises, seedAlternatives } from './exerciseSeed';
+import { getWods } from './wodSeed';
 import { fetchAllExercises, fetchPagedExercises } from './exerciseApi';
 import { mapExerciseDbToLocal } from './taxonomyMap';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -124,6 +125,22 @@ export async function initDatabase() {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS wods (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      type TEXT NOT NULL,
+      description TEXT,
+      movements TEXT NOT NULL,
+      scheme TEXT,
+      time_cap TEXT,
+      rx_weight TEXT,
+      difficulty TEXT DEFAULT 'intermediate',
+      estimated_time TEXT,
+      equipment TEXT,
+      tips TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS user_equipment (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       equipment_type TEXT NOT NULL,
@@ -191,6 +208,12 @@ export async function initDatabase() {
   const count = await database.getFirstAsync('SELECT COUNT(*) as count FROM exercises');
   if (count.count === 0) {
     await seedExerciseData(database);
+  }
+
+  // Seed WODs if empty
+  const wodCount = await database.getFirstAsync('SELECT COUNT(*) as count FROM wods');
+  if (wodCount.count === 0) {
+    await seedWodData(database);
   }
 
   // Schema migration: add ExerciseDB columns (idempotent)
@@ -274,6 +297,61 @@ async function seedExerciseData(database) {
       [alt[1], alt[0]]
     );
   }
+}
+
+async function seedWodData(database) {
+  const wods = getWods();
+  for (const w of wods) {
+    await database.runAsync(
+      `INSERT OR IGNORE INTO wods (id, name, category, type, description, movements, scheme, time_cap, rx_weight, difficulty, estimated_time, equipment, tips)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [w.id, w.name, w.category, w.type, w.description || '',
+       JSON.stringify(w.movements), w.scheme || '', w.timeCap || '',
+       w.rxWeight || '', w.difficulty || 'intermediate',
+       w.estimatedTime || '', JSON.stringify(w.equipment || []), w.tips || '']
+    );
+  }
+  console.log(`[DB] Seeded ${wods.length} WODs`);
+}
+
+export async function getWodsFromDb(filters = {}) {
+  const database = await getDatabase();
+  let query = 'SELECT * FROM wods WHERE 1=1';
+  const params = [];
+
+  if (filters.difficulty) {
+    const levels = { beginner: 1, intermediate: 2, advanced: 3, elite: 4 };
+    const maxLevel = levels[filters.difficulty] || 2;
+    const allowed = Object.entries(levels).filter(([, v]) => v <= maxLevel).map(([k]) => k);
+    query += ` AND difficulty IN (${allowed.map(() => '?').join(',')})`;
+    params.push(...allowed);
+  }
+  if (filters.category) {
+    query += ' AND category = ?';
+    params.push(filters.category);
+  }
+  if (filters.type) {
+    query += ' AND type = ?';
+    params.push(filters.type);
+  }
+  if (filters.maxTime) {
+    // Filter WODs shorter than maxTime minutes
+    query += ' AND estimated_time != ""';
+  }
+
+  const results = await database.getAllAsync(query, params);
+  return results.map(w => ({
+    ...w,
+    movements: JSON.parse(w.movements || '[]'),
+    equipment: JSON.parse(w.equipment || '[]'),
+  }));
+}
+
+export async function getWodById(wodId) {
+  const database = await getDatabase();
+  const w = await database.getFirstAsync('SELECT * FROM wods WHERE id = ?', [wodId]);
+  if (!w) return null;
+  return { ...w, movements: JSON.parse(w.movements || '[]'), equipment: JSON.parse(w.equipment || '[]') };
 }
 
 // ─── CRUD Helpers ────────────────────────────────────────────
