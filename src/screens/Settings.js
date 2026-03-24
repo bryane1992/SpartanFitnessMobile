@@ -30,12 +30,12 @@ const BODY_COMP_LABELS = {
 };
 
 const GOAL_LABELS = {
-  spartan_sprint: 'Spartan Sprint (5K)',
-  spartan_super: 'Spartan Super (10K)',
-  spartan_beast: 'Spartan Beast (21K)',
+  build_muscle: 'Build Muscle',
+  lose_fat: 'Lose Fat',
+  get_stronger: 'Get Stronger',
+  endurance: 'Improve Endurance',
+  athletic: 'Athletic Performance',
   general_fitness: 'General Fitness',
-  weight_loss: 'Weight Loss',
-  muscle_building: 'Build Muscle',
 };
 
 export default function Settings({ navigation }) {
@@ -197,15 +197,41 @@ export default function Settings({ navigation }) {
             <Text style={styles.sectionTitle}>Your Profile</Text>
 
             <View style={styles.profileCard}>
-              <ProfileRow label="Goal" value={GOAL_LABELS[profile.goal] || profile.goal} />
+              <ProfileRow label="Goals" value={
+                profile.goals
+                  ? profile.goals.map(g => GOAL_LABELS[g] || g).join(', ')
+                  : (GOAL_LABELS[profile.goal] || profile.goal || '')
+              } />
+              {profile.sex ? (
+                <ProfileRow label="Sex" value={profile.sex.charAt(0).toUpperCase() + profile.sex.slice(1)} />
+              ) : null}
+              {profile.height ? (
+                <ProfileRow label="Height" value={profile.height} />
+              ) : null}
+              {profile.weight ? (
+                <ProfileRow label="Weight" value={`${profile.weight} lbs`} />
+              ) : null}
+              {profile.bmi ? (
+                <ProfileRow label="BMI" value={`${profile.bmi}`} />
+              ) : null}
+              <ProfileRow label="Experience" value={profile.experience?.charAt(0).toUpperCase() + profile.experience?.slice(1)} />
+              {profile.workingWeights && Object.keys(profile.workingWeights).length > 0 ? (
+                <ProfileRow label="Working Weights" value={
+                  Object.entries(profile.workingWeights)
+                    .map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1).replace('_', ' ')}: ${v} lb`)
+                    .join(', ')
+                } />
+              ) : null}
               <ProfileRow label="Style" value={STYLE_LABELS[profile.workoutStyle] || profile.workoutStyle} />
               <ProfileRow label="Body Goal" value={
                 profile.bodyCompGoals
                   ? profile.bodyCompGoals.map(g => BODY_COMP_LABELS[g] || g).join(', ')
                   : (BODY_COMP_LABELS[profile.bodyCompGoal] || profile.bodyCompGoal || '')
               } />
-              <ProfileRow label="Experience" value={profile.experience?.charAt(0).toUpperCase() + profile.experience?.slice(1)} />
               <ProfileRow label="Days/Week" value={`${profile.trainingDaysPerWeek} days`} />
+              {profile.sessionDuration ? (
+                <ProfileRow label="Session" value={`${profile.sessionDuration} min`} />
+              ) : null}
               <ProfileRow label="Equipment" value={profile.equipment?.join(', ')} />
               {profile.equipmentDetails?.barbell?.maxWeight ? (
                 <ProfileRow label="Barbell Max" value={`${profile.equipmentDetails.barbell.maxWeight} lbs`} />
@@ -215,13 +241,10 @@ export default function Settings({ navigation }) {
               ) : null}
               {profile.equipmentDetails?.dumbbells?.maxWeight ? (
                 <ProfileRow label="Dumbbells" value={`Up to ${profile.equipmentDetails.dumbbells.maxWeight} lbs each`} />
-              ) : profile.equipmentDetails?.dumbbells?.weights ? (
-                <ProfileRow label="Dumbbells" value={`${profile.equipmentDetails.dumbbells.weights} lbs`} />
               ) : null}
               {profile.exclusions?.length > 0 && (
                 <ProfileRow label="Exclusions" value={profile.exclusions.join(', ')} />
               )}
-              <ProfileRow label="Event Date" value={profile.eventDate || 'No deadline'} />
             </View>
           </View>
         )}

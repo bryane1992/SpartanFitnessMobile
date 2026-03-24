@@ -132,8 +132,17 @@ function buildContext(context) {
   if (context.profile) {
     const p = context.profile;
     const goals = (p.goals || [p.goal]).join(', ');
-    parts.push(`USER: Goals: ${goals}, Exp: ${p.experience}, Style: ${p.workoutStyle}, Body: ${p.bodyCompGoal}`);
-    if (p.additionalNotes) parts.push(`USER NOTES: ${sanitizeInput(p.additionalNotes, 300)}`);
+    let userLine = `USER: Goals:${goals}, Exp:${p.experience}, Style:${p.workoutStyle}, Body:${p.bodyCompGoal}`;
+    if (p.sex) userLine += `, Sex:${p.sex}`;
+    if (p.weight) userLine += `, ${p.weight}lb`;
+    if (p.height) userLine += `, ${p.height}`;
+    if (p.bmi) userLine += `, BMI:${p.bmi}`;
+    parts.push(userLine);
+    if (p.workingWeights && Object.keys(p.workingWeights).length > 0) {
+      const ww = Object.entries(p.workingWeights).map(([k, v]) => `${k}:${v}lb`).join(',');
+      parts.push(`Working maxes: ${ww}`);
+    }
+    if (p.additionalNotes) parts.push(`Notes: ${sanitizeInput(p.additionalNotes, 300)}`);
     if (p.equipmentDetails) {
       if (p.equipmentDetails.barbell?.maxWeight) parts.push(`Barbell max: ${p.equipmentDetails.barbell.maxWeight} lbs`);
       if (p.equipmentDetails.kettlebell?.weights) parts.push(`Kettlebells: ${p.equipmentDetails.kettlebell.weights} lbs`);
