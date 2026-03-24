@@ -197,7 +197,7 @@ async function callAPI(apiKey, prompt) {
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: MODEL, max_tokens: 6000, system: SYS, messages: [{ role: 'user', content: prompt }] }),
+      body: JSON.stringify({ model: MODEL, max_tokens: 8000, system: SYS, messages: [{ role: 'user', content: prompt }] }),
       signal: ctrl.signal,
     });
     clearTimeout(timer);
@@ -205,10 +205,17 @@ async function callAPI(apiKey, prompt) {
     const data = await res.json();
     let text = data.content?.[0]?.text || '';
     const u = data.usage || {};
-    console.log(`[AI Plan] Tokens in:${u.input_tokens||'?'} out:${u.output_tokens||'?'}`);
+    const stopReason = data.stop_reason || '';
+    console.log(`[AI Plan] Tokens in:${u.input_tokens||'?'} out:${u.output_tokens||'?'} stop:${stopReason}`);
+    if (stopReason === 'max_tokens') console.warn('[AI Plan] Response hit max_tokens — may be truncated');
     text = text.trim();
     if (text.startsWith('```')) text = text.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
-    return JSON.parse(text);
+    try {
+      return JSON.parse(text);
+    } catch (parseErr) {
+      console.error(`[AI Plan] JSON parse failed. Last 200 chars: ...${text.slice(-200)}`);
+      throw parseErr;
+    }
   } catch (e) { clearTimeout(timer); throw e; }
 }
 
