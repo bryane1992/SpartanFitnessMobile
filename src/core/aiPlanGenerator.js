@@ -30,7 +30,7 @@ Sessions 60+ min: end with COOLDOWN block (4-5 stretches, 6-8 min — hip flexor
 
 WEIGHTS: Set ACCUMULATION weights only at RPE 6-7. App handles ALL progression — do NOT increase weights between phases yourself. Use the SAME base weight for an exercise across all 3 phases. If working weights given, use as baseline. Else: beginner=50-60% of max equip, intermediate=65-75%, advanced=75-85%. Max equip is CEILING. For Olympic lifts, offer power/hang alternatives for beginners/intermediate.
 
-BMI>30: limit running, low-impact cardio. Run blocks: isRun=true, type=EASY/TEMPO/INTERVALS/FARTLEK/LONG_RUN/RACE_PACE. Run distances must be in "X mi" format (e.g. "2 mi", "3.5 mi"). For race-distance goals (10K=6.2mi), peak phase must include at least one 5mi+ continuous run.
+BMI>30: limit running, low-impact cardio. Run blocks: isRun=true, type=EASY/TEMPO/INTERVALS/FARTLEK/LONG_RUN/RACE_PACE. Run distances in "X mi" format. RUNNING PROGRESSION: If the user has a race goal or mentions a distance in notes, build toward that distance. Accumulation long run=40-50% of target distance, intensification=60-75%, realization=80-90%, race prep=taper to 50%. Example: half marathon(13.1mi) → accum long run 5-6mi, build 8-10mi, peak 10-12mi, taper 6mi. 5K(3.1mi) → accum 1.5mi, build 2-2.5mi, peak 2.5-3mi. If no race distance mentioned, scale runs to general fitness.
 
 WODs: use REAL named WODs from WODS list. Each movement=separate exercise entry with clear sets/reps. No stretches/isolation in WODs. EMOMs: 1 exercise per minute. Format clearly: "5 Pull-Ups" not "Pull-Ups 3xx3 rounds".
 
@@ -425,19 +425,15 @@ function getGoalProfile(goals) {
 
   if (isEnd && !isStr) return {
     phaseWeightMult: { accumulation: 1.0, intensification: 1.08, realization: 1.12, race_prep: 0.85 },
-    phaseRunMult: { accumulation: p => 1 + p * 0.5, intensification: p => 1.4 + p * 0.6, realization: p => 1.8 + p * 0.5, race_prep: p => 1.5 - p * 0.5 },
   };
   if (isStr && !isEnd) return {
     phaseWeightMult: { accumulation: 1.0, intensification: 1.18, realization: 1.30, race_prep: 0.90 },
-    phaseRunMult: { accumulation: p => 1 + p * 0.1, intensification: p => 1 + p * 0.15, realization: p => 1 + p * 0.1, race_prep: () => 0.9 },
   };
   if (isFat) return {
     phaseWeightMult: { accumulation: 1.0, intensification: 1.10, realization: 1.15, race_prep: 0.90 },
-    phaseRunMult: { accumulation: p => 1 + p * 0.3, intensification: p => 1.2 + p * 0.4, realization: p => 1.4 + p * 0.3, race_prep: p => 1.2 - p * 0.2 },
   };
   return {
     phaseWeightMult: { accumulation: 1.0, intensification: 1.15, realization: 1.25, race_prep: 0.85 },
-    phaseRunMult: { accumulation: p => 1 + p * 0.3, intensification: p => 1.2 + p * 0.4, realization: p => 1.5 + p * 0.3, race_prep: p => 1.2 - p * 0.3 },
   };
 }
 
@@ -448,12 +444,45 @@ function getGoalProfile(goals) {
 function scaleRunDist(weight, notes, week, totalWeeks, phaseKey, profile) {
   const m = `${weight} ${notes || ''}`.match(/([\d.]+)\s*mi/i);
   if (!m) return weight;
-  const base = parseFloat(m[1]);
-  if (!base) return weight;
+  const baseDist = parseFloat(m[1]);
+  if (!baseDist) return weight;
+
+  const targetDist = getTargetRaceDistance(profile);
   const progress = Math.min(1, (week - 1) / Math.max(1, totalWeeks - 4));
-  const gp = getGoalProfile(profile?.goals || [profile?.goal]);
-  const mult = gp.phaseRunMult[phaseKey]?.(progress) || 1.0;
-  return weight.replace(m[0], `${Math.round(base * mult * 10) / 10} mi`);
+
+  if (!targetDist) {
+    // No race goal — gentle progression
+    const gentle = { accumulation: 1.0, intensification: 1.1, realization: 1.2, race_prep: 0.9 };
+    const mult = (gentle[phaseKey] || 1.0) + progress * 0.1;
+    return weight.replace(m[0], `${Math.round(baseDist * mult * 10) / 10} mi`);
+  }
+
+  // Build toward target distance by phase
+  const phasePct = { accumulation: 0.45, intensification: 0.68, realization: 0.85, race_prep: 0.50 };
+  const pct = phasePct[phaseKey] || 0.5;
+  const phaseDist = targetDist * (pct - 0.1 + progress * 0.1);
+  const finalDist = Math.max(baseDist, Math.round(phaseDist * 10) / 10);
+  return weight.replace(m[0], `${finalDist} mi`);
+}
+
+// Parse target race distance from goals and notes
+function getTargetRaceDistance(profile) {
+  if (!profile) return null;
+  const all = `${(profile.additionalNotes || '')} ${(profile.goals || []).join(' ')}`.toLowerCase();
+
+  if (all.includes('marathon') && !all.includes('half')) return 26.2;
+  if (all.includes('half marathon') || all.includes('half-marathon')) return 13.1;
+  if (all.includes('50k') || all.includes('ultra')) return 31.0;
+  if (all.includes('spartan beast') || all.includes('21k')) return 13.1;
+  if (all.includes('10k') || all.includes('10 k') || all.includes('spartan super')) return 6.2;
+  if (all.includes('spartan sprint') || all.includes('5k') || all.includes('5 k')) return 3.1;
+  if (all.includes('10 mi') || all.includes('10-mile')) return 10.0;
+
+  const distMatch = all.match(/(\d+(?:\.\d+)?)\s*(?:mile|mi)\s*(?:race|run|goal)/i);
+  if (distMatch) return parseFloat(distMatch[1]);
+
+  if (all.includes('endurance') || all.includes('athletic')) return 6.2;
+  return null;
 }
 
 function capWeight(weight, category, profile) {
