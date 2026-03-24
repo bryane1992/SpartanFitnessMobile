@@ -845,7 +845,7 @@ export default function Onboarding({ navigation }) {
     'Cross-referencing gains with the council of bro science...',
     'Warming up the playlist for your PR attempts...',
     'Hiding the foam roller — you won\'t be needing it...',
-    'Asking ChatGPT... just kidding, we\'re better than that.',
+    'Whispering sweet nothings to your barbell...',
   ];
 
   const [flavorIndex, setFlavorIndex] = useState(0);
