@@ -59,7 +59,13 @@ CORE WORK must include variety: anti-extension (ab wheel, hollow hold), anti-rot
 
 WOD EXERCISE SELECTION: Only use exercises appropriate for the WOD format. Sprints use running/rowing/burpees, NOT stretches or dead bugs. AMRAPs use compound movements. EMOMs use movements that can be completed in under 40 seconds. NEVER put static stretches, mobility work, or isolation exercises in a WOD.
 
-WEIGHT CALIBRATION: The weights you set for the accumulation phase are BASELINE. The app will automatically scale them up 15% for intensification and 25% for realization. So set accumulation weights conservatively — they should feel like RPE 6-7 for the prescribed reps.
+WEIGHT CALIBRATION:
+- Accumulation weights are BASELINE. The app auto-scales +15% for intensification, +25% for realization.
+- Set accumulation weights CONSERVATIVELY at RPE 6-7 — NOT at the user's max.
+- BEGINNERS: start at 50-60% of their max equipment weight. A beginner with 55 lb DBs should start bench press at 25-30 lb, not 55 lb.
+- INTERMEDIATE: start at 65-75% of max equipment weight.
+- ADVANCED/ELITE: start at 75-85% of max equipment weight.
+- The user's max DB/barbell weight is a CEILING, not a starting point.
 
 RPE NOTES: Add "RPE X" in the notes field for main compound lifts.
 
@@ -551,6 +557,23 @@ function applyWeekVariation(aiEx, weekInBlock, isDeload, phaseKey, category, pro
   // Cap to equipment limits
   weight = capWeightToEquipment(weight, category, profile);
 
+  // Safety: ensure beginners aren't starting at equipment max
+  if (hasNumericWeight && phaseKey === 'accumulation' && weekInBlock === 1) {
+    const currentWeight = parseFloat(weight);
+    if (!isNaN(currentWeight) && currentWeight > 0) {
+      const EXP_CEILING = { beginner: 0.55, intermediate: 0.75, advanced: 0.85, elite: 0.95 };
+      const exp = profile.experience || 'intermediate';
+      const ceiling = EXP_CEILING[exp] || 0.75;
+      const details = profile.equipmentDetails || {};
+      let maxEquip = null;
+      if (category === 'dumbbell' && details.dumbbells?.maxWeight) maxEquip = parseFloat(details.dumbbells.maxWeight);
+      if (category === 'barbell' && details.barbell?.maxWeight) maxEquip = parseFloat(details.barbell.maxWeight);
+      if (maxEquip && currentWeight > maxEquip * ceiling) {
+        weight = `${Math.round(maxEquip * ceiling / 5) * 5} lb`;
+      }
+    }
+  }
+
   return { sets: `${sets}`, reps, weight, rest, notes };
 }
 
@@ -741,12 +764,15 @@ async function loadExercisePool(userProfile) {
   const styles = userProfile.workoutStyles || [userProfile.workoutStyle || 'hybrid'];
   const exerciseMap = new Map();
 
-  for (const style of styles) {
+  // Load ALL styles to maximize exercise pool — don't filter by difficulty
+  // (Claude knows the user's level and will pick appropriate exercises)
+  const allStyles = [...new Set([...styles, 'hybrid', 'traditional'])];
+  for (const style of allStyles) {
     const exercises = await getExercisesByFilter({
       style,
       exclusions: userProfile.exclusions || [],
       equipment: userProfile.equipment || [],
-      difficulty: userProfile.experience || 'intermediate',
+      difficulty: null, // Don't filter by difficulty — let AI decide
     });
     for (const ex of exercises) exerciseMap.set(ex.id, ex);
   }
