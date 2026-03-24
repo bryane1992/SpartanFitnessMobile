@@ -433,7 +433,7 @@ async function saveAIPlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
 
           // Scale run distances progressively toward race distance
           if (isRunBlock && weight) {
-            weight = scaleRunDistance(weight, notes, week, totalWeeks, phaseKey);
+            weight = scaleRunDistance(weight, notes, week, totalWeeks, phaseKey, userProfile);
           }
 
           await savePlanExercise({
@@ -490,17 +490,10 @@ function applyWeekVariation(aiEx, weekInBlock, isDeload, phaseKey, category, pro
   const hasNumericReps = !isNaN(numReps);
 
   // ══════════════════════════════════════════════════
-  // CROSS-PHASE WEIGHT PROGRESSION
-  // Claude's weights are for Week 1 of that phase.
-  // We scale UP across phases so weights actually increase over 16 weeks.
+  // GOAL-AWARE CROSS-PHASE WEIGHT PROGRESSION
   // ══════════════════════════════════════════════════
-  const PHASE_WEIGHT_MULTIPLIER = {
-    accumulation: 1.0,        // baseline
-    intensification: 1.15,    // 15% heavier (fewer reps justify more load)
-    realization: 1.25,        // 25% heavier (triples/5s at near-max)
-    race_prep: 0.85,          // taper: 85% of baseline, maintain don't build
-  };
-  const phaseMult = PHASE_WEIGHT_MULTIPLIER[phaseKey] || 1.0;
+  const goalProfile = getGoalProfile(profile.goals || [profile.goal]);
+  const phaseMult = goalProfile.phaseWeightMult[phaseKey] || 1.0;
 
   if (isDeload) {
     sets = Math.max(2, sets - 1);
@@ -565,9 +558,8 @@ function applyWeekVariation(aiEx, weekInBlock, isDeload, phaseKey, category, pro
 // Helpers
 // ═══════════════════════════════════════════════════════════════
 
-// Scale run distances to build toward race distance over the plan
-function scaleRunDistance(weight, notes, week, totalWeeks, phaseKey) {
-  // Only modify if the weight/notes contain distance info
+// Scale run distances based on goals and phase
+function scaleRunDistance(weight, notes, week, totalWeeks, phaseKey, profile) {
   const combined = `${weight} ${notes || ''}`.toLowerCase();
   const miMatch = combined.match(/([\d.]+)\s*mi/);
   if (!miMatch) return weight;
@@ -575,19 +567,79 @@ function scaleRunDistance(weight, notes, week, totalWeeks, phaseKey) {
   const baseDist = parseFloat(miMatch[1]);
   if (isNaN(baseDist) || baseDist === 0) return weight;
 
-  // Progressive distance: build from base to ~1.5x by realization, then taper
   const progress = Math.min(1, (week - 1) / Math.max(1, totalWeeks - 4));
-  const PHASE_RUN_MULT = {
-    accumulation: 1.0 + progress * 0.3,    // build slowly: 1.0→1.3x
-    intensification: 1.2 + progress * 0.4,  // 1.2→1.6x
-    realization: 1.5 + progress * 0.3,      // peak: 1.5→1.8x
-    race_prep: 1.2 - progress * 0.3,        // taper: 1.2→0.9x
-  };
+  const goalProfile = getGoalProfile(profile?.goals || [profile?.goal]);
 
-  const mult = PHASE_RUN_MULT[phaseKey] || 1.0;
+  const mult = goalProfile.phaseRunMult[phaseKey]?.(progress) || 1.0;
   const scaledDist = Math.round(baseDist * mult * 10) / 10;
 
   return weight.replace(miMatch[0], `${scaledDist} mi`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Goal-aware progression profiles
+// ═══════════════════════════════════════════════════════════════
+
+function getGoalProfile(goals) {
+  const g = Array.isArray(goals) ? goals : [goals];
+
+  // Detect primary training focus from goals
+  const isEndurance = g.some(x => ['endurance', 'athletic'].includes(x));
+  const isStrength = g.some(x => ['build_muscle', 'get_stronger'].includes(x));
+  const isFatLoss = g.some(x => x === 'lose_fat');
+
+  // Check for race-specific keywords in notes (handled by Claude, but we can adapt scaling)
+  // Default to balanced profile, override if goals are clearly one direction
+
+  if (isEndurance && !isStrength) {
+    // Endurance focus: moderate strength gains, big run volume buildup
+    return {
+      phaseWeightMult: { accumulation: 1.0, intensification: 1.08, realization: 1.12, race_prep: 0.85 },
+      phaseRunMult: {
+        accumulation: (p) => 1.0 + p * 0.5,     // 1.0→1.5x
+        intensification: (p) => 1.4 + p * 0.6,   // 1.4→2.0x
+        realization: (p) => 1.8 + p * 0.5,        // 1.8→2.3x (peak volume)
+        race_prep: (p) => 1.5 - p * 0.5,          // taper: 1.5→1.0x
+      },
+    };
+  }
+
+  if (isStrength && !isEndurance) {
+    // Strength focus: big weight jumps, minimal run scaling
+    return {
+      phaseWeightMult: { accumulation: 1.0, intensification: 1.18, realization: 1.30, race_prep: 0.90 },
+      phaseRunMult: {
+        accumulation: (p) => 1.0 + p * 0.1,
+        intensification: (p) => 1.0 + p * 0.15,
+        realization: (p) => 1.0 + p * 0.1,
+        race_prep: (p) => 0.9,
+      },
+    };
+  }
+
+  if (isFatLoss) {
+    // Fat loss: moderate weight increases, steady cardio buildup
+    return {
+      phaseWeightMult: { accumulation: 1.0, intensification: 1.10, realization: 1.15, race_prep: 0.90 },
+      phaseRunMult: {
+        accumulation: (p) => 1.0 + p * 0.3,
+        intensification: (p) => 1.2 + p * 0.4,
+        realization: (p) => 1.4 + p * 0.3,
+        race_prep: (p) => 1.2 - p * 0.2,
+      },
+    };
+  }
+
+  // Balanced / general fitness
+  return {
+    phaseWeightMult: { accumulation: 1.0, intensification: 1.15, realization: 1.25, race_prep: 0.85 },
+    phaseRunMult: {
+      accumulation: (p) => 1.0 + p * 0.3,
+      intensification: (p) => 1.2 + p * 0.4,
+      realization: (p) => 1.5 + p * 0.3,
+      race_prep: (p) => 1.2 - p * 0.3,
+    },
+  };
 }
 
 function capWeightToEquipment(weight, category, profile) {
