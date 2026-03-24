@@ -26,13 +26,13 @@ PHASES set rep schemes: accumulation=4x10,3x12 RPE6-7; intensification=4x8,5x5 R
 
 VOLUME BY TIME: 30min=3-4 supersets only; 45min=warmup+2-3 compounds+1-2 accessories+short WOD; 60min=warmup+3-4 compounds+2-3 accessories+WOD+cooldown; 90min=full+core+carries; 120min=everything+skill.
 
-Sessions 60+ min: end with COOLDOWN block (4-5 stretches, 6-8 min — hip flexors, shoulders, thoracic, hamstrings, glutes). Olympic/run days need longer cooldowns. Core variety: anti-extension/anti-rotation/carries/hip flexion.
+Sessions 60+ min: end with COOLDOWN block (4-5 stretches, 6-8 min). COOLDOWN MUST ONLY contain static stretches and mobility: hip flexor stretch, shoulder stretch, thoracic rotation, hamstring stretch, pigeon pose, child's pose, foam roll. NEVER put loaded exercises (RDL, squat, press), explosive moves (jump squat), or compound lifts in a cooldown block. Core variety: anti-extension/anti-rotation/carries/hip flexion.
 
 WEIGHTS: Set ACCUMULATION weights only at RPE 6-7. App handles ALL progression — do NOT increase weights between phases yourself. Use the SAME base weight for an exercise across all 3 phases. If working weights given, use as baseline. Else: beginner=50-60% of max equip, intermediate=65-75%, advanced=75-85%. Max equip is CEILING. For Olympic lifts, offer power/hang alternatives for beginners/intermediate.
 
 BMI>30: limit running, low-impact cardio. Run blocks: isRun=true, type=EASY/TEMPO/INTERVALS/FARTLEK/LONG_RUN/RACE_PACE. Run distances in "X mi" format. RUNNING PROGRESSION: If the user has a race goal or mentions a distance in notes, build toward that distance. Accumulation long run=40-50% of target distance, intensification=60-75%, realization=80-90%, race prep=taper to 50%. Example: half marathon(13.1mi) → accum long run 5-6mi, build 8-10mi, peak 10-12mi, taper 6mi. 5K(3.1mi) → accum 1.5mi, build 2-2.5mi, peak 2.5-3mi. If no race distance mentioned, scale runs to general fitness.
 
-WODs: use REAL named WODs from WODS list. Each movement=separate exercise entry with clear sets/reps. No stretches/isolation in WODs. EMOMs: 1 exercise per minute. Format clearly: "5 Pull-Ups" not "Pull-Ups 3xx3 rounds".
+WODs: use REAL named WODs from WODS list. Each movement=separate exercise entry with clear sets/reps. No stretches/isolation in WODs. EMOMs: 1 exercise per minute. Chippers: use 1 set per movement (1x50, 1x40, etc.) — chipper is a single pass, NOT 2 rounds. NEVER back-to-back same-pattern exercises (no squat then goblet squat — alternate push/pull/hinge).
 
 RPE notes on main compounds. JSON only, no text outside.
 
@@ -304,9 +304,14 @@ async function savePlanToDb(aiPlan, userProfile, onStatus, exercisePool) {
       const dt = template[tdi % template.length];
       if (!dt) continue;
 
+      // BUG 2 FIX: Override meso label for race_prep — don't show ACCUMULATION for taper weeks
+      const focusLabel = phaseKey === 'race_prep'
+        ? `TAPER • RACE PREP • Wk ${week}`
+        : `${meso.label} • ${stimulus.label} • Wk ${week}`;
+
       const dayId = await savePlanDay({
         planId, date, dayOfWeek: dow, weekNumber: week, phase: phase.phase,
-        title: dt.title || 'TRAINING', focus: `${meso.label} • ${stimulus.label} • Wk ${week}`,
+        title: dt.title || 'TRAINING', focus: focusLabel,
         color: phase.color, emoji: '', isRestDay: false,
       });
 
@@ -364,8 +369,8 @@ function applyVariation(aiEx, weekInBlock, isDeload, phaseKey, category, profile
   let notes = aiEx.notes || null;
   const name = (aiEx.name || '').toLowerCase();
 
-  // Skip warmup/cooldown/stretching entirely
-  if (/stretch|foam|mobil|warm|cool|circle|activ|band pull|dead hang|pose|roller/i.test(name)) {
+  // Skip warmup/cooldown/stretching — no weight or rest changes
+  if (/stretch|foam|mobil|warm|cool|circle|activ|band pull|dead hang|pose|roller|yoga/i.test(name)) {
     return { sets: `${sets}`, reps, weight, rest: null, notes };
   }
   // Skip cardio
@@ -373,33 +378,66 @@ function applyVariation(aiEx, weekInBlock, isDeload, phaseKey, category, profile
     return { sets: `${sets}`, reps, weight, rest, notes };
   }
 
-  const bw = parseFloat(weight);
-  const hasW = !isNaN(bw) && bw > 0;
+  const baseW = parseFloat(weight);
+  const hasW = !isNaN(baseW) && baseW > 0;
   const nr = parseInt(reps);
   const hasR = !isNaN(nr);
 
-  const gp = getGoalProfile(profile.goals || [profile.goal]);
-  const pm = gp.phaseWeightMult[phaseKey] || 1.0;
+  // BUG 4 FIX: Cap Olympic lift reps at 6 (5 for snatches)
+  const isOlympic = /clean|snatch|jerk|push press/i.test(name);
+  if (isOlympic && hasR && nr > 6) {
+    reps = '5';
+  }
 
+  const gp = getGoalProfile(profile.goals || [profile.goal]);
+
+  // ═══════════════════════════════════════════
+  // BUG 1+3 FIX: Calculate weight relative to PEAK, not base
+  // Peak weight = base * realization_mult * realization_wk3_wave
+  // Then each phase is a % of that peak
+  // ═══════════════════════════════════════════
+  const realMult = gp.phaseWeightMult.realization || 1.25;
+  const peakWave = 1.15; // realization week 3 wave
+  const peakWeight = baseW * realMult * peakWave;
+
+  // Phase targets as % of PEAK weight
+  const PHASE_PCT_OF_PEAK = {
+    accumulation: 0.65,   // ~65% of peak = moderate
+    intensification: 0.80, // ~80% of peak = challenging
+    realization: 0.90,     // ~90-100% of peak (wave pushes to 100%)
+    race_prep: 0.85,       // ~85% of peak = maintain, don't detrain
+  };
+  const phasePct = PHASE_PCT_OF_PEAK[phaseKey] || 0.75;
+  const phaseBase = peakWeight * phasePct;
+
+  // Wave within each 3-week block (sets adj, reps adj, weight % of phase base)
   const WAVE = {
-    accumulation: { 1: [0, 0, 1.0], 2: [0, 2, 0.97], 3: [1, 0, 1.05] },
-    intensification: { 1: [0, 0, 1.0], 2: [0, -2, 1.07], 3: [1, -2, 1.12] },
-    realization: { 1: [0, 0, 1.0], 2: [0, -1, 1.08], 3: [0, -2, 1.15] },
-    race_prep: { 1: [-1, 0, 1.0], 2: [-1, -2, 0.95], 3: [-1, -2, 0.90] },
+    accumulation: { 1: [0, 0, 0.95], 2: [0, 2, 1.0], 3: [1, 0, 1.05] },
+    intensification: { 1: [0, 0, 0.95], 2: [0, -2, 1.0], 3: [1, -2, 1.07] },
+    realization: { 1: [0, 0, 0.95], 2: [0, -1, 1.0], 3: [0, -2, 1.08] },
+    race_prep: { 1: [-1, 0, 1.0], 2: [-1, 0, 0.97], 3: [-1, -1, 0.93] },
   };
 
   if (isDeload) {
+    // BUG 3 FIX: Deload = 70% of phase working weight (week 2 = middle of block)
+    // This gives consistent ~30% reduction from the working weight of that phase
     sets = Math.max(2, sets - 1);
     if (hasR) reps = `${Math.max(3, nr - 2)}`;
-    if (hasW) weight = `${r5(bw * pm * 0.7)} lb`;
+    if (hasW) weight = `${r5(phaseBase * 1.0 * 0.70)} lb`;
     rest = '90s';
     notes = notes ? `${notes} | DELOAD` : 'DELOAD';
   } else {
     const [sa, ra, wm] = WAVE[phaseKey]?.[weekInBlock] || [0, 0, 1.0];
     sets = Math.max(2, sets + sa);
-    if (hasR) reps = `${Math.max(2, nr + ra)}`;
-    if (hasW) weight = `${r5(bw * pm * wm)} lb`;
-    const REST = { accumulation: '60s', intensification: '90s', realization: '120s', race_prep: '60s' };
+    if (hasR) {
+      let newReps = Math.max(2, nr + ra);
+      // BUG 4: Re-cap Olympic lifts after wave adjustment
+      if (isOlympic && newReps > 6) newReps = 5;
+      reps = `${newReps}`;
+    }
+    if (hasW) weight = `${r5(phaseBase * wm)} lb`;
+
+    const REST = { accumulation: '60s', intensification: '90s', realization: '120s', race_prep: '90s' };
     if (!rest) rest = REST[phaseKey] || '60s';
   }
 
@@ -456,20 +494,35 @@ function scaleRunDist(weight, notes, week, totalWeeks, phaseKey, profile) {
   if (!baseDist) return weight;
 
   const targetDist = getTargetRaceDistance(profile);
-  const progress = Math.min(1, (week - 1) / Math.max(1, totalWeeks - 4));
+
+  // BUG 5 FIX: Week-over-week progression, not flat per phase
+  // Use absolute week number to create a smooth ramp
+  const weekPct = Math.min(1, (week - 1) / Math.max(1, totalWeeks - 4));
 
   if (!targetDist) {
-    // No race goal — gentle progression
-    const gentle = { accumulation: 1.0, intensification: 1.1, realization: 1.2, race_prep: 0.9 };
-    const mult = (gentle[phaseKey] || 1.0) + progress * 0.1;
+    // No race goal — gentle weekly ramp: 1.0x → 1.3x by peak, then taper
+    const isRacePrep = phaseKey === 'race_prep';
+    const mult = isRacePrep ? 1.0 : 1.0 + weekPct * 0.3;
     return weight.replace(m[0], `${Math.round(baseDist * mult * 10) / 10} mi`);
   }
 
-  // Build toward target distance by phase
-  const phasePct = { accumulation: 0.45, intensification: 0.68, realization: 0.85, race_prep: 0.50 };
-  const pct = phasePct[phaseKey] || 0.5;
-  const phaseDist = targetDist * (pct - 0.1 + progress * 0.1);
-  const finalDist = Math.max(baseDist, Math.round(phaseDist * 10) / 10);
+  // Build toward target distance with week-over-week progression
+  // Week 1: 40% of target → peak week: 95% of target → taper: 50%
+  let targetPct;
+  if (phaseKey === 'race_prep') {
+    // Taper: 60% → 45% over 3 weeks
+    const taperWeek = Math.min(3, totalWeeks - week + 1);
+    targetPct = 0.45 + (taperWeek - 1) * 0.075; // wk1=0.60, wk2=0.525, wk3=0.45
+  } else {
+    // Build: 40% → 95% smoothly across all training weeks
+    targetPct = 0.40 + weekPct * 0.55;
+  }
+
+  // Deload weeks: reduce by 25%
+  const isDeloadWeek = week > 1 && ((week - 1) % 4 === 3);
+  if (isDeloadWeek && phaseKey !== 'race_prep') targetPct *= 0.75;
+
+  const finalDist = Math.max(baseDist, Math.round(targetDist * targetPct * 10) / 10);
   return weight.replace(m[0], `${finalDist} mi`);
 }
 
