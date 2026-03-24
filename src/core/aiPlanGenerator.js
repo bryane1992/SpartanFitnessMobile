@@ -66,6 +66,7 @@ WEIGHT CALIBRATION:
 - INTERMEDIATE: start at 65-75% of max equipment weight.
 - ADVANCED/ELITE: start at 75-85% of max equipment weight.
 - The user's max DB/barbell weight is a CEILING, not a starting point.
+- If CURRENT WORKING WEIGHTS are provided, use them as your baseline for accumulation. Scale other exercises relative to these benchmarks (e.g. if they bench 95 lb, DB rows might be ~35 lb, skull crushers ~25 lb).
 
 RPE NOTES: Add "RPE X" in the notes field for main compound lifts.
 
@@ -239,6 +240,16 @@ function buildPlanPrompt(profile, exercisePool) {
   if (profile.weight) parts.push(`WEIGHT: ${profile.weight} lbs`);
   if (profile.bmi) parts.push(`BMI: ${profile.bmi}`);
   parts.push(`EXPERIENCE: ${profile.experience}`);
+  if (profile.workingWeights && Object.keys(profile.workingWeights).length > 0) {
+    const ww = profile.workingWeights;
+    const lines = [];
+    if (ww.bench) lines.push(`Bench Press: ${ww.bench} lb for 8-10 reps`);
+    if (ww.squat) lines.push(`Squat: ${ww.squat} lb for 8-10 reps`);
+    if (ww.deadlift) lines.push(`Deadlift: ${ww.deadlift} lb for 8-10 reps`);
+    if (ww.overhead_press) lines.push(`Overhead Press: ${ww.overhead_press} lb for 8-10 reps`);
+    if (ww.row) lines.push(`Row: ${ww.row} lb for 8-10 reps`);
+    parts.push(`CURRENT WORKING WEIGHTS (use these to calibrate all weights):\n  ${lines.join('\n  ')}`);
+  }
   parts.push(`TRAINING DAYS PER WEEK: ${profile.trainingDaysPerWeek}`);
   parts.push(`SESSION DURATION: ${profile.sessionDuration || 60} minutes`);
   parts.push(`WORKOUT STYLES: ${(profile.workoutStyles || [profile.workoutStyle]).join(', ')}`);

@@ -104,8 +104,9 @@ export default function Onboarding({ navigation }) {
   const [heightFt, setHeightFt] = useState('');
   const [heightIn, setHeightIn] = useState('');
   const [bodyWeight, setBodyWeight] = useState('');
-  // Step 3: Experience
+  // Step 3: Experience + working weights
   const [selectedExperience, setSelectedExperience] = useState(null);
+  const [workingWeights, setWorkingWeights] = useState({});
   // Step 4: Equipment
   const [selectedEquipment, setSelectedEquipment] = useState([]);
   // Step 5: Equipment Details (specific weights)
@@ -247,6 +248,9 @@ export default function Onboarding({ navigation }) {
         equipment: selectedEquipment,
         equipmentDetails: equipmentDetails,
         experience: selectedExperience,
+        workingWeights: Object.fromEntries(
+          Object.entries(workingWeights).filter(([, v]) => v && parseFloat(v) > 0)
+        ),
         eventDate: eventDate.toISOString().split('T')[0],
         trainingDaysPerWeek: daysPerWeek,
         trainingDays: trainingDays,
@@ -432,6 +436,18 @@ export default function Onboarding({ navigation }) {
     </View>
   );
 
+  const BENCHMARK_LIFTS = [
+    { id: 'bench', label: 'Bench Press', placeholder: 'e.g. 95' },
+    { id: 'squat', label: 'Squat', placeholder: 'e.g. 135' },
+    { id: 'deadlift', label: 'Deadlift', placeholder: 'e.g. 155' },
+    { id: 'overhead_press', label: 'Overhead Press', placeholder: 'e.g. 65' },
+    { id: 'row', label: 'Barbell/DB Row', placeholder: 'e.g. 75' },
+  ];
+
+  const updateWorkingWeight = (id, value) => {
+    setWorkingWeights(prev => ({ ...prev, [id]: value }));
+  };
+
   const renderStep3 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Experience level?</Text>
@@ -451,6 +467,32 @@ export default function Onboarding({ navigation }) {
             {selectedExperience === exp.id && <View style={styles.checkMark} />}
           </TouchableOpacity>
         ))}
+
+        {/* Optional working weights */}
+        {selectedExperience && (
+          <>
+            <Text style={[styles.sectionLabel, { marginTop: 25 }]}>Know your numbers?</Text>
+            <Text style={styles.sectionDesc}>Optional — helps us pick the right starting weights. Enter what you can comfortably do for 8-10 reps.</Text>
+
+            {BENCHMARK_LIFTS.map(lift => (
+              <View key={lift.id} style={styles.benchmarkRow}>
+                <Text style={styles.benchmarkLabel}>{lift.label}</Text>
+                <View style={styles.benchmarkInputWrap}>
+                  <TextInput
+                    style={styles.benchmarkInput}
+                    placeholder={lift.placeholder}
+                    placeholderTextColor="rgba(255,255,255,0.15)"
+                    keyboardType="numeric"
+                    value={workingWeights[lift.id] || ''}
+                    onChangeText={(v) => updateWorkingWeight(lift.id, v)}
+                    maxLength={4}
+                  />
+                  <Text style={styles.benchmarkUnit}>lb</Text>
+                </View>
+              </View>
+            ))}
+          </>
+        )}
       </ScrollView>
 
       <View style={styles.buttonRow}>
@@ -1180,6 +1222,49 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 11,
     marginTop: 6,
+    fontFamily: 'monospace',
+  },
+  // Benchmark lift inputs
+  benchmarkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1A1A1A',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+  benchmarkLabel: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  benchmarkInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  benchmarkInput: {
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+    width: 70,
+    textAlign: 'center',
+  },
+  benchmarkUnit: {
+    color: '#666',
+    fontSize: 12,
     fontFamily: 'monospace',
   },
   notesInput: {
