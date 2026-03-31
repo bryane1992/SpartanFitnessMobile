@@ -77,16 +77,26 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
       const parsedProfile = profile ? JSON.parse(profile) : null;
       const injuries = await getActiveInjuries();
 
-      // Gather alternatives only for incomplete exercises (saves tokens)
+      // Gather alternatives — filter out exercises already in today's workout
       const alternatives = {};
+      const todayExerciseIds = new Set();
       if (workout?.blocks) {
         for (const block of workout.blocks) {
           for (const ex of (block.exercises || [])) {
-            if (ex.is_completed) continue; // skip done exercises
+            todayExerciseIds.add(ex.exercise_id || ex.id);
+          }
+        }
+        for (const block of workout.blocks) {
+          for (const ex of (block.exercises || [])) {
+            if (ex.is_completed) continue;
             try {
               const alts = await getAlternatives(ex.exercise_id || ex.id, parsedProfile);
               if (alts && alts.length > 0) {
-                alternatives[ex.id] = alts.slice(0, 3).map(a => ({ id: a.id, name: a.name }));
+                // Filter out exercises already in today's workout
+                const filtered = alts.filter(a => !todayExerciseIds.has(a.id));
+                if (filtered.length > 0) {
+                  alternatives[ex.id] = filtered.slice(0, 3).map(a => ({ id: a.id, name: a.name }));
+                }
               }
             } catch {}
           }
@@ -109,8 +119,12 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
       await saveCoachMessage(sessionId, 'assistant', response.message, response.actions);
 
       // Execute immediate actions (non-option ones like flagInjury)
-      if (response.actions.length > 0) {
-        await executeActions(response.actions);
+      if (response.actions && response.actions.length > 0) {
+        try {
+          await executeActions(response.actions);
+        } catch (actionErr) {
+          console.error('[AI Coach] Action execution failed:', actionErr);
+        }
       }
 
       setMessages(prev => [...prev, {
@@ -134,30 +148,45 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
 
   const executeActions = async (actions) => {
     const store = useWorkoutStore.getState();
-    for (const action of actions) {
+    for (let action of actions) {
+      // Normalize action format — Claude sometimes nests as { "swap": {...} } instead of { "type": "swap", ... }
+      if (!action.type) {
+        const key = Object.keys(action).find(k => ['swap', 'adjustWeight', 'adjustReps', 'flagInjury', 'removeExercise', 'addNote'].includes(k));
+        if (key) {
+          action = { type: key, ...action[key] };
+        }
+      }
+      console.log('[AI Coach] Executing action:', action.type, action);
       try {
         switch (action.type) {
           case 'swap':
             if (action.planExerciseId && action.newExerciseId) {
-              await store.swapExercise(action.planExerciseId, action.newExerciseId, null);
+              const peId = parseInt(action.planExerciseId) || action.planExerciseId;
+              console.log(`[AI Coach] Swapping plan_exercise ${peId} → ${action.newExerciseId}`);
+              await store.swapExercise(peId, action.newExerciseId, null);
+            } else {
+              console.warn('[AI Coach] Swap missing IDs:', action);
             }
             break;
           case 'adjustWeight':
             if (action.planExerciseId && action.newWeight) {
-              await updateExerciseLog(action.planExerciseId, null, action.newWeight, action.reason || null);
+              const peIdW = parseInt(action.planExerciseId) || action.planExerciseId;
+              await updateExerciseLog(peIdW, null, action.newWeight, action.reason || null);
               await store.loadTodayWorkout();
             }
             break;
           case 'adjustReps':
             if (action.planExerciseId) {
+              const peIdR = parseInt(action.planExerciseId) || action.planExerciseId;
               const setsReps = action.newSets && action.newReps ? `${action.newSets}x${action.newReps}` : null;
-              await updateExerciseLog(action.planExerciseId, setsReps, null, action.reason || null);
+              await updateExerciseLog(peIdR, setsReps, null, action.reason || null);
               await store.loadTodayWorkout();
             }
             break;
           case 'removeExercise':
             if (action.planExerciseId) {
-              await updateExerciseLog(action.planExerciseId, 'SKIP', null, action.reason || 'Removed by AI Coach');
+              const peIdRm = parseInt(action.planExerciseId) || action.planExerciseId;
+              await updateExerciseLog(peIdRm, 'SKIP', null, action.reason || 'Removed by AI Coach');
               await store.loadTodayWorkout();
             }
             break;
@@ -244,10 +273,10 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
                 </Text>
                 {msg.actions && msg.actions.length > 0 ? (
                   <View style={styles.actionsList}>
-                    {msg.actions.map((a, j) => (
+                    {msg.actions.filter(a => a && a.type).map((a, j) => (
                       <View key={j} style={styles.actionCard}>
-                        <Text style={styles.actionType}>{String(a.type).toUpperCase()}</Text>
-                        <Text style={styles.actionReason}>{a.reason || a.bodyPart || a.newWeight || ''}</Text>
+                        <Text style={styles.actionType}>{String(a.type || '').toUpperCase()}</Text>
+                        <Text style={styles.actionReason}>{String(a.reason || a.bodyPart || a.note || a.newWeight || 'Done')}</Text>
                       </View>
                     ))}
                   </View>

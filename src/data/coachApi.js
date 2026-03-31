@@ -5,7 +5,7 @@ import Constants from 'expo-constants';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-haiku-4-5-20251001'; // Haiku for fast, cheap coaching responses
-const TIMEOUT = 10000; // Haiku is faster, shorter timeout
+const TIMEOUT = 15000; // Haiku is fast but needs time for structured responses
 
 // Read from app config (sourced from .env), fallback to bundled key
 const BUNDLED_API_KEY = Constants.expoConfig?.extra?.claudeApiKey
@@ -22,7 +22,7 @@ INJURY ORDER: 1)reduce reps 2)lighten load 40-60% 3)limit ROM 4)slow tempo 5)cha
 RESPONSE: Plain text for questions/advice. JSON ONLY when performing actions:
 {"message":"text","actions":[...],"options":[...]}
 Actions: swap(planExerciseId,newExerciseId,reason), adjustWeight(planExerciseId,newWeight,reason), adjustReps(planExerciseId,newSets,newReps,reason), flagInjury(bodyPart,severity), removeExercise(planExerciseId,reason), addNote(planExerciseId,note)
-Options (injuries only): {"label":"text","description":"why","recommended":bool,"action":{...}} 2-4 options.`;
+Options: ALWAYS present 2-3 options for swaps, removals, and injuries so the user can choose. Format: {"label":"Exercise Name","description":"why this is a good swap","recommended":bool,"action":{"type":"swap","planExerciseId":"id","newExerciseId":"id","reason":"why"}}. Use SWAP OPTIONS from context for valid IDs.`;
 
 // Sanitize user input — cap length, strip weird chars
 function sanitizeInput(text, maxLen = 500) {
@@ -73,7 +73,7 @@ export async function sendCoachMessage(apiKey, messages, context) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 350,
+        max_tokens: 800,
         system: SYSTEM_PROMPT,
         messages: anthropicMessages,
       }),
@@ -99,11 +99,13 @@ export async function sendCoachMessage(apiKey, messages, context) {
     if (text.startsWith('```')) {
       text = text.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
     }
-
-    // Try JSON parse — if it fails, it's a plain text response (which is fine)
-    if (text.startsWith('{')) {
+    // Extract JSON if surrounded by prose
+    const jsonStart = text.indexOf('{');
+    const jsonEnd = text.lastIndexOf('}');
+    if (jsonStart >= 0 && jsonEnd > jsonStart) {
+      const jsonCandidate = text.substring(jsonStart, jsonEnd + 1);
       try {
-        const parsed = JSON.parse(text);
+        const parsed = JSON.parse(jsonCandidate);
         console.log('[AI Coach] JSON response with actions:', parsed.actions?.length || 0);
         return {
           message: parsed.message || text,
@@ -111,12 +113,18 @@ export async function sendCoachMessage(apiKey, messages, context) {
           options: Array.isArray(parsed.options) ? parsed.options : [],
         };
       } catch (parseErr) {
+        // JSON parse failed — extract just the message text, skip actions
+        // Don't try to regex-parse nested arrays — too error-prone
         console.warn('[AI Coach] JSON parse failed:', parseErr.message);
+        const msgMatch = jsonCandidate.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+        if (msgMatch) {
+          return { message: msgMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'), actions: [], options: [] };
+        }
       }
     }
 
     // Plain text response — no actions needed
-    return { message: rawText, actions: [], options: [] };
+    return { message: text, actions: [], options: [] };
   } catch (e) {
     clearTimeout(timer);
     if (e.name === 'AbortError') {
