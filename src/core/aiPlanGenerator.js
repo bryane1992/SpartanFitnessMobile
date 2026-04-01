@@ -197,7 +197,6 @@ function validateStrategy(raw, userProfile) {
   if (hasEndurance) {
     const runDays = s.dayConfigs.filter(d => d.run);
     if (runDays.length < 2) {
-      // Add runs to days that don't have them, preferring middle and last days
       const midIdx = Math.floor(daysPerWeek / 2);
       const lastIdx = daysPerWeek - 1;
       if (!s.dayConfigs[midIdx].run) {
@@ -206,6 +205,14 @@ function validateStrategy(raw, userProfile) {
       if (!s.dayConfigs[lastIdx].run) {
         s.dayConfigs[lastIdx].run = { type: 'long_run', label: 'LONG RUN' };
       }
+    }
+
+    // ALWAYS ensure exactly one day has a long run — critical for race prep
+    const hasLongRun = s.dayConfigs.some(d => d.run?.type === 'long_run');
+    if (!hasLongRun) {
+      // Put long run on the last training day
+      const lastIdx = daysPerWeek - 1;
+      s.dayConfigs[lastIdx].run = { type: 'long_run', label: 'LONG RUN' };
     }
   }
 
@@ -475,6 +482,15 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
   const scored = candidates.map(ex => {
     let score = Math.random() * 3;
 
+    // Exclusion enforcement — check exercise name against user's exclusion tags
+    const userExclusions = userProfile.exclusions || [];
+    if (userExclusions.includes('olympic_lift') && /clean|snatch|jerk/i.test(ex.name) && !/push press/i.test(ex.name)) {
+      score -= 100;
+    }
+    if (userExclusions.includes('overhead') && /overhead|jerk|snatch|push press/i.test(ex.name)) {
+      score -= 100;
+    }
+
     // Compound filtering
     if (compoundsOnly && ex.is_compound) score += 15;
     if (compoundsOnly && !ex.is_compound) score -= 25;
@@ -703,8 +719,11 @@ function scaleWodWeight(weight, exerciseId, equipmentDetails) {
   const match = weight.match(/(\d+)(?:\/(\d+))?\s*(?:lb|lbs)?/i);
   if (!match) return weight;
 
-  const rxWeight = parseInt(match[1]); // Use the heavier (male) RX weight
+  let rxWeight = parseInt(match[1]); // Use the heavier (male) RX weight
   if (!rxWeight) return weight;
+
+  // Always simplify "225/155 lb" → just the male weight "225 lb"
+  const simplified = match[2] ? `${rxWeight} lb` : weight;
 
   // Determine equipment type from exercise
   const isBarbell = /deadlift|squat|clean|snatch|jerk|press|thruster/i.test(exerciseId);
@@ -713,19 +732,20 @@ function scaleWodWeight(weight, exerciseId, equipmentDetails) {
   if (isBarbell && equipmentDetails.barbell?.maxWeight) {
     const max = parseFloat(equipmentDetails.barbell.maxWeight);
     if (rxWeight > max) return `${Math.round(max / 5) * 5} lb (scaled)`;
+    return `${rxWeight} lb`;
   }
 
   if (isKB && equipmentDetails.kettlebell?.weights) {
     const kbWeights = equipmentDetails.kettlebell.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0).sort((a, b) => b - a);
     if (kbWeights.length > 0) {
-      // Find closest available KB weight that doesn't exceed RX
       const available = kbWeights.filter(w => w <= rxWeight);
       const bestKB = available.length > 0 ? available[0] : kbWeights[kbWeights.length - 1];
       if (bestKB !== rxWeight) return `${bestKB} lb KB (scaled)`;
+      return `${bestKB} lb KB`;
     }
   }
 
-  return weight;
+  return simplified;
 }
 
 function parseWodMovement(movement, scheme, index) {
