@@ -690,6 +690,28 @@ export async function updateExerciseLog(planExerciseId, actualReps, actualWeight
   );
 }
 
+// Adjust prescribed weight for an exercise in all future unfinished weeks
+// Called when user logs an actual_weight significantly different from prescribed
+export async function adjustFutureWeights(exerciseId, newWeight, currentDate) {
+  const database = await getDatabase();
+  const today = currentDate || new Date().toISOString().split('T')[0];
+
+  const result = await database.runAsync(
+    `UPDATE plan_exercises SET weight = ?
+     WHERE exercise_id = ?
+       AND is_completed = 0
+       AND plan_block_id IN (
+         SELECT pb.id FROM plan_blocks pb
+         JOIN plan_days pd ON pd.id = pb.plan_day_id
+         WHERE pd.date > ?
+       )`,
+    [newWeight, exerciseId, today]
+  );
+
+  console.log(`[Autoregulate] Adjusted ${exerciseId} to ${newWeight} for ${result.changes} future exercises`);
+  return result.changes;
+}
+
 export async function saveAmrapRounds(planBlockId, rounds) {
   const database = await getDatabase();
   await database.runAsync(

@@ -27,6 +27,7 @@ export default function TodayWorkout({ navigation }) {
     updateExerciseLog,
     saveAmrapRounds,
     completeDay,
+    lastAdjustment,
   } = useWorkoutStore();
 
   const [expandedBlocks, setExpandedBlocks] = useState({});
@@ -126,6 +127,13 @@ export default function TodayWorkout({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {lastAdjustment ? (
+        <View style={styles.adjustmentToast}>
+          <Text style={styles.adjustmentText}>
+            {`${lastAdjustment.exerciseName} adjusted to ${lastAdjustment.newWeight} for ${lastAdjustment.count} future workout${lastAdjustment.count > 1 ? 's' : ''}`}
+          </Text>
+        </View>
+      ) : null}
       <ScrollView showsVerticalScrollIndicator={false}>
         {dayNavContent}
 
@@ -366,6 +374,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0A0A0A',
+  },
+  adjustmentToast: {
+    backgroundColor: 'rgba(1,255,112,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(1,255,112,0.25)',
+    marginHorizontal: 12,
+    marginTop: 4,
+    marginBottom: 2,
+    borderRadius: 8,
+    padding: 10,
+  },
+  adjustmentText: {
+    color: '#01FF70',
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+    textAlign: 'center',
+    letterSpacing: 0.3,
   },
   centerContainer: {
     flex: 1,

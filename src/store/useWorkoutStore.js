@@ -9,6 +9,7 @@ import {
   saveAmrapRounds as dbSaveAmrapRounds,
   completeDay as dbCompleteDay,
   swapExercise as dbSwapExercise,
+  adjustFutureWeights as dbAdjustFutureWeights,
   deletePlan,
 } from '../data/database';
 import { generatePlan } from '../core/planGenerator';
@@ -25,6 +26,7 @@ const useWorkoutStore = create((set, get) => ({
   // Today's view
   todayWorkout: null,
   selectedDate: new Date().toISOString().split('T')[0],
+  lastAdjustment: null, // { exerciseName, newWeight, count } — for toast display
 
   // Plan overview
   planDays: [],
@@ -130,6 +132,35 @@ const useWorkoutStore = create((set, get) => ({
   updateExerciseLog: async (planExerciseId, actualReps, actualWeight, notes) => {
     try {
       await dbUpdateExerciseLog(planExerciseId, actualReps, actualWeight, notes);
+
+      // Autoregulation: if user logged a weight, compare to prescribed and adjust future weeks
+      if (actualWeight) {
+        const workout = get().todayWorkout;
+        if (workout?.blocks) {
+          for (const block of workout.blocks) {
+            const exercise = (block.exercises || []).find(e => e.id === planExerciseId);
+            if (exercise) {
+              const prescribed = parseFloat(exercise.weight);
+              const actual = parseFloat(actualWeight);
+              if (!isNaN(prescribed) && !isNaN(actual) && prescribed > 0 && actual > 0) {
+                const diff = (actual - prescribed) / prescribed;
+                if (Math.abs(diff) > 0.10) {
+                  // >10% difference — adjust future weeks
+                  // Apply the actual weight as the new baseline, rounded to nearest 5
+                  const newWeight = `${Math.round(actual / 5) * 5} lb`;
+                  const adjusted = await dbAdjustFutureWeights(exercise.exercise_id, newWeight);
+                  if (adjusted > 0) {
+                    set({ lastAdjustment: { exerciseName: exercise.name, newWeight, count: adjusted } });
+                    // Clear the toast after 4 seconds
+                    setTimeout(() => set({ lastAdjustment: null }), 4000);
+                  }
+                }
+              }
+              break;
+            }
+          }
+        }
+      }
     } catch (e) {
       console.error('Error updating exercise log:', e);
     }
