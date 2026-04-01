@@ -19,6 +19,7 @@ import { buildDayBlocks, getDefaultDayConfigs } from './dayTemplates';
 import { logValidation } from './planValidator';
 import { detectArchetype, adjustArchetypeForEquipment } from './archetypes';
 import { getAbilityScore, canDoBodyweightPull } from './abilityFilter';
+import { isBeginnerAllowed } from './beginnerPool';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-haiku-4-5-20251001';
@@ -301,6 +302,14 @@ async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs,
   const startDate = getNextMonday();
   const eventDate = userProfile.eventDate || addWeeks(startDate, 16);
   const { totalWeeks, phases } = calculatePhases(startDate, eventDate);
+
+  // Determine run eligibility (same logic as validateStrategy)
+  const userGoals = (userProfile.goals || []).join(' ').toLowerCase();
+  const userNotes = (userProfile.additionalNotes || '').toLowerCase();
+  const cantRun = /can'?t run|no running|don'?t run|unable to run|hate running|avoid running/i.test(userNotes);
+  const excludesRunning = (userProfile.exclusions || []).includes('running');
+  const hasExplicitRunGoal = /endurance|athletic|spartan|race|marathon|10k|5k/i.test(userGoals + ' ' + userNotes);
+  const shouldHaveRuns = hasExplicitRunGoal && !cantRun && !excludesRunning;
   const trainingDays = userProfile.trainingDays || Array.from({ length: userProfile.trainingDaysPerWeek || 5 }, (_, i) => i);
   const sessionMinutes = parseInt(userProfile.sessionDuration) || 60;
 
@@ -390,8 +399,12 @@ async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs,
           exercises = generateRunExercises(week, displayPhase, totalWeeks, exercisePool, runType, userProfile.experience, targetDistance);
           if (week <= 2) console.log(`[AI Plan] RUN block: wk${week} ${runType} → ${exercises.length} exercises, dist=${exercises[1]?.reps || '?'}`);
         } else if (block.isWarmup) {
-          // ── Warmup ──
-          exercises = selectWarmupExercises(block.warmupPool || WARMUP_IDS, block.exerciseCount, exercisePool);
+          // ── Warmup — filter out jog for "can't run" users ──
+          let warmupPool = block.warmupPool || [...WARMUP_IDS];
+          if (!shouldHaveRuns) {
+            warmupPool = warmupPool.filter(id => id !== 'easy_jog' && id !== 'strides' && id !== 'a_skips');
+          }
+          exercises = selectWarmupExercises(warmupPool, block.exerciseCount, exercisePool);
         } else if (block.isCooldown) {
           // ── Cooldown ──
           exercises = selectCooldownExercises(block.cooldownPool || [], exercisePool);
@@ -564,24 +577,24 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
     // Ability check — penalize exercises user can't realistically do
     score += getAbilityScore(ex, userProfile);
 
-    // Strong seed exercise preference — curated exercises are better than random ExerciseDB ones
+    // BEGINNER ALLOWLIST — for beginners, ONLY allow approved exercises
+    if (userProfile.experience === 'beginner' && !isBeginnerAllowed(ex.id)) {
+      score -= 200; // hard exclude anything not on the allowlist
+    }
+
+    // Seed exercise preference (for non-beginners)
     if (ex.source === 'seed' || !ex.source) score += 20;
-    // Filter out obscure ExerciseDB exercises aggressively
+
+    // Filter obscure ExerciseDB exercises for everyone
     if (ex.source === 'api') {
       const eName = ex.name || '';
-      // Hard exclude: gendered, versioned, seated misspellings, absurd combos
       if (/\(female\)|\(male\)|v\.\s*\d|sitted|lying floor/i.test(eName) || eName.length > 40) {
         score -= 100;
-      } else if (/reverse grip|guillotine|cambered|lever |floor fly|kneeling jump|squat jump step|step rear lunge|bent v\.|side bent|wide reverse|close grip to skull|behind neck|behind the neck|decline close grip|rollerout from|press sit.?up|standing twist|standing ab roll|alternate leg raise/i.test(eName)) {
+      } else if (/reverse grip|guillotine|cambered|lever |floor fly|kneeling jump|squat jump step|step rear lunge|bent v\.|side bent|wide reverse|close grip to skull|behind neck|behind the neck|decline close grip|rollerout from|press sit.?up|standing twist|standing ab roll|alternate leg raise|jefferson|zercher|overhead squat|speed squat|on knees|frankenstein|lateral lunge|side split/i.test(eName)) {
         score -= 100;
       } else if (eName.split(' ').length > 4 || eName.length > 32) {
         score -= 50;
       }
-    }
-
-    // For beginners: strongly prefer simple, guided exercises
-    if (userProfile.experience === 'beginner' && ex.source === 'api' && ex.difficulty !== 'beginner') {
-      score -= 20; // beginners should mostly get seed exercises
     }
 
     return { exercise: ex, score };
