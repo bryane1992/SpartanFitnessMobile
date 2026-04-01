@@ -166,33 +166,45 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
   if (seedWeight === 0 || exercise.default_weight === 'BW') return exercise.default_weight;
 
   // Step 1: Get base from user's working weights (much better than seed defaults)
+  // Working weights are 8-10RM — that's roughly 75% of 1RM
+  // So estimated 1RM = working weight × 1.3
   const userBase = getUserBaseWeight(exercise, workingWeights);
   const baseWeight = userBase || seedWeight;
+  const hasUserWeights = !!userBase;
 
   // Step 2: Classify exercise — compound vs isolation
   const isCompound = exercise.is_compound;
   const category = isCompound ? 'compound' : 'isolation';
 
-  // Step 3: Phase intensity — higher starting percentages than v2
+  // Step 3: Phase intensity as % of ESTIMATED 1RM
+  // If we have user's working weights, estimate 1RM first then apply phase %
+  // If no working weights, apply phase % to seed default directly
+  const est1RM = hasUserWeights ? baseWeight * 1.3 : baseWeight;
+
+  // Phase targets as % of estimated 1RM:
+  // Foundation: 65-70% 1RM = moderate (≈ user's working weight for higher reps)
+  // Build: 75-80% 1RM = challenging
+  // Peak: 85-90% 1RM = heavy
+  // Race prep: 70-75% 1RM = maintain without fatigue
   const PHASE_INTENSITY = {
-    foundation: { compound: 0.75, isolation: 0.65 },
-    build:      { compound: 0.85, isolation: 0.75 },
-    peak:       { compound: 0.95, isolation: 0.85 },
-    race_prep:  { compound: 0.80, isolation: 0.70 },
+    foundation: { compound: 0.70, isolation: 0.60 },
+    build:      { compound: 0.80, isolation: 0.70 },
+    peak:       { compound: 0.90, isolation: 0.80 },
+    race_prep:  { compound: 0.75, isolation: 0.65 },
   };
   const phaseKey = phase === 'race_prep' ? 'race_prep' : phase === 'peak' ? 'peak' : phase === 'build' ? 'build' : 'foundation';
-  const phaseIntensity = PHASE_INTENSITY[phaseKey]?.[category] || 0.75;
+  const phaseIntensity = PHASE_INTENSITY[phaseKey]?.[category] || 0.70;
 
-  // Step 4: Weekly progression within the phase (not cumulative across all weeks)
-  const weekInPhase = ((weekNumber - 1) % 4) + 1;
-  const weeklyBump = isCompound ? 0.025 : 0.015;
-  const progressionMultiplier = 1 + ((weekInPhase - 1) * weeklyBump);
+  // Step 4: Weekly progression — cumulative across ALL weeks (not reset per phase)
+  // Compounds: +2.5% per week, Isolation: +1.5% per week
+  const weeklyBump = isCompound ? 0.02 : 0.01;
+  const progressionMultiplier = 1 + ((weekNumber - 1) * weeklyBump);
 
-  // Step 5: Experience multiplier (only when no working weights — working weights ARE the user's level)
-  const expMult = userBase ? 1.0 : getExperienceMultiplier(experience);
+  // Step 5: Experience multiplier (only when no working weights)
+  const expMult = hasUserWeights ? 1.0 : getExperienceMultiplier(experience);
 
-  // Step 6: Calculate
-  let weight = baseWeight * phaseIntensity * progressionMultiplier * expMult;
+  // Step 6: Calculate from estimated 1RM
+  let weight = est1RM * phaseIntensity * progressionMultiplier * expMult;
 
   // Step 7: Deload — 70% of working weight
   if (isDeloadWeek(weekNumber)) {
@@ -266,9 +278,16 @@ function capToEquipment(weight, exercise, equipmentDetails) {
 
 export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal) {
   const bodyComp = getBodyCompParams(bodyCompGoal);
-  const mesoPhase = getMesocyclePhase(weekNumber);
-
   const isCompound = exercise.is_compound;
+
+  // Race prep: fixed reduced volume — OVERRIDE mesocycle cycling
+  if (phase === 'race_prep') {
+    const sets = isCompound ? 3 : 2;
+    const reps = isCompound ? 5 : 8;
+    return { sets: `${sets}`, reps: `${reps}` };
+  }
+
+  const mesoPhase = getMesocyclePhase(weekNumber);
   const repRange = isCompound ? bodyComp.compoundReps : bodyComp.accessoryReps;
   const setRange = isCompound ? bodyComp.compoundSets : bodyComp.accessorySets;
 
@@ -278,7 +297,7 @@ export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal) {
   let reps = Math.round(repRange[0] + (repRange[1] - repRange[0]) * repProgress);
   let sets = setRange[0];
 
-  // Volume progression: add a set every 2 weeks
+  // Volume progression: add a set every 2 weeks, cap at setRange max
   if (weekNumber > 2 && weekNumber % 2 === 0) {
     sets = Math.min(setRange[1], sets + 1);
   }

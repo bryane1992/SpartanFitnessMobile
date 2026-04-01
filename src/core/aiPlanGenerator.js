@@ -16,6 +16,7 @@ import { savePlanDay, savePlanBlock, savePlanExercise, getExercisesByFilter, get
 import { getRaceRequirements, getRaceExerciseRequirements, getRaceDistance } from './raceRequirements';
 import { selectWOD } from './wodSelector';
 import { buildDayBlocks, getDefaultDayConfigs } from './dayTemplates';
+import { logValidation } from './planValidator';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-haiku-4-5-20251001';
@@ -341,7 +342,20 @@ async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs,
     if (onStatus && week % 4 === 0) onStatus(`Week ${week}/${totalWeeks}...`);
   }
 
+  // Log validation summary
+  const equip = (userProfile.equipment || []).map(e => e.toLowerCase());
+  const hasBarbell = equip.some(e => /barbell|squat.?rack/i.test(e));
+  const validation = { violations: [] };
+  if (hasBarbell) {
+    // We can't easily scan saved exercises, but log the constraint was active
+    console.log('[AI Plan] Barbell constraint: ACTIVE');
+  }
+  if (raceReqs) {
+    console.log(`[AI Plan] Race requirements: ${raceReqs.label}, must_include: ${raceReqs.must_include.join(', ')}`);
+  }
+  console.log(`[AI Plan] Target run distance: ${targetDistance || 'none'} mi`);
   console.log('[AI Plan] Plan generated successfully');
+
   return {
     planId, totalWeeks, phases, startDate, eventDate,
     planName: strategy.planName || 'AI Training Program',
@@ -354,22 +368,31 @@ async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs,
 // ═══════════════════════════════════════════════════════════════
 
 async function loadExercisePool(userProfile) {
-  const styles = [...new Set([...(userProfile.workoutStyles || [userProfile.workoutStyle || 'hybrid']), 'hybrid'])];
+  // Load ALL exercises — don't filter by style (was excluding barbell exercises)
+  // Equipment and exclusion filters still apply
   const exerciseMap = new Map();
-  for (const style of styles) {
-    const exercises = await getExercisesByFilter({
-      style, exclusions: userProfile.exclusions || [],
-      equipment: userProfile.equipment || [],
-      difficulty: null,
-    });
-    for (const ex of exercises) exerciseMap.set(ex.id, ex);
-  }
+  const exercises = await getExercisesByFilter({
+    style: null, // No style filter — include all exercises
+    exclusions: userProfile.exclusions || [],
+    equipment: userProfile.equipment || [],
+    difficulty: null,
+  });
+  for (const ex of exercises) exerciseMap.set(ex.id, ex);
   const allExercises = Array.from(exerciseMap.values());
   const byMuscle = {};
   for (const ex of allExercises) {
     if (!byMuscle[ex.muscle_group]) byMuscle[ex.muscle_group] = [];
     byMuscle[ex.muscle_group].push(ex);
   }
+  // Debug: verify key exercises are in the pool
+  const barbellCount = allExercises.filter(e => e.category === 'barbell').length;
+  const pullUps = allExercises.find(e => e.id === 'pull_ups');
+  const backSquat = allExercises.find(e => e.id === 'back_squat');
+  const benchPress = allExercises.find(e => e.id === 'bench_press');
+  console.log(`[AI Plan] Pool: ${allExercises.length} total, ${barbellCount} barbell, pullups:${!!pullUps}, squat:${!!backSquat}, bench:${!!benchPress}`);
+  if (!backSquat) console.warn('[AI Plan] WARNING: back_squat not in exercise pool!');
+  if (!pullUps) console.warn('[AI Plan] WARNING: pull_ups not in exercise pool!');
+
   return { all: allExercises, byMuscle };
 }
 
@@ -434,13 +457,33 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
     if (usedToday.has(ex.id)) score -= 100;
     if (recentlyUsed.has(ex.id)) score -= 8;
 
-    // Seed exercise preference
-    if (ex.source === 'seed' || !ex.source) score += 6;
+    // Strong seed exercise preference — curated exercises are better than random ExerciseDB ones
+    if (ex.source === 'seed' || !ex.source) score += 15;
+    // Penalize ExerciseDB exercises that are obscure variations
+    if (ex.source === 'api' && /reverse grip|guillotine|cambered|lever |floor fly|kneeling jump/i.test(ex.name)) score -= 15;
 
     return { exercise: ex, score };
   });
 
+  // Deduplicate by normalized name (ExerciseDB creates case-variant duplicates)
+  const nameMap = new Map();
+  for (const item of scored) {
+    const normName = item.exercise.name.toLowerCase().trim();
+    const existing = nameMap.get(normName);
+    if (!existing || item.score > existing.score) {
+      nameMap.set(normName, item);
+    }
+  }
+  scored.length = 0;
+  scored.push(...nameMap.values());
+
   scored.sort((a, b) => b.score - a.score);
+
+  // Debug: log top 5 candidates for first block of first day
+  if (block.name === 'MAIN LIFTS' || block.name === 'OLYMPIC LIFTS') {
+    console.log(`[AI Plan] Top 5 for ${block.name} (patterns: ${(patterns || []).join(',')}):`,
+      scored.slice(0, 5).map(s => `${s.exercise.name}(${s.exercise.category}):${s.score.toFixed(1)}`).join(', '));
+  }
 
   // Pick top N
   const selected = [];
@@ -461,7 +504,47 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
       weight,
       rest: bodyCompParams.restSeconds,
       notes: null,
+      category: ex.category, // needed for hard constraints below
     });
+  }
+
+  // ── Hard constraints — enforce critical exercise types ──
+  const userEquip = (userProfile.equipment || []).map(e => e.toLowerCase());
+  const hasBarbell = userEquip.some(e => /barbell|squat.?rack/i.test(e));
+  const compoundPatterns = ['squat', 'hinge', 'horizontal_push', 'horizontal_pull'];
+  const isCompoundBlock = compoundsOnly && patterns?.some(p => compoundPatterns.includes(p));
+
+  // Barbell constraint: compound blocks for primary patterns MUST have at least 1 barbell exercise
+  if (hasBarbell && isCompoundBlock && !selected.some(e => e.category === 'barbell')) {
+    const barbellOption = scored.find(s => s.exercise.category === 'barbell' && !usedToday.has(s.exercise.id));
+    if (barbellOption && selected.length > 0) {
+      const ex = barbellOption.exercise;
+      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal);
+      const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
+      selected[selected.length - 1] = { id: ex.id, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bodyCompParams.restSeconds, notes: null, category: ex.category };
+    }
+  }
+
+  // Pull-up constraint: pull_up/vertical_pull patterns MUST include pull-ups or chin-ups
+  if (patterns?.some(p => p === 'pull_up' || p === 'vertical_pull') && !selected.some(e => /pull.?up|chin.?up/i.test(e.id))) {
+    const pullUpOption = scored.find(s => /pull_ups|chin_ups/i.test(s.exercise.id) && !usedToday.has(s.exercise.id));
+    if (pullUpOption && selected.length > 0) {
+      const ex = pullUpOption.exercise;
+      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal);
+      const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
+      selected[selected.length - 1] = { id: ex.id, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bodyCompParams.restSeconds, notes: null, category: ex.category };
+    }
+  }
+
+  // Carry constraint: carry pattern MUST include a carry exercise
+  if (patterns?.includes('carry') && !selected.some(e => /carry|farmer|suitcase/i.test(e.id))) {
+    const carryOption = scored.find(s => /farmer_walk|kb_carry|overhead_carry|bucket_carry|sandbag_carry/i.test(s.exercise.id) && !usedToday.has(s.exercise.id));
+    if (carryOption && selected.length > 0) {
+      const ex = carryOption.exercise;
+      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal);
+      const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
+      selected[selected.length - 1] = { id: ex.id, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bodyCompParams.restSeconds, notes: null, category: ex.category };
+    }
   }
 
   return selected;
@@ -582,7 +665,7 @@ function fuzzyMatchWodMovement(name) {
     'double unders': 'jump_rope', 'ring dips': 'dips', 'dips': 'dips',
     'muscle ups': 'muscle_ups', 'handstand push ups': 'handstand_push_ups',
     'pistol squats': 'pistol_squats', 'run': 'easy_run', 'running': 'easy_run',
-    'mile run': 'easy_run', 'row': 'burpees', 'rowing': 'burpees',
+    'mile run': 'easy_run', 'row': 'easy_run', 'rowing': 'easy_run',
     'push press': 'push_jerk', 'step ups': 'step_ups', 'farmer walk': 'farmer_walk',
     'overhead squats': 'front_squat', 'toes to bar': 'sit_ups',
   };
@@ -609,10 +692,14 @@ function pickRunType(phase, weekNumber) {
 
 function generateRunExercises(weekNumber, phase, totalWeeks, pool, runType, experience, targetDistance) {
   const runParams = calculateRunParams(weekNumber, phase, totalWeeks, targetDistance);
-  const expMult = experience === 'beginner' ? 0.7 : experience === 'intermediate' ? 0.85 : experience === 'advanced' ? 1.0 : 1.1;
 
+  // Experience affects interval count and pace, NOT distance for race-specific training
+  // If training for a race, you MUST run the race distance — can't scale it down
+  const expMult = experience === 'beginner' ? 0.7 : experience === 'intermediate' ? 0.85 : experience === 'advanced' ? 1.0 : 1.1;
   const rawDist = parseFloat(runParams.distance);
-  const scaledDist = Math.round(rawDist * expMult * 2) / 2; // round to 0.5
+  // Only scale distance for non-long-run types. Long runs must reach target distance.
+  const distScale = (runType === 'LONG_RUN' || runType === 'RACE_PACE') ? 1.0 : expMult;
+  const scaledDist = Math.round(rawDist * distScale * 2) / 2; // round to 0.5
   const distance = `${scaledDist} mi`;
   const longRunMin = `${Math.round(scaledDist * 9)}-${Math.round(scaledDist * 11)} min`;
   const scaledIntervals = Math.max(2, Math.round(runParams.intervals * expMult));

@@ -386,6 +386,16 @@ export async function getExercisesByFilter({ muscleGroups, style, exclusions, eq
 
   let filtered = await database.getAllAsync(query, params);
 
+  // Debug: check if bench press exists in DB at all
+  const benchCheck = await database.getFirstAsync("SELECT id, style_tags, difficulty, equipment_required FROM exercises WHERE id = 'bench_press'");
+  if (benchCheck) {
+    console.log(`[DB Filter] bench_press in DB: styles=${benchCheck.style_tags} diff=${benchCheck.difficulty} equip=${benchCheck.equipment_required}`);
+    const inFiltered = filtered.some(e => e.id === 'bench_press');
+    console.log(`[DB Filter] bench_press passed SQL filter: ${inFiltered}, query style=${style}, difficulty=${difficulty}`);
+  } else {
+    console.warn('[DB Filter] bench_press NOT IN DATABASE');
+  }
+
   // Filter out exclusions in JS (JSON array matching)
   if (exclusions && exclusions.length > 0) {
     filtered = filtered.filter(ex => {
@@ -561,6 +571,42 @@ export async function exportPlanAsText(planId) {
   lines.push('═══════════════════════════════════════');
   lines.push('         MY WORKOUT PLAN');
   lines.push('═══════════════════════════════════════\n');
+
+  // Include onboarding profile for debugging
+  try {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const profileStr = await AsyncStorage.getItem('userProfile');
+    if (profileStr) {
+      const p = JSON.parse(profileStr);
+      lines.push('── ATHLETE PROFILE ──');
+      if (p.goals) lines.push(`Goals: ${p.goals.join(', ')}`);
+      if (p.experience) lines.push(`Experience: ${p.experience}`);
+      if (p.sex) lines.push(`Sex: ${p.sex}`);
+      if (p.height) lines.push(`Height: ${p.height}`);
+      if (p.weight) lines.push(`Weight: ${p.weight} lb`);
+      if (p.bmi) lines.push(`BMI: ${p.bmi}`);
+      if (p.workingWeights) {
+        const ww = p.workingWeights;
+        lines.push(`Working Weights (8-10RM): Bench ${ww.bench || '?'}, Squat ${ww.squat || '?'}, DL ${ww.deadlift || '?'}, OHP ${ww.overhead_press || '?'}, Row ${ww.row || '?'}`);
+      }
+      if (p.equipment) lines.push(`Equipment: ${p.equipment.join(', ')}`);
+      if (p.equipmentDetails) {
+        const d = p.equipmentDetails;
+        if (d.barbell?.maxWeight) lines.push(`  Barbell max: ${d.barbell.maxWeight} lb`);
+        if (d.kettlebell?.weights) lines.push(`  Kettlebells: ${d.kettlebell.weights} lb`);
+        if (d.dumbbells?.maxWeight) lines.push(`  Dumbbells: up to ${d.dumbbells.maxWeight} lb/hand`);
+      }
+      if (p.trainingDaysPerWeek) lines.push(`Training: ${p.trainingDaysPerWeek} days/week`);
+      if (p.sessionDuration) lines.push(`Session: ${p.sessionDuration} min`);
+      if (p.workoutStyles) lines.push(`Styles: ${p.workoutStyles.join(', ')}`);
+      if (p.bodyCompGoals) lines.push(`Body Comp: ${p.bodyCompGoals.join(', ')}`);
+      if (p.exclusions?.length) lines.push(`Exclusions: ${p.exclusions.join(', ')}`);
+      if (p.additionalNotes) lines.push(`Notes: ${p.additionalNotes}`);
+      lines.push('');
+    }
+  } catch (e) {
+    lines.push('(Could not load profile)\n');
+  }
 
   let currentWeek = 0;
   for (const day of days) {
