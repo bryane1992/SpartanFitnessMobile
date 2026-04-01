@@ -291,19 +291,19 @@ export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal) {
   const repRange = isCompound ? bodyComp.compoundReps : bodyComp.accessoryReps;
   const setRange = isCompound ? bodyComp.compoundSets : bodyComp.accessorySets;
 
-  // Progress reps within range over the 4-week block
+  // Progress reps within the 4-week block (resets each cycle)
   const weekInPhase = weekNumber % 4 || 4;
   const repProgress = Math.min(1, (weekInPhase - 1) / 3);
   let reps = Math.round(repRange[0] + (repRange[1] - repRange[0]) * repProgress);
-  let sets = setRange[0];
 
-  // Volume progression: add a set every 2 weeks, cap at setRange max
-  if (weekNumber > 2 && weekNumber % 2 === 0) {
+  // Sets: start at range minimum, add 1 set in week 3 of each block
+  let sets = setRange[0];
+  if (weekInPhase >= 3) {
     sets = Math.min(setRange[1], sets + 1);
   }
 
-  // Apply mesocycle volume modifier
-  sets = Math.max(2, Math.round(sets * mesoPhase.volumeMultiplier));
+  // Apply mesocycle volume modifier (capped at setRange max)
+  sets = Math.min(setRange[1], Math.max(2, Math.round(sets * mesoPhase.volumeMultiplier)));
 
   // Deload: fewer sets, lower reps
   if (isDeloadWeek(weekNumber)) {

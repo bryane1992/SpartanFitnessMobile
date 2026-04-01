@@ -39,10 +39,27 @@ function deriveWodMetadata(wod) {
   if (/burpee|pull.?up|carry|farmer|wall ball|box jump|rope/i.test(movements)) spartanRelevance += 0.15;
   spartanRelevance = Math.min(1, spartanRelevance);
 
-  // Difficulty (1-5)
+  // Difficulty (1-5) — based on tag, duration, AND total volume
   const diffMap = { beginner: 1, intermediate: 2, advanced: 3, elite: 4 };
   let difficulty = diffMap[wod.difficulty] || 2;
   if (estTime >= 30) difficulty = Math.min(5, difficulty + 1);
+
+  // Total rep volume estimation — high volume = harder
+  const totalReps = (wod.movements || []).reduce((sum, m) => {
+    const repMatch = m.match(/^(\d+)\s/);
+    return sum + (repMatch ? parseInt(repMatch[1]) : 10);
+  }, 0);
+  // Factor in scheme multiplier (e.g., "5 rounds" or "21-15-9" = multiple passes)
+  const schemeStr = (wod.scheme || '').toLowerCase();
+  let schemeMult = 1;
+  const roundMatch = schemeStr.match(/(\d+)\s*round/);
+  if (roundMatch) schemeMult = parseInt(roundMatch[1]);
+  const descMatch = schemeStr.match(/^(\d+)-/);
+  if (descMatch && !roundMatch) schemeMult = schemeStr.split('-').length; // "21-15-9" = 3 passes
+
+  const estimatedTotalReps = totalReps * schemeMult;
+  if (estimatedTotalReps > 200) difficulty = Math.min(5, difficulty + 2);
+  else if (estimatedTotalReps > 100) difficulty = Math.min(5, difficulty + 1);
 
   // Tags
   const tags = [];
