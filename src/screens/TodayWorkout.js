@@ -411,7 +411,8 @@ function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress,
     // Check for rep drop-off
     if (targetReps > 0 && onRepDropOff) {
       const repNums = updatedSets.map(s => parseInt(s.reps)).filter(r => !isNaN(r));
-      if (repNums.length >= 2) {
+      // Only trigger after ALL sets are logged
+      if (repNums.length >= targetSets) {
         const missedSets = repNums.filter(r => r < targetReps - 1).length;
         const lastSet = repNums[repNums.length - 1];
         const lastSetDrop = lastSet / targetReps;
