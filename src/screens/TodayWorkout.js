@@ -162,7 +162,7 @@ export default function TodayWorkout({ navigation }) {
               <TouchableOpacity style={styles.blockHeader} onPress={() => toggleBlock(blockIndex)}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.blockName}>{String(block.name || '')}</Text>
-                  <Text style={styles.blockType}>{`${block.type || ''}${isAmrap ? ' \u2022 AMRAP' : ''}`}</Text>
+                  <Text style={styles.blockType}>{`${block.type || ''}${isAmrap && block.time_cap ? ` \u2022 AMRAP ${block.time_cap}` : isAmrap ? ' \u2022 AMRAP' : ''}`}</Text>
                 </View>
                 <View style={styles.blockRight}>
                   {hasGps ? (

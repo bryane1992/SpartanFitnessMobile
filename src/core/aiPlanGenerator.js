@@ -108,7 +108,9 @@ export async function generateAIPlan(userProfile, onStatus) {
   try {
     const prompt = buildStrategyPrompt(userProfile, raceReqs);
     const raw = await callClaude(apiKey, prompt);
+    console.log('[AI Plan] Claude raw dayConfigs:', JSON.stringify((raw.dayConfigs || []).map(d => ({ type: d.type, run: !!d.run, wod: !!d.wod }))));
     strategy = validateStrategy(raw, userProfile);
+    console.log('[AI Plan] After validation dayConfigs:', JSON.stringify(strategy.dayConfigs.map(d => ({ type: d.type, run: !!d.run, wod: !!d.wod }))));
   } catch (err) {
     console.warn('[AI Plan] Strategy call failed, using defaults:', err.message);
     strategy = buildDefaultStrategy(userProfile, raceReqs);
@@ -322,6 +324,10 @@ async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs,
 
       const usedToday = new Set();
 
+      if (week <= 2 && trainingDayIndex === 0) {
+        console.log(`[AI Plan] Wk${week} Day1 blocks:`, blocks.map(b => `${b.name}(run:${!!b.isRun},wod:${!!b.isWod})`).join(', '));
+      }
+
       for (let bi = 0; bi < blocks.length; bi++) {
         const block = blocks[bi];
 
@@ -340,6 +346,7 @@ async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs,
           const runType = block.runType?.toUpperCase() || pickRunType(displayPhase, week);
           await updateBlockRunType(blockId, runType);
           exercises = generateRunExercises(week, displayPhase, totalWeeks, exercisePool, runType, userProfile.experience, targetDistance);
+          if (week <= 2) console.log(`[AI Plan] RUN block: wk${week} ${runType} → ${exercises.length} exercises, dist=${exercises[1]?.reps || '?'}`);
         } else if (block.isWarmup) {
           // ── Warmup ──
           exercises = selectWarmupExercises(block.warmupPool || WARMUP_IDS, block.exerciseCount, exercisePool);
@@ -356,8 +363,9 @@ async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs,
             spartanBias, excludeWodIds: weekWodIds,
             targetMinutes: parseInt(block.duration) || 12,
           });
-          exercises = buildWodExercises(wod);
+          exercises = buildWodExercises(wod, userProfile.equipmentDetails);
           if (wod) weekWodIds.push(wod.id);
+          if (week <= 2) console.log(`[AI Plan] WOD block: wk${week} ${wod?.name || 'fallback'} → ${exercises.length} exercises`);
         } else {
           // ── Lifts / accessories ──
           exercises = selectExercises(block, exercisePool, recentlyUsed, usedToday, week, displayPhase, userProfile, strategy, raceExerciseReqs);
@@ -497,15 +505,15 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
 
     // Strong seed exercise preference — curated exercises are better than random ExerciseDB ones
     if (ex.source === 'seed' || !ex.source) score += 20;
-    // Filter out obscure ExerciseDB exercises
+    // Filter out obscure ExerciseDB exercises aggressively
     if (ex.source === 'api') {
-      // Reject exercises with gendered labels, version numbers, or absurdly long names
-      if (/\(female\)|\(male\)|v\.\s*\d|sitted|lying floor/i.test(ex.name) || ex.name.length > 45) {
-        score -= 50; // effectively excluded
-      }
-      // Penalize obscure variations that no coach would program
-      else if (/reverse grip|guillotine|cambered|lever |floor fly|kneeling jump|squat jump step/i.test(ex.name)) {
-        score -= 30;
+      const eName = ex.name || '';
+      if (/\(female\)|\(male\)|v\.\s*\d|sitted|lying floor/i.test(eName) || eName.length > 40) {
+        score -= 100; // hard exclude
+      } else if (/reverse grip|guillotine|cambered|lever |floor fly|kneeling jump|squat jump step|step rear lunge|bent v\.|side bent|wide reverse/i.test(eName)) {
+        score -= 100; // hard exclude
+      } else if (eName.split(' ').length > 5) {
+        score -= 50; // penalize overly wordy exercise names
       }
     }
 
@@ -656,7 +664,7 @@ function selectCooldownExercises(cooldownPool, pool) {
 // WOD exercises from seed data — never freeform
 // ═══════════════════════════════════════════════════════════════
 
-function buildWodExercises(wod) {
+function buildWodExercises(wod, equipmentDetails) {
   if (!wod) {
     return [
       { id: 'air_squats', sets: '1x15', reps: '15', weight: 'BW', rest: null, notes: 'Bodyweight circuit' },
@@ -671,16 +679,53 @@ function buildWodExercises(wod) {
     const parsed = parseWodMovement(movement, wod.scheme, i);
     const exerciseId = fuzzyMatchWodMovement(parsed.name);
 
+    // Scale WOD weight to user's equipment limits
+    let weight = parsed.weight || wod.rxWeight || 'BW';
+    weight = scaleWodWeight(weight, exerciseId, equipmentDetails);
+
     exercises.push({
       id: exerciseId,
       sets: `1x${parsed.reps}`,
       reps: parsed.reps,
-      weight: parsed.weight || wod.rxWeight || 'BW',
+      weight,
       rest: null,
       notes: i === 0 ? `${wod.name} \u2014 ${wod.type}${wod.timeCap ? ` (${wod.timeCap})` : ''}: ${wod.description}` : null,
     });
   }
   return exercises;
+}
+
+// Scale WOD prescribed weights to user's equipment limits
+function scaleWodWeight(weight, exerciseId, equipmentDetails) {
+  if (!weight || weight === 'BW' || !equipmentDetails) return weight;
+
+  // Parse the weight — handle "225/155 lb", "95/65 lb", "53/35 lb KB" formats
+  const match = weight.match(/(\d+)(?:\/(\d+))?\s*(?:lb|lbs)?/i);
+  if (!match) return weight;
+
+  const rxWeight = parseInt(match[1]); // Use the heavier (male) RX weight
+  if (!rxWeight) return weight;
+
+  // Determine equipment type from exercise
+  const isBarbell = /deadlift|squat|clean|snatch|jerk|press|thruster/i.test(exerciseId);
+  const isKB = /kb|swing|kettlebell/i.test(exerciseId) || /kb/i.test(weight.toLowerCase());
+
+  if (isBarbell && equipmentDetails.barbell?.maxWeight) {
+    const max = parseFloat(equipmentDetails.barbell.maxWeight);
+    if (rxWeight > max) return `${Math.round(max / 5) * 5} lb (scaled)`;
+  }
+
+  if (isKB && equipmentDetails.kettlebell?.weights) {
+    const kbWeights = equipmentDetails.kettlebell.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0).sort((a, b) => b - a);
+    if (kbWeights.length > 0) {
+      // Find closest available KB weight that doesn't exceed RX
+      const available = kbWeights.filter(w => w <= rxWeight);
+      const bestKB = available.length > 0 ? available[0] : kbWeights[kbWeights.length - 1];
+      if (bestKB !== rxWeight) return `${bestKB} lb KB (scaled)`;
+    }
+  }
+
+  return weight;
 }
 
 function parseWodMovement(movement, scheme, index) {

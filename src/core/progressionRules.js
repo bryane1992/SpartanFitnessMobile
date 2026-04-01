@@ -335,7 +335,7 @@ export function getTempoForExercise(exercise, weekNumber) {
 export function calculateRunParams(weekNumber, phase, totalWeeks, targetDistance) {
   const target = targetDistance || 6.2; // Default to 10K / Spartan Super distance
   const baseDistance = Math.max(1.5, target * 0.25); // Start at 25% of target
-  const peakDistance = target * 1.05; // Build slightly beyond race distance
+  const peakDistance = target * 1.10; // Build beyond race distance — overshoot so race feels manageable
   const progress = Math.min(1, (weekNumber - 1) / Math.max(1, totalWeeks - 3)); // Peak 3 weeks before end
   let distance = baseDistance + (peakDistance - baseDistance) * progress;
 

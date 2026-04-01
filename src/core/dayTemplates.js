@@ -91,6 +91,8 @@ export function buildDayBlocks(dayConfig, phase, sessionMinutes = 60) {
   // Remaining time budget
   let timeLeft = sessionMinutes;
 
+  console.log(`[DayTemplate] Building ${dayConfig.type}: run=${!!dayConfig.run} wod=${!!dayConfig.wod} patterns=${allPatterns.join(',')}`);
+
   // ── WARMUP (always, 8 min) ──
   const warmupPool = WARMUP_POOLS[focus] || WARMUP_POOLS.full;
   blocks.push({
@@ -132,8 +134,39 @@ export function buildDayBlocks(dayConfig, phase, sessionMinutes = 60) {
     timeLeft -= dur;
   }
 
-  // ── SECONDARY / ACCESSORIES (10-12 min) ──
-  if (dayConfig.secondary_patterns && dayConfig.secondary_patterns.length > 0 && timeLeft > 15) {
+  // ── RUN BLOCK (PRIORITY — if day has a run, reserve time FIRST) ──
+  if (dayConfig.run) {
+    const runDur = dayConfig.run.type === 'long_run' ? 30 : 20;
+    blocks.push({
+      name: dayConfig.run.label || 'RUN',
+      type: dayConfig.run.type?.toUpperCase() || 'EASY',
+      duration: `${runDur} min`,
+      isRun: true,
+      hasGps: true,
+      runType: dayConfig.run.type,
+      exerciseCount: 3,
+      muscleGroups: ['cardio'],
+    });
+    timeLeft -= runDur;
+  }
+
+  // ── WOD BLOCK (PRIORITY — conditioning is core to training) ──
+  if (dayConfig.wod) {
+    const wodDur = Math.min(12, Math.max(8, timeLeft - 20));
+    blocks.push({
+      name: 'WOD',
+      type: dayConfig.wod.type || 'AMRAP',
+      duration: `${Math.max(8, wodDur)} min`,
+      isWod: true,
+      exerciseCount: 4,
+      muscleGroups: ['full_body'],
+      wodFilter: dayConfig.wod.filter || {},
+    });
+    timeLeft -= Math.max(8, wodDur);
+  }
+
+  // ── SECONDARY / ACCESSORIES (if time remains) ──
+  if (dayConfig.secondary_patterns && dayConfig.secondary_patterns.length > 0 && timeLeft > 12) {
     const muscleGroups = new Set();
     for (const pattern of dayConfig.secondary_patterns) {
       const muscles = PATTERN_MUSCLES[pattern] || ['full_body'];
@@ -143,17 +176,17 @@ export function buildDayBlocks(dayConfig, phase, sessionMinutes = 60) {
     blocks.push({
       name: 'ACCESSORIES',
       type: 'ISOLATION',
-      duration: '12 min',
+      duration: '10 min',
       exerciseCount: Math.min(3, dayConfig.secondary_patterns.length + 1),
       muscleGroups: Array.from(muscleGroups),
       compoundsOnly: false,
       patterns: dayConfig.secondary_patterns,
     });
-    timeLeft -= 12;
+    timeLeft -= 10;
   }
 
-  // ── ARM FINISHER (8 min, if strategy says so) ──
-  if (dayConfig.arm_finisher && timeLeft > 12) {
+  // ── ARM FINISHER (guaranteed when requested — this is a user priority, not optional) ──
+  if (dayConfig.arm_finisher) {
     blocks.push({
       name: 'ARM BLASTER',
       type: 'SUPERSETS',
@@ -167,8 +200,8 @@ export function buildDayBlocks(dayConfig, phase, sessionMinutes = 60) {
     timeLeft -= 8;
   }
 
-  // ── CORE BLOCK (8 min, if strategy says so) ──
-  if (dayConfig.core_block && timeLeft > 12) {
+  // ── CORE BLOCK (if time remains) ──
+  if (dayConfig.core_block && timeLeft > 10) {
     blocks.push({
       name: 'CORE',
       type: 'CIRCUIT',
@@ -179,37 +212,6 @@ export function buildDayBlocks(dayConfig, phase, sessionMinutes = 60) {
       patterns: ['core'],
     });
     timeLeft -= 8;
-  }
-
-  // ── RUN BLOCK (if day has a run) ──
-  if (dayConfig.run && timeLeft > 10) {
-    const runDur = dayConfig.run.type === 'long_run' ? 35 : 25;
-    blocks.push({
-      name: dayConfig.run.label || 'RUN',
-      type: dayConfig.run.type?.toUpperCase() || 'EASY',
-      duration: `${Math.min(runDur, timeLeft - 6)} min`,
-      isRun: true,
-      hasGps: true,
-      runType: dayConfig.run.type,
-      exerciseCount: 3,
-      muscleGroups: ['cardio'],
-    });
-    timeLeft -= runDur;
-  }
-
-  // ── WOD BLOCK (if day has conditioning) ──
-  if (dayConfig.wod && timeLeft > 8) {
-    const wodDur = Math.min(15, Math.max(8, timeLeft - 6));
-    blocks.push({
-      name: 'WOD',
-      type: dayConfig.wod.type || 'AMRAP',
-      duration: `${wodDur} min`,
-      isWod: true,
-      exerciseCount: 4,
-      muscleGroups: ['full_body'],
-      wodFilter: dayConfig.wod.filter || {},
-    });
-    timeLeft -= wodDur;
   }
 
   // ── COOLDOWN (always, 5-6 min) ──
