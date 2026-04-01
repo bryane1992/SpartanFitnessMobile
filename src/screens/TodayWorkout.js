@@ -381,16 +381,56 @@ export default function TodayWorkout({ navigation }) {
 
 function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress, onNamePress, onRepDropOff }) {
   const isDone = !!exercise.is_completed;
+  const [isExpanded, setIsExpanded] = useState(false);
   const name = String(exercise.name || 'Exercise');
   const sets = String(exercise.sets || '');
   const weight = exercise.weight ? String(exercise.weight) : '';
   const rest = exercise.rest ? String(exercise.rest) : '';
   const swapped = exercise.swapped_from ? ' (swapped)' : '';
 
-  // Parse target reps from prescribed sets (e.g., "4x10" → 10)
+  // Parse target reps and sets from prescribed (e.g., "4x10" → 4 sets of 10)
   const targetReps = parseInt((sets.match(/x(\d+)/) || [])[1]) || 0;
-  const targetSets = parseInt(sets) || 0;
-  const repsHint = targetSets > 1 ? `e.g. ${Array(targetSets).fill(targetReps).join(',')}` : 'Reps';
+  const targetSets = parseInt(sets) || 1;
+
+  // Parse existing per-set data from actual_reps (e.g., "10,9,9,7")
+  const existingReps = (exercise.actual_reps || '').split(',').map(r => r.trim()).filter(Boolean);
+  const [setData, setSetData] = useState(() => {
+    return Array.from({ length: Math.max(targetSets, 1) }, (_, i) => ({
+      reps: existingReps[i] || '',
+      weight: exercise.actual_weight || weight || '',
+    }));
+  });
+
+  // Sync set data back to the exercise log as comma-separated values
+  const syncToLog = (updatedSets) => {
+    const repsStr = updatedSets.map(s => s.reps).filter(Boolean).join(',');
+    const weightStr = updatedSets[0]?.weight || '';
+    onLogChange('reps', repsStr);
+    onLogChange('weight', weightStr);
+
+    // Check for rep drop-off
+    if (targetReps > 0 && onRepDropOff) {
+      const repNums = updatedSets.map(s => parseInt(s.reps)).filter(r => !isNaN(r));
+      if (repNums.length >= 2) {
+        const missedSets = repNums.filter(r => r < targetReps - 1).length;
+        const lastSet = repNums[repNums.length - 1];
+        const lastSetDrop = lastSet / targetReps;
+        if (missedSets >= 2 || lastSetDrop < 0.75) {
+          onRepDropOff({
+            exerciseName: name, exerciseId: exercise.exercise_id,
+            planExerciseId: exercise.id, targetReps, targetSets,
+            actualReps: repNums, weight: exercise.weight,
+          });
+        }
+      }
+    }
+  };
+
+  const updateSet = (index, field, value) => {
+    const updated = [...setData];
+    updated[index] = { ...updated[index], [field]: value };
+    setSetData(updated);
+  };
 
   return (
     <View>
@@ -400,13 +440,17 @@ function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress,
           { borderLeftColor: isDone ? 'rgba(255,255,255,0.08)' : blockColor },
           isDone ? styles.exerciseRowDone : null,
         ]}
-        onPress={onToggle}
+        onPress={() => setIsExpanded(!isExpanded)}
         onLongPress={onLongPress}
       >
-        {/* Checkbox */}
-        <View style={[styles.checkbox, isDone ? { backgroundColor: blockColor, borderColor: 'transparent' } : null]}>
+        {/* Checkbox — tap to complete */}
+        <TouchableOpacity
+          style={[styles.checkbox, isDone ? { backgroundColor: blockColor, borderColor: 'transparent' } : null]}
+          onPress={onToggle}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           {isDone ? <Text style={styles.checkIcon}>{'\u2713'}</Text> : null}
-        </View>
+        </TouchableOpacity>
 
         {/* Exercise info */}
         <View style={styles.exerciseContent}>
@@ -426,52 +470,53 @@ function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress,
         </TouchableOpacity>
       </TouchableOpacity>
 
-      {/* Log inputs - shown when checked */}
-      {isDone ? (
-        <View style={styles.logRow}>
+      {/* Per-set rows — shown when expanded (tap exercise row to expand) */}
+      {isExpanded ? (
+        <View style={styles.setLogContainer}>
+          {setData.map((s, i) => {
+            const repNum = parseInt(s.reps);
+            const hitTarget = !isNaN(repNum) && repNum >= targetReps;
+            const missed = !isNaN(repNum) && repNum < targetReps - 1;
+            return (
+              <View key={i} style={styles.setRow}>
+                <Text style={styles.setLabel}>{`SET ${i + 1}`}</Text>
+                <TextInput
+                  style={[styles.setInput, hitTarget && styles.setInputHit, missed && styles.setInputMiss]}
+                  placeholder={`${targetReps}`}
+                  placeholderTextColor="rgba(255,255,255,0.15)"
+                  keyboardType="number-pad"
+                  defaultValue={s.reps}
+                  onEndEditing={(e) => {
+                    updateSet(i, 'reps', e.nativeEvent.text);
+                    // Sync after last set
+                    const updated = [...setData];
+                    updated[i] = { ...updated[i], reps: e.nativeEvent.text };
+                    syncToLog(updated);
+                  }}
+                />
+                <Text style={styles.setDivider}>@</Text>
+                <TextInput
+                  style={styles.setInput}
+                  placeholder={weight.replace(' lb', '')}
+                  placeholderTextColor="rgba(255,255,255,0.15)"
+                  keyboardType="number-pad"
+                  defaultValue={s.weight.replace(' lb', '')}
+                  onEndEditing={(e) => {
+                    updateSet(i, 'weight', e.nativeEvent.text);
+                    const updated = [...setData];
+                    updated[i] = { ...updated[i], weight: e.nativeEvent.text };
+                    syncToLog(updated);
+                  }}
+                />
+                <Text style={styles.setUnit}>lb</Text>
+              </View>
+            );
+          })}
+          {/* Notes row */}
           <TextInput
-            style={styles.logInput}
-            placeholder={repsHint}
+            style={styles.setNoteInput}
+            placeholder="Notes..."
             placeholderTextColor="rgba(255,255,255,0.15)"
-            defaultValue={String(exercise.actual_reps || '')}
-            onEndEditing={(e) => {
-              const text = e.nativeEvent.text;
-              onLogChange('reps', text);
-              // Detect rep drop-off
-              if (text && targetReps > 0 && text.includes(',') && onRepDropOff) {
-                const repSets = text.split(',').map(r => parseInt(r.trim())).filter(r => !isNaN(r));
-                if (repSets.length >= 2) {
-                  const missedSets = repSets.filter(r => r < targetReps - 1).length;
-                  const lastSet = repSets[repSets.length - 1];
-                  const lastSetDrop = lastSet / targetReps;
-                  if (missedSets >= 2 || lastSetDrop < 0.75) {
-                    onRepDropOff({
-                      exerciseName: name,
-                      exerciseId: exercise.exercise_id,
-                      planExerciseId: exercise.id,
-                      targetReps,
-                      targetSets,
-                      actualReps: repSets,
-                      weight: exercise.weight,
-                      isCompound: exercise.is_compound,
-                      category: exercise.category,
-                    });
-                  }
-                }
-              }
-            }}
-          />
-          <TextInput
-            style={styles.logInput}
-            placeholder="Weight"
-            placeholderTextColor="rgba(255,255,255,0.2)"
-            defaultValue={String(exercise.actual_weight || '')}
-            onEndEditing={(e) => onLogChange('weight', e.nativeEvent.text)}
-          />
-          <TextInput
-            style={[styles.logInput, { flex: 1.5 }]}
-            placeholder="Note"
-            placeholderTextColor="rgba(255,255,255,0.2)"
             defaultValue={String(exercise.notes || '')}
             onEndEditing={(e) => onLogChange('notes', e.nativeEvent.text)}
           />
@@ -550,6 +595,76 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
   },
+  // Per-set logging
+  setLogContainer: {
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    marginHorizontal: 12,
+    marginTop: -2,
+    marginBottom: 4,
+    borderRadius: 0,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: 'rgba(255,255,255,0.05)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  setRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+  },
+  setLabel: {
+    color: 'rgba(255,255,255,0.25)',
+    fontSize: 9,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+    letterSpacing: 1,
+    width: 42,
+  },
+  setInput: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+    width: 55,
+    textAlign: 'center',
+  },
+  setInputHit: {
+    borderColor: 'rgba(1,255,112,0.3)',
+  },
+  setInputMiss: {
+    borderColor: 'rgba(255,65,54,0.3)',
+  },
+  setDivider: {
+    color: 'rgba(255,255,255,0.15)',
+    fontSize: 12,
+    marginHorizontal: 6,
+  },
+  setUnit: {
+    color: 'rgba(255,255,255,0.2)',
+    fontSize: 10,
+    fontFamily: 'monospace',
+    marginLeft: 4,
+  },
+  setNoteInput: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 11,
+    fontFamily: 'monospace',
+    marginTop: 4,
+  },
+
   adjustmentToast: {
     backgroundColor: 'rgba(1,255,112,0.12)',
     borderWidth: 1,
