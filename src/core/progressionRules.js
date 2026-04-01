@@ -276,11 +276,12 @@ function capToEquipment(weight, exercise, equipmentDetails) {
 // Sets, Reps & Tempo
 // ═══════════════════════════════════════════════════════════════
 
-export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal) {
+export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal, sessionMinutes) {
   const bodyComp = getBodyCompParams(bodyCompGoal);
   const isCompound = exercise.is_compound;
+  const session = sessionMinutes || 60;
 
-  // Race prep: fixed reduced volume — OVERRIDE mesocycle cycling
+  // Race prep: fixed reduced volume
   if (phase === 'race_prep') {
     const sets = isCompound ? 3 : 2;
     const reps = isCompound ? 5 : 8;
@@ -304,6 +305,10 @@ export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal) {
 
   // Apply mesocycle volume modifier (capped at setRange max)
   sets = Math.min(setRange[1], Math.max(2, Math.round(sets * mesoPhase.volumeMultiplier)));
+
+  // Session duration cap: 60-min or less sessions max 3 sets per exercise
+  if (session <= 60 && sets > 3) sets = 3;
+  if (session <= 45 && sets > 2) sets = 2;
 
   // Deload: fewer sets, lower reps
   if (isDeloadWeek(weekNumber)) {

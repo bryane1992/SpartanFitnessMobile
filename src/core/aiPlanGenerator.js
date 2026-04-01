@@ -629,7 +629,7 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
     usedIds.add(item.exercise.id);
 
     const ex = item.exercise;
-    const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal);
+    const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal, userProfile.sessionDuration);
     const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
 
     selected.push({
@@ -654,7 +654,7 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
     const barbellOption = scored.find(s => s.exercise.category === 'barbell' && !usedToday.has(s.exercise.id));
     if (barbellOption && selected.length > 0) {
       const ex = barbellOption.exercise;
-      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal);
+      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal, userProfile.sessionDuration);
       const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
       selected[selected.length - 1] = { id: ex.id, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bodyCompParams.restSeconds, notes: null, category: ex.category };
     }
@@ -666,7 +666,7 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
     const pullUpOption = scored.find(s => /pull_ups|chin_ups/i.test(s.exercise.id) && !usedToday.has(s.exercise.id));
     if (pullUpOption && selected.length > 0) {
       const ex = pullUpOption.exercise;
-      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal);
+      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal, userProfile.sessionDuration);
       const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
       selected[selected.length - 1] = { id: ex.id, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bodyCompParams.restSeconds, notes: null, category: ex.category };
     }
@@ -677,7 +677,29 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
     const carryOption = scored.find(s => /farmer_walk|kb_carry|overhead_carry|bucket_carry|sandbag_carry/i.test(s.exercise.id) && !usedToday.has(s.exercise.id));
     if (carryOption && selected.length > 0) {
       const ex = carryOption.exercise;
-      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal);
+      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal, userProfile.sessionDuration);
+      const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
+      selected[selected.length - 1] = { id: ex.id, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bodyCompParams.restSeconds, notes: null, category: ex.category };
+    }
+  }
+
+  // Squat constraint: if patterns include squat, at least one exercise must be a squat pattern
+  if (patterns?.includes('squat') && !selected.some(e => /squat|leg.?press|lunge|step.?up|split/i.test(e.id))) {
+    const squatOption = scored.find(s => /squat|leg_press|lunge|step_ups|split/i.test(s.exercise.id) && !usedToday.has(s.exercise.id));
+    if (squatOption && selected.length > 0) {
+      const ex = squatOption.exercise;
+      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal, userProfile.sessionDuration);
+      const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
+      selected[selected.length - 1] = { id: ex.id, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bodyCompParams.restSeconds, notes: null, category: ex.category };
+    }
+  }
+
+  // Vertical pull constraint: if patterns include vertical_pull and no pull-ups allowed, ensure lat pulldown
+  if (!canPull && patterns?.some(p => p === 'vertical_pull' || p === 'pull_up') && !selected.some(e => /lat_pulldown|pulldown|band_assisted/i.test(e.id))) {
+    const latOption = scored.find(s => /lat_pulldown|band_assisted/i.test(s.exercise.id) && !usedToday.has(s.exercise.id));
+    if (latOption && selected.length > 0) {
+      const ex = latOption.exercise;
+      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal, userProfile.sessionDuration);
       const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
       selected[selected.length - 1] = { id: ex.id, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bodyCompParams.restSeconds, notes: null, category: ex.category };
     }

@@ -106,6 +106,9 @@ export function getAbilityScore(exercise, userProfile) {
   // Hanging exercises require grip strength — exclude for heavy beginners
   if (/toes.?to.?bar|hanging|knee.?raise/i.test(name) && experience === 'beginner' && bodyWeight > 180) return -50;
 
+  // Inverted row is partial bodyweight — penalize for heavy beginners, prefer cable/machine row
+  if (/inverted.?row/i.test(name) && experience === 'beginner' && bodyWeight > 200) return -30;
+
   // Barbell compounds for beginners — penalize but don't hard exclude (goblet squat etc should win via scoring)
   if (/^bench_press$|^back_squat$|^front_squat$|^deadlift$|^overhead_press$/i.test(id) && !canBB) return -30;
 
