@@ -14,6 +14,7 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import useWorkoutStore from '../store/useWorkoutStore';
 import { initDatabase, deleteAllPlanData, syncExerciseDb, getExerciseCount, exportPlanAsText } from '../data/database';
+import { testArchetypes, TEST_PROFILES, getTestProfile } from '../core/testProfiles';
 
 const STYLE_LABELS = {
   crossfit: 'CrossFit',
@@ -325,6 +326,47 @@ export default function Settings({ navigation }) {
             <View style={styles.actionContent}>
               <Text style={styles.actionLabel}>Redo Onboarding</Text>
               <Text style={styles.actionDesc}>Change all preferences from scratch</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Dev Tools */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Dev Tools</Text>
+
+          <TouchableOpacity style={styles.actionButton} onPress={() => {
+            const results = testArchetypes();
+            const passCount = results.filter(r => r.passed).length;
+            Alert.alert('Archetype Tests', `${passCount}/${results.length} passed. Check console for details.`);
+          }}>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionLabel}>Test Archetypes</Text>
+              <Text style={styles.actionDesc}>Run archetype detection on 7 test profiles</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.actionButton} onPress={() => {
+            const keys = Object.keys(TEST_PROFILES);
+            Alert.alert('Generate Test Plan', 'Pick a profile to generate:', keys.map(key => ({
+              text: TEST_PROFILES[key].label,
+              onPress: async () => {
+                const profile = getTestProfile(key);
+                if (!profile) return;
+                try {
+                  Alert.alert('Generating...', `Building plan for: ${TEST_PROFILES[key].label}`);
+                  const { generateAIPlan } = require('../core/aiPlanGenerator');
+                  const result = await generateAIPlan(profile, (status) => console.log(`[Test] ${status}`));
+                  Alert.alert('Done', `Plan "${result.planName}" generated: ${result.totalWeeks} weeks`);
+                } catch (e) {
+                  Alert.alert('Error', e.message);
+                  console.error('Test plan error:', e);
+                }
+              },
+            })).concat({ text: 'Cancel', style: 'cancel' }));
+          }}>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionLabel}>Generate Test Plan</Text>
+              <Text style={styles.actionDesc}>Build a plan for a test profile (check console)</Text>
             </View>
           </TouchableOpacity>
         </View>
