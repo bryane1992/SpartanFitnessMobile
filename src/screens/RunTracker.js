@@ -99,6 +99,10 @@ export default function RunTracker({ route, navigation }) {
   const lastPosition = useRef(null);
   const segmentDistance = useRef(0);
   const timerRef = useRef(null);
+  const runStartTime = useRef(null);        // absolute timestamp when run started
+  const segmentStartTime = useRef(null);    // absolute timestamp when current segment started
+  const pausedDuration = useRef(0);         // total seconds spent paused
+  const pauseStartTime = useRef(null);      // when current pause started
 
   const [planSegments, setPlanSegments] = useState(null);
 
@@ -225,15 +229,25 @@ export default function RunTracker({ route, navigation }) {
     };
   }, []);
 
-  // Timer
+  // Timer — uses real timestamps so it survives screen-off/background
   useEffect(() => {
     if (isRunning && !isPaused) {
+      if (!runStartTime.current) runStartTime.current = Date.now();
+      if (!segmentStartTime.current) segmentStartTime.current = Date.now();
+      if (pauseStartTime.current) {
+        // Resuming from pause — add pause duration
+        pausedDuration.current += (Date.now() - pauseStartTime.current) / 1000;
+        pauseStartTime.current = null;
+      }
       timerRef.current = setInterval(() => {
-        setTotalTime(t => t + 1);
-        setSegmentTime(t => t + 1);
+        const elapsed = (Date.now() - runStartTime.current) / 1000 - pausedDuration.current;
+        const segElapsed = (Date.now() - segmentStartTime.current) / 1000;
+        setTotalTime(Math.round(elapsed));
+        setSegmentTime(Math.round(segElapsed));
       }, 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (isPaused && !pauseStartTime.current) pauseStartTime.current = Date.now();
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRunning, isPaused]);
@@ -265,25 +279,47 @@ export default function RunTracker({ route, navigation }) {
   };
 
   const startGPS = async () => {
+    // Request foreground first, then background for screen-off tracking
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission Denied', 'Location access is required for run tracking.');
       return false;
     }
+    // Request background permission so tracking continues with screen off
+    const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync().catch(() => ({ status: 'denied' }));
+    if (bgStatus !== 'granted') {
+      console.log('[RunTracker] Background location not granted — tracking may pause with screen off');
+    }
 
     locationSub.current = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.High, timeInterval: 1000, distanceInterval: 3 },
+      {
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: 2000,      // every 2 seconds (was 1s — too frequent adds noise)
+        distanceInterval: 5,      // every 5 meters (was 3m — too sensitive)
+      },
       (loc) => {
+        const accuracy = loc.coords.accuracy || 999;
+
+        // Filter out inaccurate readings (GPS noise when standing still or poor signal)
+        if (accuracy > 20) return; // ignore readings with >20m accuracy radius
+
         if (lastPosition.current) {
           const dist = calculateDistance(lastPosition.current.coords, loc.coords);
-          if (dist < 0.5) { // ignore GPS jumps > 0.5 mi
-            setTotalDistance(d => d + dist);
-            segmentDistance.current += dist;
+          const timeDelta = (loc.timestamp - (lastPosition.current.timestamp || 0)) / 1000;
+
+          // Filter: ignore GPS jumps > 0.1 mi (teleports) and micro-jitter < 0.002 mi (~3m)
+          if (dist < 0.1 && dist > 0.002) {
+            // Speed sanity check: if implied speed > 20 mph, it's probably GPS noise
+            const impliedSpeedMph = timeDelta > 0 ? (dist / timeDelta) * 3600 : 0;
+            if (impliedSpeedMph < 20) {
+              setTotalDistance(d => d + dist);
+              segmentDistance.current += dist;
+            }
           }
         }
         lastPosition.current = loc;
-        setCurrentSpeed(loc.coords.speed ? loc.coords.speed * 2.237 : 0);
-        setGpsAccuracy(loc.coords.accuracy);
+        setCurrentSpeed(loc.coords.speed && loc.coords.speed > 0 ? loc.coords.speed * 2.237 : 0);
+        setGpsAccuracy(accuracy);
       }
     );
     return true;
