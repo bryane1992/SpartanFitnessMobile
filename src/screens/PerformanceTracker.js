@@ -29,6 +29,17 @@ const RUN_TYPE_COLORS = {
   RACE_PACE: '#B10DC9',
 };
 
+// Format per-set reps for display: "10,9,9,7" → "10/9/9/7" with target comparison
+function formatRepsDisplay(actualReps, prescribedSets) {
+  if (!actualReps) return String(prescribedSets || '');
+  const reps = String(actualReps);
+  if (reps.includes(',')) {
+    // Per-set data — show as slash-separated
+    return reps.split(',').map(r => r.trim()).join('/');
+  }
+  return reps;
+}
+
 function formatTime(seconds) {
   if (!seconds || seconds <= 0) return '--:--';
   const h = Math.floor(seconds / 3600);
@@ -189,13 +200,21 @@ export default function PerformanceTracker() {
                 {isLoadingExercise ? (
                   <ActivityIndicator size="small" color="#FF4136" />
                 ) : (
-                  selectedExerciseHistory.map((entry, i) => (
-                    <View key={i} style={styles.historyRow}>
-                      <Text style={styles.historyDate}>{String(entry.date || '')}</Text>
-                      <Text style={styles.historyWeight}>{String(entry.actual_weight || '--')}</Text>
-                      <Text style={styles.historyReps}>{String(entry.actual_reps || entry.sets || '')}</Text>
-                    </View>
-                  ))
+                  selectedExerciseHistory.map((entry, i) => {
+                    const repsDisplay = formatRepsDisplay(entry.actual_reps, entry.sets);
+                    const targetReps = parseInt((entry.sets || '').match(/x(\d+)/)?.[1]) || 0;
+                    const actualNums = (entry.actual_reps || '').split(',').map(r => parseInt(r.trim())).filter(r => !isNaN(r));
+                    const allHit = targetReps > 0 && actualNums.length > 0 && actualNums.every(r => r >= targetReps);
+                    const anyMissed = targetReps > 0 && actualNums.some(r => r < targetReps - 1);
+                    return (
+                      <View key={i} style={styles.historyRow}>
+                        <Text style={styles.historyDate}>{entry.week_number ? `Wk${entry.week_number}` : String(entry.date || '').slice(5)}</Text>
+                        <Text style={styles.historyWeight}>{String(entry.actual_weight || '--')}</Text>
+                        <Text style={[styles.historyReps, allHit && { color: '#01FF70' }, anyMissed && { color: '#FF4136' }]}>{repsDisplay}</Text>
+                        <Text style={styles.historyTarget}>{entry.sets || ''}</Text>
+                      </View>
+                    );
+                  })
                 )}
               </View>
             ) : null}
@@ -359,13 +378,21 @@ export default function PerformanceTracker() {
                 {isLoadingExercise ? (
                   <ActivityIndicator size="small" color="#FF4136" />
                 ) : (
-                  selectedExerciseHistory.map((entry, i) => (
-                    <View key={i} style={styles.historyRow}>
-                      <Text style={styles.historyDate}>{String(entry.date || '')}</Text>
-                      <Text style={styles.historyWeight}>{String(entry.actual_weight || '--')}</Text>
-                      <Text style={styles.historyReps}>{String(entry.actual_reps || entry.sets || '')}</Text>
-                    </View>
-                  ))
+                  selectedExerciseHistory.map((entry, i) => {
+                    const repsDisplay = formatRepsDisplay(entry.actual_reps, entry.sets);
+                    const targetReps = parseInt((entry.sets || '').match(/x(\d+)/)?.[1]) || 0;
+                    const actualNums = (entry.actual_reps || '').split(',').map(r => parseInt(r.trim())).filter(r => !isNaN(r));
+                    const allHit = targetReps > 0 && actualNums.length > 0 && actualNums.every(r => r >= targetReps);
+                    const anyMissed = targetReps > 0 && actualNums.some(r => r < targetReps - 1);
+                    return (
+                      <View key={i} style={styles.historyRow}>
+                        <Text style={styles.historyDate}>{entry.week_number ? `Wk${entry.week_number}` : String(entry.date || '').slice(5)}</Text>
+                        <Text style={styles.historyWeight}>{String(entry.actual_weight || '--')}</Text>
+                        <Text style={[styles.historyReps, allHit && { color: '#01FF70' }, anyMissed && { color: '#FF4136' }]}>{repsDisplay}</Text>
+                        <Text style={styles.historyTarget}>{entry.sets || ''}</Text>
+                      </View>
+                    );
+                  })
                 )}
               </View>
             ) : null}
@@ -403,7 +430,7 @@ export default function PerformanceTracker() {
                       <View key={i} style={styles.historyRow}>
                         <Text style={styles.historyDate}>{String(entry.date || '')}</Text>
                         <Text style={styles.historyWeight}>{String(entry.actual_weight || '--')}</Text>
-                        <Text style={styles.historyReps}>{String(entry.actual_reps || entry.sets || '')}</Text>
+                        <Text style={styles.historyReps}>{formatRepsDisplay(entry.actual_reps, entry.sets)}</Text>
                       </View>
                     ))
                   )}
@@ -531,6 +558,7 @@ const styles = StyleSheet.create({
   historyDate: { color: 'rgba(255,255,255,0.3)', fontSize: 10, fontFamily: 'monospace', width: 85 },
   historyWeight: { color: '#FF4136', fontSize: 13, fontWeight: '700', fontFamily: 'monospace', width: 65 },
   historyReps: { color: 'rgba(255,255,255,0.4)', fontSize: 11, fontFamily: 'monospace', flex: 1 },
+  historyTarget: { color: 'rgba(255,255,255,0.15)', fontSize: 9, fontFamily: 'monospace', width: 40, textAlign: 'right' },
 
   // Exercise Search
   searchInput: { backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, color: '#fff', fontSize: 13, fontFamily: 'monospace', marginBottom: 8 },

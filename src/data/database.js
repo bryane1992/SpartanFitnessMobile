@@ -827,8 +827,8 @@ export async function getWorkoutStats() {
 export async function getExerciseHistory(exerciseId, limit = 30) {
   const database = await getDatabase();
   return database.getAllAsync(
-    `SELECT pe.actual_weight, pe.actual_reps, pe.notes, pe.sets,
-            pd.date, pd.title as workout_title
+    `SELECT pe.actual_weight, pe.actual_reps, pe.notes, pe.sets, pe.weight as prescribed_weight,
+            pe.reps as prescribed_reps, pd.date, pd.title as workout_title, pd.week_number
      FROM plan_exercises pe
      JOIN plan_blocks pb ON pb.id = pe.plan_block_id
      JOIN plan_days pd ON pd.id = pb.plan_day_id
