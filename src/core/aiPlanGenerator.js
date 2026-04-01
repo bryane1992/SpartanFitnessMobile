@@ -196,41 +196,32 @@ function validateStrategy(raw, userProfile) {
     day.secondary_patterns = (day.secondary_patterns || []).filter(p => VALID_PATTERNS.includes(p));
   }
 
-  // Check if user explicitly can't or doesn't want to run
+  // Determine who should and shouldn't have runs
   const goals = (userProfile.goals || [userProfile.goal || '']).join(' ').toLowerCase();
   const notes = (userProfile.additionalNotes || '').toLowerCase();
-  const cantRun = /can'?t run|no running|don'?t run|unable to run|hate running|avoid running/i.test(notes);
-  const excludesRunning = (userProfile.exclusions || []).includes('running');
-  const noRunning = cantRun || excludesRunning;
-
-  // Determine archetype from the validation context
   const arch = detectArchetype(userProfile);
 
-  // Remove all run blocks if user can't/won't run
-  if (noRunning) {
+  const cantRun = /can'?t run|no running|don'?t run|unable to run|hate running|avoid running/i.test(notes);
+  const excludesRunning = (userProfile.exclusions || []).includes('running');
+  const hasExplicitRunGoal = /endurance|athletic|spartan|race|marathon|10k|5k/i.test(goals + ' ' + notes);
+
+  // Determine if this user should have run blocks
+  // YES: has an explicit endurance/race goal AND doesn't explicitly can't run
+  // NO: everyone else — runs are opt-in, not default
+  const shouldHaveRuns = hasExplicitRunGoal && !cantRun && !excludesRunning;
+
+  // Remove ALL run blocks if user shouldn't have them
+  if (!shouldHaveRuns) {
     for (const day of s.dayConfigs) {
       if (day.run) {
-        // Replace run with walking or cardio machine work
         day.run = null;
-        // Add a WOD or cardio block instead if none exists
         if (!day.wod) day.wod = { type: 'CIRCUIT' };
       }
     }
+    console.log('[AI Plan] Runs removed — no explicit run goal or user excluded running');
   }
 
-  // For overweight beginners without explicit run goals, replace runs with walks
-  if (arch.archetype === 'overweight_beginner' && !noRunning) {
-    for (const day of s.dayConfigs) {
-      if (day.run && day.run.type !== 'easy') {
-        day.run = { type: 'easy', label: 'WALKING' };
-      }
-    }
-  }
-
-  // Ensure runs exist on at least 2 days for endurance/race goals (only if running allowed)
-  const hasEndurance = !noRunning && /endurance|athletic|spartan|race|marathon|10k|5k/i.test(goals + ' ' + notes);
-
-  if (hasEndurance) {
+  if (shouldHaveRuns) {
     const runDays = s.dayConfigs.filter(d => d.run);
     if (runDays.length < 2) {
       const midIdx = Math.floor(daysPerWeek / 2);
