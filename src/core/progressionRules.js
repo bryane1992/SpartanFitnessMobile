@@ -161,13 +161,16 @@ export function getExperienceMultiplier(experience) {
 // Weight Calculation with Equipment Awareness
 // ═══════════════════════════════════════════════════════════════
 
-export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, experience, equipmentDetails) {
-  const baseWeight = parseFloat(exercise.default_weight) || 0;
-  if (baseWeight === 0 || exercise.default_weight === 'BW') return exercise.default_weight;
+export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, experience, equipmentDetails, workingWeights) {
+  const seedWeight = parseFloat(exercise.default_weight) || 0;
+  if (seedWeight === 0 || exercise.default_weight === 'BW') return exercise.default_weight;
+
+  // Use user's working weights when available — much better than seed defaults
+  const baseWeight = getUserBaseWeight(exercise, workingWeights) || seedWeight;
 
   const bodyComp = getBodyCompParams(bodyCompGoal);
   const mesoPhase = getMesocyclePhase(weekNumber);
-  const expMultiplier = getExperienceMultiplier(experience);
+  const expMultiplier = workingWeights ? 1.0 : getExperienceMultiplier(experience); // Skip exp scaling if we have real weights
 
   // Weekly progression: +2.5% per week for compounds, +1.5% for isolation
   const weeklyProgression = exercise.is_compound ? 1.025 : 1.015;
@@ -179,9 +182,9 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
     * expMultiplier
     * weekProgression;
 
-  // Deload: reduce by 40%
+  // Deload: reduce by 30% (not 40% — keep enough stimulus)
   if (isDeloadWeek(weekNumber)) {
-    weight *= 0.6;
+    weight *= 0.7;
   }
 
   // Round to nearest 5 lbs
@@ -274,18 +277,24 @@ export function getTempoForExercise(exercise, weekNumber) {
 // Run Parameters
 // ═══════════════════════════════════════════════════════════════
 
-export function calculateRunParams(weekNumber, phase, totalWeeks) {
-  const mesoPhase = getMesocyclePhase(weekNumber);
+export function calculateRunParams(weekNumber, phase, totalWeeks, targetDistance) {
+  const target = targetDistance || 6.2; // Default to 10K / Spartan Super distance
+  const baseDistance = Math.max(1.5, target * 0.25); // Start at 25% of target
+  const peakDistance = target * 1.05; // Build slightly beyond race distance
+  const progress = Math.min(1, (weekNumber - 1) / Math.max(1, totalWeeks - 3)); // Peak 3 weeks before end
+  let distance = baseDistance + (peakDistance - baseDistance) * progress;
 
-  const baseDistance = 2;
-  const maxDistance = 6.5;
-  const progress = Math.min(1, (weekNumber - 1) / (totalWeeks - 1));
-  let distance = baseDistance + (maxDistance - baseDistance) * progress;
+  // Race prep: taper down but not below 50% of target
+  if (phase === 'race_prep') {
+    const weeksLeft = totalWeeks - weekNumber;
+    distance = target * (0.50 + weeksLeft * 0.08); // Week before race = ~50%, earlier = ~65%
+  }
 
-  if (phase === 'race_prep') distance *= 0.85;
-  if (isDeloadWeek(weekNumber)) distance *= 0.7;
+  // Deload: 70% of current progression (not 60%)
+  if (isDeloadWeek(weekNumber)) distance *= 0.70;
 
-  distance = Math.round(distance * 10) / 10;
+  // Round to nearest 0.5 for easy measurement
+  distance = Math.round(distance * 2) / 2;
 
   const intervals = weekNumber <= 4 ? 4 : weekNumber <= 8 ? 6 : weekNumber <= 12 ? 8 : 6;
 
@@ -299,6 +308,67 @@ export function calculateRunParams(weekNumber, phase, totalWeeks) {
 // ═══════════════════════════════════════════════════════════════
 // RPE Autoregulation
 // ═══════════════════════════════════════════════════════════════
+
+// Map exercise to user's working weight by movement pattern
+// workingWeights = { bench: 110, squat: 135, deadlift: 155, overhead_press: 75, row: 95 }
+// Returns the appropriate working weight scaled by movement similarity
+function getUserBaseWeight(exercise, workingWeights) {
+  if (!workingWeights) return null;
+  const name = (exercise.name || '').toLowerCase();
+  const id = (exercise.id || '').toLowerCase();
+
+  // Direct matches — use the exact working weight (it's their 8-10RM)
+  if (/^bench\s*press$|^bench_press$/.test(id)) return parseFloat(workingWeights.bench) || null;
+  if (/^back\s*squat$|^back_squat$/.test(id)) return parseFloat(workingWeights.squat) || null;
+  if (/^deadlift$/.test(id)) return parseFloat(workingWeights.deadlift) || null;
+  if (/^overhead_press$|^ohp$/.test(id)) return parseFloat(workingWeights.overhead_press) || null;
+  if (/^barbell_row$/.test(id)) return parseFloat(workingWeights.row) || null;
+
+  // Scaled matches — related exercises as % of the primary
+  const bench = parseFloat(workingWeights.bench) || 0;
+  const squat = parseFloat(workingWeights.squat) || 0;
+  const dl = parseFloat(workingWeights.deadlift) || 0;
+  const ohp = parseFloat(workingWeights.overhead_press) || 0;
+  const row = parseFloat(workingWeights.row) || 0;
+
+  // Bench variants
+  if (/incline.*bench|incline.*press/i.test(name)) return bench * 0.75 || null;
+  if (/decline.*bench/i.test(name)) return bench * 0.90 || null;
+  if (/db.*bench|dumbbell.*bench|db.*press/i.test(name)) return bench * 0.35 || null; // per hand
+  if (/floor\s*press/i.test(name)) return bench * 0.85 || null;
+  if (/db.*fly|chest\s*fly/i.test(name)) return bench * 0.25 || null;
+
+  // Squat variants
+  if (/front\s*squat/i.test(name)) return squat * 0.80 || null;
+  if (/goblet/i.test(name)) return squat * 0.40 || null;
+  if (/split\s*squat|lunge|step.?up|bulgarian/i.test(name)) return squat * 0.35 || null; // per leg
+
+  // Deadlift variants
+  if (/sumo/i.test(name)) return dl * 0.95 || null;
+  if (/romanian|rdl|stiff/i.test(name)) return dl * 0.65 || null;
+  if (/trap\s*bar/i.test(name)) return dl * 0.90 || null;
+  if (/hip\s*thrust/i.test(name)) return dl * 0.75 || null;
+
+  // Overhead variants
+  if (/push\s*press/i.test(name)) return ohp * 1.15 || null;
+  if (/db.*shoulder|db.*ohp|db.*overhead/i.test(name)) return ohp * 0.35 || null;
+  if (/lateral\s*raise/i.test(name)) return ohp * 0.20 || null;
+
+  // Row variants
+  if (/db.*row|dumbbell.*row/i.test(name)) return row * 0.40 || null;
+
+  // Olympic lifts — scale from deadlift
+  if (/power\s*clean|hang.*clean/i.test(name)) return dl * 0.55 || null;
+  if (/clean.*jerk/i.test(name)) return dl * 0.50 || null;
+  if (/snatch/i.test(name)) return dl * 0.45 || null;
+  if (/push\s*jerk/i.test(name)) return ohp * 1.25 || null;
+
+  // Arms
+  if (/curl/i.test(name)) return bench * 0.20 || null;
+  if (/tricep|skull|pushdown/i.test(name)) return bench * 0.25 || null;
+
+  return null;
+}
 
 export function adjustWeightByRpe(currentWeight, rpe, targetRpe = 8) {
   // RPE feedback: Too Easy (5-6), Just Right (7-8), Tough (9), Failed (10)

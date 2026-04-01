@@ -162,7 +162,7 @@ export default function TodayWorkout({ navigation }) {
               <TouchableOpacity style={styles.blockHeader} onPress={() => toggleBlock(blockIndex)}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.blockName}>{String(block.name || '')}</Text>
-                  <Text style={styles.blockType}>{`${block.type || ''} \u2022 ${block.time_cap || ''}${isAmrap ? ' \u2022 AMRAP' : ''}`}</Text>
+                  <Text style={styles.blockType}>{`${block.type || ''}${isAmrap ? ' \u2022 AMRAP' : ''}`}</Text>
                 </View>
                 <View style={styles.blockRight}>
                   {hasGps ? (
@@ -337,7 +337,7 @@ function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress,
         <View style={styles.logRow}>
           <TextInput
             style={styles.logInput}
-            placeholder="Actual"
+            placeholder="Reps"
             placeholderTextColor="rgba(255,255,255,0.2)"
             defaultValue={String(exercise.actual_reps || '')}
             onEndEditing={(e) => onLogChange('reps', e.nativeEvent.text)}

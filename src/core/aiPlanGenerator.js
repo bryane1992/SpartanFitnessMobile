@@ -115,14 +115,47 @@ const WARMUP_IDS = [
   'arm_circles', 'inchworm',
 ];
 
-// Safe cooldown exercises
-const COOLDOWN_EXERCISES = [
-  { id: 'hip_flexor_stretch', name: 'Hip Flexor Stretch', sets: '1', reps: '60s each', weight: 'BW' },
-  { id: 'pigeon_pose', name: 'Pigeon Pose', sets: '1', reps: '60s each', weight: 'BW' },
-  { id: 'shoulder_stretch', name: 'Shoulder Stretch', sets: '1', reps: '45s each', weight: 'BW' },
-  { id: 'hamstring_stretch', name: 'Hamstring Stretch', sets: '1', reps: '45s each', weight: 'BW' },
-  { id: 'thoracic_rotation', name: 'Thoracic Rotation', sets: '1', reps: '30s each', weight: 'BW' },
-];
+// Cooldown exercises mapped by body region — pick stretches that match the day's work
+const COOLDOWN_BY_FOCUS = {
+  lower: [
+    { id: 'hip_flexor_stretch', sets: '1', reps: '60s each', weight: 'BW' },
+    { id: 'pigeon_pose', sets: '1', reps: '60s each', weight: 'BW' },
+    { id: 'hamstring_stretch', sets: '1', reps: '45s each', weight: 'BW' },
+  ],
+  upper: [
+    { id: 'shoulder_stretch', sets: '1', reps: '45s each', weight: 'BW' },
+    { id: 'thoracic_rotation', sets: '1', reps: '30s each', weight: 'BW' },
+    { id: 'pvc_pass_throughs', sets: '1', reps: '10', weight: 'Shoulder mobility' },
+  ],
+  full: [
+    { id: 'hip_flexor_stretch', sets: '1', reps: '60s each', weight: 'BW' },
+    { id: 'shoulder_stretch', sets: '1', reps: '45s each', weight: 'BW' },
+    { id: 'thoracic_rotation', sets: '1', reps: '30s each', weight: 'BW' },
+    { id: 'hamstring_stretch', sets: '1', reps: '45s each', weight: 'BW' },
+  ],
+  run: [
+    { id: 'hip_flexor_stretch', sets: '1', reps: '60s each', weight: 'BW' },
+    { id: 'hamstring_stretch', sets: '1', reps: '60s each', weight: 'BW' },
+    { id: 'pigeon_pose', sets: '1', reps: '60s each', weight: 'BW' },
+    { id: 'samson_stretch', sets: '1', reps: '30s each', weight: 'BW' },
+  ],
+};
+
+// Map day template types to cooldown focus
+function getCooldownForDay(dayType) {
+  const FOCUS_MAP = {
+    lower_power: 'lower',
+    upper_push_pull: 'upper',
+    sprint_conditioning: 'run',
+    olympic_power: 'full',
+    endurance_metabolic: 'run',
+    strength: 'full',
+    wod_focus: 'full',
+    run_focus: 'run',
+    obstacle: 'full',
+  };
+  return COOLDOWN_BY_FOCUS[FOCUS_MAP[dayType] || 'full'];
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Claude prompt — asks for plan CONFIG, not workout templates
@@ -473,7 +506,9 @@ async function buildPlanFromConfig(config, userProfile, exercisePool, wodList, o
         planId, date, dayOfWeek, weekNumber: week,
         phase: phase.phase,
         title: `${template.title}`,
-        focus: `${mesoPhase.label} • ${stimulus.label} • Week ${week}`,
+        focus: weeksFromEnd < 3 && totalWeeks > 12
+          ? `TAPER • RACE PREP • Week ${week}`
+          : `${mesoPhase.label} • ${stimulus.label} • Week ${week}`,
         color: phase.color, emoji: '', isRestDay: false,
       });
 
@@ -497,7 +532,7 @@ async function buildPlanFromConfig(config, userProfile, exercisePool, wodList, o
           // ── Run block: use proven run generation ──
           const runType = pickRunType(dayConfig.type, week, phase.phase, userProfile.experience);
           await updateBlockRunType(blockId, runType);
-          exercises = generateRunExercises(week, phase.phase, totalWeeks, exercisePool, runType, userProfile.experience);
+          exercises = generateRunExercises(week, phase.phase, totalWeeks, exercisePool, runType, userProfile.experience, userProfile);
         } else if (blockTemplate.isWarmup) {
           // ── Warmup: safe hardcoded exercises ──
           exercises = selectWarmupExercises(blockTemplate, exercisePool);
@@ -522,16 +557,17 @@ async function buildPlanFromConfig(config, userProfile, exercisePool, wodList, o
         }
       }
 
-      // Add cooldown for 60+ min sessions
+      // Add cooldown matched to the day's muscle groups
       const sessionMin = parseInt(userProfile.sessionDuration) || 60;
-      if (sessionMin >= 60) {
+      if (sessionMin >= 45) {
+        const cooldownExercises = getCooldownForDay(dayConfig.type);
         const cooldownBlockId = await savePlanBlock({
           planDayId: dayId, sortOrder: template.blocks.length,
-          name: 'COOLDOWN', type: 'MOBILITY', timeCap: '6 min',
+          name: 'COOLDOWN', type: 'MOBILITY', timeCap: '5 min',
           isAmrap: false, hasGps: false,
         });
-        for (let ci = 0; ci < COOLDOWN_EXERCISES.length; ci++) {
-          const ce = COOLDOWN_EXERCISES[ci];
+        for (let ci = 0; ci < cooldownExercises.length; ci++) {
+          const ce = cooldownExercises[ci];
           await savePlanExercise({
             planBlockId: cooldownBlockId, exerciseId: ce.id, sortOrder: ci,
             sets: `${ce.sets}x${ce.reps}`, reps: ce.reps, weight: ce.weight,
@@ -595,6 +631,15 @@ function selectExercises(blockTemplate, pool, recentlyUsed, weekNumber, phase, u
     candidates.push(...exercises);
   }
 
+  // User's equipment for scoring
+  const userEquip = new Set((userProfile.equipment || []).map(e => e.toLowerCase()));
+  const hasBarbell = userEquip.has('barbell') || userEquip.has('barbell & rack') || userEquip.has('squat rack');
+  const goals = (userProfile.goals || [userProfile.goal || '']).map(g => g.toLowerCase());
+  const wantsChest = goals.some(g => /chest|muscle|size/i.test(g));
+  const wantsArms = goals.some(g => /arm|muscle|size/i.test(g));
+  const wantsSpartan = goals.some(g => /spartan|obstacle|endurance|athletic/i.test(g))
+    || /spartan/i.test(userProfile.additionalNotes || '');
+
   // Priority exercise IDs from Claude's config
   const priorityIds = new Set();
   if (priorities.primary_squat) priorityIds.add(priorities.primary_squat);
@@ -615,6 +660,17 @@ function selectExercises(blockTemplate, pool, recentlyUsed, weekNumber, phase, u
     if (ex.is_compound && (phase === 'build' || phase === 'peak')) score += 5;
     if (ex.category === 'bodyweight' && ex.muscle_group === 'full_body') score += 3;
     if (ex.source === 'seed' || !ex.source) score += 8;
+
+    // Prefer barbell when user has one — barbell compounds are king for strength
+    if (hasBarbell && ex.category === 'barbell' && compoundsOnly) score += 12;
+    // Don't use DB/KB versions of exercises when barbell is available for compounds
+    if (hasBarbell && compoundsOnly && (ex.category === 'dumbbell' || ex.category === 'kettlebell')) score -= 8;
+
+    // Goal-based boosts
+    if (wantsChest && ex.muscle_group === 'chest') score += 5;
+    if (wantsArms && ex.muscle_group === 'arms') score += 5;
+    if (wantsSpartan && /pull.?up|dead.?hang|farmer|carry|rope|climb|monkey|burpee/i.test(ex.name)) score += 8;
+
     // AI priority boost — Claude's preferred exercises get a big bonus
     if (priorityIds.has(ex.id)) score += 25;
     return { exercise: ex, score };
@@ -631,11 +687,8 @@ function selectExercises(blockTemplate, pool, recentlyUsed, weekNumber, phase, u
 
     const ex = item.exercise;
     const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal);
-    const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails);
-    const tempo = getTempoForExercise(ex, weekNumber);
-
+    const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
     let notes = null;
-    if (tempo) notes = `Tempo: ${tempo}`;
 
     selected.push({
       id: ex.id,
@@ -820,8 +873,10 @@ function pickRunType(dayType, weekNumber, phase, experience) {
   return runType;
 }
 
-function generateRunExercises(weekNumber, phase, totalWeeks, pool, runType, experience) {
-  const runParams = calculateRunParams(weekNumber, phase, totalWeeks);
+function generateRunExercises(weekNumber, phase, totalWeeks, pool, runType, experience, userProfile) {
+  // Parse target race distance from user goals
+  const targetDist = getTargetRaceDistance(userProfile) || 6.2;
+  const runParams = calculateRunParams(weekNumber, phase, totalWeeks, targetDist);
   const expMult = experience === 'beginner' ? 0.7
     : experience === 'intermediate' ? 0.85
     : experience === 'advanced' ? 1.0 : 1.1;
@@ -901,6 +956,21 @@ function generateRunExercises(weekNumber, phase, totalWeeks, pool, runType, expe
 // ═══════════════════════════════════════════════════════════════
 // Helpers
 // ═══════════════════════════════════════════════════════════════
+
+// Parse target race distance from user goals and notes
+function getTargetRaceDistance(profile) {
+  if (!profile) return null;
+  const all = `${(profile.additionalNotes || '')} ${(profile.goals || []).join(' ')}`.toLowerCase();
+  if (all.includes('marathon') && !all.includes('half')) return 26.2;
+  if (all.includes('half marathon') || all.includes('half-marathon')) return 13.1;
+  if (all.includes('spartan beast') || all.includes('21k')) return 13.1;
+  if (all.includes('10k') || all.includes('spartan super')) return 6.2;
+  if (all.includes('spartan sprint') || all.includes('5k')) return 3.1;
+  if (all.includes('endurance') || all.includes('athletic') || all.includes('spartan')) return 6.2;
+  const distMatch = all.match(/(\d+(?:\.\d+)?)\s*(?:mile|mi)\s*(?:race|run|goal)/i);
+  if (distMatch) return parseFloat(distMatch[1]);
+  return null;
+}
 
 function generateUUID() {
   return 'xxxx-xxxx-xxxx'.replace(/x/g, () =>

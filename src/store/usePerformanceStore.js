@@ -6,6 +6,8 @@ import {
   getRunHistory,
   getBiggestStrengthGains,
   getWeeklyProgress,
+  getWeekOverWeekLifts,
+  getRunProgression,
   searchExercises as dbSearchExercises,
   getExerciseHistory as dbGetExerciseHistory,
 } from '../data/database';
@@ -24,6 +26,8 @@ const usePerformanceStore = create((set, get) => ({
   runHistory: [],
   biggestGains: [],
   weeklyProgress: [],
+  weekOverWeekLifts: [],
+  runProgression: [],
 
   // Exercise search
   exerciseSearchResults: [],
@@ -37,13 +41,15 @@ const usePerformanceStore = create((set, get) => ({
   loadDashboard: async () => {
     set({ isLoading: true });
     try {
-      const [workoutStats, runStats, prs, runs, gains, weekly] = await Promise.all([
+      const [workoutStats, runStats, prs, runs, gains, weekly, liftDeltas, runProg] = await Promise.all([
         getWorkoutStats(),
         getRunStats(),
         getPersonalRecords(),
         getRunHistory(10),
         getBiggestStrengthGains(),
         getWeeklyProgress(),
+        getWeekOverWeekLifts().catch(() => []),
+        getRunProgression().catch(() => []),
       ]);
 
       set({
@@ -57,6 +63,8 @@ const usePerformanceStore = create((set, get) => ({
         runHistory: runs,
         biggestGains: gains,
         weeklyProgress: weekly,
+        weekOverWeekLifts: liftDeltas,
+        runProgression: runProg,
         isLoading: false,
       });
     } catch (e) {

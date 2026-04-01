@@ -204,11 +204,9 @@ export async function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_run_history_date ON run_history(date);
   `);
 
-  // Seed exercises if empty
-  const count = await database.getFirstAsync('SELECT COUNT(*) as count FROM exercises');
-  if (count.count === 0) {
-    await seedExerciseData(database);
-  }
+  // Seed exercises — INSERT OR IGNORE ensures new seed exercises are added
+  // without duplicating existing ones
+  await seedExerciseData(database);
 
   // Seed WODs if empty
   const wodCount = await database.getFirstAsync('SELECT COUNT(*) as count FROM wods');
@@ -726,8 +724,13 @@ export async function getPersonalRecords() {
 
 export async function getWorkoutStats() {
   const database = await getDatabase();
+  // Count days that have at least 1 completed exercise (not just fully-completed days)
   const workouts = await database.getFirstAsync(
-    `SELECT COUNT(*) as completed FROM plan_days WHERE is_completed = 1 AND is_rest_day = 0`
+    `SELECT COUNT(DISTINCT pd.id) as completed
+     FROM plan_days pd
+     JOIN plan_blocks pb ON pb.plan_day_id = pd.id
+     JOIN plan_exercises pe ON pe.plan_block_id = pb.id
+     WHERE pd.is_rest_day = 0 AND pe.is_completed = 1`
   );
   const total = await database.getFirstAsync(
     `SELECT COUNT(*) as total FROM plan_days WHERE is_rest_day = 0`
@@ -812,6 +815,82 @@ export async function getBiggestStrengthGains() {
   }
 
   return gains.sort((a, b) => b.gain - a.gain).slice(0, 5);
+}
+
+// Week-over-week lift comparison for major compounds
+// Returns: [{ exercise_name, exercise_id, thisWeek, lastWeek, delta, pctChange }]
+export async function getWeekOverWeekLifts() {
+  const database = await getDatabase();
+  // Get current week number
+  const today = new Date().toISOString().split('T')[0];
+  const currentDay = await database.getFirstAsync(
+    'SELECT week_number FROM plan_days WHERE date <= ? ORDER BY date DESC LIMIT 1', [today]
+  );
+  const currentWeek = currentDay?.week_number || 1;
+  const prevWeek = currentWeek - 1;
+  if (prevWeek < 1) return [];
+
+  // Get best logged weight per exercise for current and previous week
+  const rows = await database.getAllAsync(
+    `SELECT pe.exercise_id, e.name as exercise_name, e.is_compound,
+            pd.week_number,
+            MAX(CAST(COALESCE(pe.actual_weight, pe.weight) AS REAL)) as best_weight
+     FROM plan_exercises pe
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     JOIN exercises e ON e.id = pe.exercise_id
+     WHERE pd.week_number IN (?, ?)
+       AND COALESCE(pe.actual_weight, pe.weight) IS NOT NULL
+       AND COALESCE(pe.actual_weight, pe.weight) != 'BW'
+       AND COALESCE(pe.actual_weight, pe.weight) != ''
+       AND CAST(COALESCE(pe.actual_weight, pe.weight) AS REAL) > 0
+       AND e.is_compound = 1
+     GROUP BY pe.exercise_id, pd.week_number
+     ORDER BY best_weight DESC`,
+    [currentWeek, prevWeek]
+  );
+
+  // Pair up this week vs last week
+  const byExercise = {};
+  for (const row of rows) {
+    if (!byExercise[row.exercise_id]) {
+      byExercise[row.exercise_id] = { name: row.exercise_name, thisWeek: null, lastWeek: null };
+    }
+    if (row.week_number === currentWeek) byExercise[row.exercise_id].thisWeek = row.best_weight;
+    if (row.week_number === prevWeek) byExercise[row.exercise_id].lastWeek = row.best_weight;
+  }
+
+  const results = [];
+  for (const [id, data] of Object.entries(byExercise)) {
+    if (data.thisWeek === null && data.lastWeek === null) continue;
+    const tw = data.thisWeek || data.lastWeek;
+    const lw = data.lastWeek || data.thisWeek;
+    const delta = tw - lw;
+    const pctChange = lw > 0 ? Math.round((delta / lw) * 100) : 0;
+    results.push({ exercise_id: id, exercise_name: data.name, thisWeek: tw, lastWeek: lw, delta, pctChange });
+  }
+
+  return results.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 8);
+}
+
+// Run progression — weekly distance and pace trends
+export async function getRunProgression() {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    `SELECT strftime('%W', date) as week_num,
+            strftime('%Y', date) as year,
+            COUNT(*) as run_count,
+            SUM(total_distance) as total_distance,
+            AVG(total_distance) as avg_distance,
+            AVG(avg_pace) as avg_pace,
+            MIN(avg_pace) as best_pace,
+            MAX(total_distance) as longest_run
+     FROM run_history
+     WHERE total_distance > 0
+     GROUP BY year, week_num
+     ORDER BY year ASC, week_num ASC
+     LIMIT 16`
+  );
 }
 
 export async function getWeeklyProgress() {

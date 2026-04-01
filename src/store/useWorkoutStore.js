@@ -101,15 +101,29 @@ const useWorkoutStore = create((set, get) => ({
   },
 
   toggleExercise: async (planExerciseId, isCurrentlyCompleted) => {
+    // Optimistic update — toggle in state immediately, no full reload
+    set(state => {
+      const workout = state.todayWorkout;
+      if (!workout?.blocks) return state;
+      const updatedBlocks = workout.blocks.map(block => ({
+        ...block,
+        exercises: (block.exercises || []).map(ex =>
+          ex.id === planExerciseId ? { ...ex, is_completed: isCurrentlyCompleted ? 0 : 1 } : ex
+        ),
+      }));
+      return { todayWorkout: { ...workout, blocks: updatedBlocks } };
+    });
+
+    // Persist to DB in background
     try {
       if (isCurrentlyCompleted) {
         await dbUncompleteExercise(planExerciseId);
       } else {
         await dbCompleteExercise(planExerciseId, null, null);
       }
-      await get().loadTodayWorkout();
     } catch (e) {
       console.error('Error toggling exercise:', e);
+      await get().loadTodayWorkout(); // Revert on failure
     }
   },
 
