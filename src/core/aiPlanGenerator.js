@@ -510,9 +510,9 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
       const eName = ex.name || '';
       if (/\(female\)|\(male\)|v\.\s*\d|sitted|lying floor/i.test(eName) || eName.length > 40) {
         score -= 100; // hard exclude
-      } else if (/reverse grip|guillotine|cambered|lever |floor fly|kneeling jump|squat jump step|step rear lunge|bent v\.|side bent|wide reverse/i.test(eName)) {
+      } else if (/reverse grip|guillotine|cambered|lever |floor fly|kneeling jump|squat jump step|step rear lunge|bent v\.|side bent|wide reverse|close grip to skull|behind neck|behind the neck|decline close grip/i.test(eName)) {
         score -= 100; // hard exclude
-      } else if (eName.split(' ').length > 5) {
+      } else if (eName.split(' ').length > 5 || eName.length > 35) {
         score -= 50; // penalize overly wordy exercise names
       }
     }
@@ -746,22 +746,37 @@ function parseWodMovement(movement, scheme, index) {
 
 function fuzzyMatchWodMovement(name) {
   const n = name.toLowerCase().replace(/[^a-z\s]/g, '').trim();
-  const MAP = {
-    'pull ups': 'pull_ups', 'pullups': 'pull_ups', 'push ups': 'push_ups', 'pushups': 'push_ups',
-    'air squats': 'air_squats', 'squats': 'air_squats', 'burpees': 'burpees', 'burpee': 'burpees',
-    'sit ups': 'sit_ups', 'thrusters': 'barbell_thrusters', 'thruster': 'barbell_thrusters',
-    'deadlifts': 'deadlift', 'deadlift': 'deadlift', 'cleans': 'power_clean', 'clean': 'power_clean',
-    'clean jerk': 'clean_and_jerk', 'snatch': 'snatch', 'snatches': 'snatch',
-    'push jerk': 'push_jerk', 'jerk': 'push_jerk', 'box jumps': 'box_jumps',
-    'kb swings': 'kb_swings', 'kettlebell swings': 'kb_swings', 'wall balls': 'wall_balls',
-    'double unders': 'jump_rope', 'ring dips': 'dips', 'dips': 'dips',
-    'muscle ups': 'muscle_ups', 'handstand push ups': 'handstand_push_ups',
-    'pistol squats': 'pistol_squats', 'run': 'easy_run', 'running': 'easy_run',
-    'mile run': 'easy_run', 'row': 'easy_run', 'rowing': 'easy_run',
-    'push press': 'push_jerk', 'step ups': 'step_ups', 'farmer walk': 'farmer_walk',
-    'overhead squats': 'front_squat', 'toes to bar': 'sit_ups',
-  };
-  for (const [key, id] of Object.entries(MAP)) {
+  // Order matters — specific matches before generic ones
+  const MAP = [
+    ['pull ups', 'pull_ups'], ['pullups', 'pull_ups'], ['push ups', 'push_ups'], ['pushups', 'push_ups'],
+    ['handstand push ups', 'handstand_push_ups'], ['hspu', 'handstand_push_ups'],
+    ['muscle ups', 'muscle_ups'], ['muscleups', 'muscle_ups'],
+    ['front squats', 'front_squat'], ['front squat', 'front_squat'],
+    ['overhead squats', 'front_squat'], ['overhead squat', 'front_squat'],
+    ['squat snatches', 'snatch'], ['squat cleans', 'power_clean'],
+    ['pistol squats', 'pistol_squats'], ['pistol', 'pistol_squats'],
+    ['air squats', 'air_squats'], ['squats', 'air_squats'],
+    ['burpees', 'burpees'], ['burpee', 'burpees'],
+    ['sit ups', 'sit_ups'], ['situps', 'sit_ups'], ['toes to bar', 'sit_ups'],
+    ['thrusters', 'barbell_thrusters'], ['thruster', 'barbell_thrusters'],
+    ['deadlifts', 'deadlift'], ['deadlift', 'deadlift'],
+    ['hang power cleans', 'hang_clean'], ['power cleans', 'power_clean'],
+    ['cleans', 'power_clean'], ['clean jerk', 'clean_and_jerk'],
+    ['clean and jerk', 'clean_and_jerk'],
+    ['push jerk', 'push_jerk'], ['push jerks', 'push_jerk'], ['jerk', 'push_jerk'],
+    ['push press', 'push_press'],
+    ['snatches', 'snatch'], ['snatch', 'snatch'],
+    ['box jumps', 'box_jumps'], ['box jump', 'box_jumps'],
+    ['kb swings', 'kb_swings'], ['kettlebell swings', 'kb_swings'],
+    ['wall balls', 'wall_balls'], ['wall ball', 'wall_balls'],
+    ['double unders', 'jump_rope'], ['doubleunders', 'jump_rope'],
+    ['ring dips', 'dips'], ['dips', 'dips'],
+    ['step ups', 'step_ups'], ['farmer walk', 'farmer_walk'], ['farmer carry', 'farmer_walk'],
+    ['mile run', 'easy_run'], ['run', 'easy_run'], ['running', 'easy_run'],
+    ['row', 'easy_run'], ['rowing', 'easy_run'],
+    ['back extensions', 'back_extension'],
+  ];
+  for (const [key, id] of MAP) {
     if (n.includes(key)) return id;
   }
   return 'burpees';
