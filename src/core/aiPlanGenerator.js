@@ -18,7 +18,7 @@ import { selectWOD } from './wodSelector';
 import { buildDayBlocks, getDefaultDayConfigs } from './dayTemplates';
 import { logValidation } from './planValidator';
 import { detectArchetype, adjustArchetypeForEquipment } from './archetypes';
-import { getAbilityScore } from './abilityFilter';
+import { getAbilityScore, canDoBodyweightPull } from './abilityFilter';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-haiku-4-5-20251001';
@@ -196,10 +196,39 @@ function validateStrategy(raw, userProfile) {
     day.secondary_patterns = (day.secondary_patterns || []).filter(p => VALID_PATTERNS.includes(p));
   }
 
-  // Ensure runs exist on at least 2 days for endurance/race goals
+  // Check if user explicitly can't or doesn't want to run
   const goals = (userProfile.goals || [userProfile.goal || '']).join(' ').toLowerCase();
   const notes = (userProfile.additionalNotes || '').toLowerCase();
-  const hasEndurance = /endurance|athletic|spartan|race|run|marathon|10k|5k/i.test(goals + ' ' + notes);
+  const cantRun = /can'?t run|no running|don'?t run|unable to run|hate running|avoid running/i.test(notes);
+  const excludesRunning = (userProfile.exclusions || []).includes('running');
+  const noRunning = cantRun || excludesRunning;
+
+  // Determine archetype from the validation context
+  const arch = detectArchetype(userProfile);
+
+  // Remove all run blocks if user can't/won't run
+  if (noRunning) {
+    for (const day of s.dayConfigs) {
+      if (day.run) {
+        // Replace run with walking or cardio machine work
+        day.run = null;
+        // Add a WOD or cardio block instead if none exists
+        if (!day.wod) day.wod = { type: 'CIRCUIT' };
+      }
+    }
+  }
+
+  // For overweight beginners without explicit run goals, replace runs with walks
+  if (arch.archetype === 'overweight_beginner' && !noRunning) {
+    for (const day of s.dayConfigs) {
+      if (day.run && day.run.type !== 'easy') {
+        day.run = { type: 'easy', label: 'WALKING' };
+      }
+    }
+  }
+
+  // Ensure runs exist on at least 2 days for endurance/race goals (only if running allowed)
+  const hasEndurance = !noRunning && /endurance|athletic|spartan|race|marathon|10k|5k/i.test(goals + ' ' + notes);
 
   if (hasEndurance) {
     const runDays = s.dayConfigs.filter(d => d.run);
@@ -214,10 +243,8 @@ function validateStrategy(raw, userProfile) {
       }
     }
 
-    // ALWAYS ensure exactly one day has a long run — critical for race prep
     const hasLongRun = s.dayConfigs.some(d => d.run?.type === 'long_run');
     if (!hasLongRun) {
-      // Put long run on the last training day
       const lastIdx = daysPerWeek - 1;
       s.dayConfigs[lastIdx].run = { type: 'long_run', label: 'LONG RUN' };
     }
@@ -296,9 +323,9 @@ async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs,
     const mesoPhase = getMesocyclePhase(week);
     const stimulus = STIMULUS_TYPES[mesoPhase.defaultStimulus];
 
-    // Determine display phase for race prep override
+    // Determine display phase — only use race_prep if archetype has taper
     const weeksFromEnd = totalWeeks - week;
-    const isRacePrep = weeksFromEnd < 3 && totalWeeks > 12;
+    const isRacePrep = archetype?.hasTaper && weeksFromEnd < 3 && totalWeeks > 12;
     const displayPhase = isRacePrep ? 'race_prep' : phase.phase;
 
     weekWodIds.length = 0; // reset weekly WOD tracking
@@ -371,12 +398,17 @@ async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs,
           // ── WOD from seed data ──
           const dayPatterns = dayConfig.primary_patterns || [];
           const spartanBias = raceReqs ? 0.7 : 0.2;
+          const userNotes = (userProfile.additionalNotes || '').toLowerCase();
+          const userExclusions = userProfile.exclusions || [];
+          const canRun = !(/can'?t run|no running|don'?t run|unable to run|avoid running/i.test(userNotes)) && !userExclusions.includes('running');
           const wod = selectWOD(wodList, {
             phase: displayPhase, dayPatterns,
             userEquipment: userProfile.equipment || [],
             spartanBias, excludeWodIds: weekWodIds,
             targetMinutes: parseInt(block.duration) || 12,
             maxDifficultyOverride: archetype?.maxWodDifficulty,
+            canDoPullUps: canDoBodyweightPull(userProfile),
+            canDoRunning: canRun,
           });
           exercises = buildWodExercises(wod, userProfile.equipmentDetails);
           if (wod) weekWodIds.push(wod.id);
@@ -608,8 +640,9 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
     }
   }
 
-  // Pull-up constraint: pull_up/vertical_pull patterns MUST include pull-ups or chin-ups
-  if (patterns?.some(p => p === 'pull_up' || p === 'vertical_pull') && !selected.some(e => /pull.?up|chin.?up/i.test(e.id))) {
+  // Pull-up constraint: ONLY enforce for users who can actually do them
+  const canPull = canDoBodyweightPull(userProfile);
+  if (canPull && patterns?.some(p => p === 'pull_up' || p === 'vertical_pull') && !selected.some(e => /pull.?up|chin.?up/i.test(e.id))) {
     const pullUpOption = scored.find(s => /pull_ups|chin_ups/i.test(s.exercise.id) && !usedToday.has(s.exercise.id));
     if (pullUpOption && selected.length > 0) {
       const ex = pullUpOption.exercise;

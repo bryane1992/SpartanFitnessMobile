@@ -77,9 +77,11 @@ export function selectWOD(wodPool, options = {}) {
     userEquipment = [],
     spartanBias = 0,
     preferredTags = [],
-    maxDifficultyOverride = null, // archetype cap
-    excludeWodIds = [],       // WODs already used this week
-    targetMinutes = 12,       // desired WOD duration
+    maxDifficultyOverride = null,
+    excludeWodIds = [],
+    targetMinutes = 12,
+    canDoPullUps = true,       // ability filter
+    canDoRunning = true,       // ability filter
   } = options;
 
   const equip = new Set(userEquipment.map(e => e.toLowerCase()));
@@ -99,6 +101,11 @@ export function selectWOD(wodPool, options = {}) {
 
       // Not already used this week
       if (excludeWodIds.includes(wod.id)) return false;
+
+      // Ability filtering — exclude WODs with movements user can't do
+      const movements = (wod.movements || []).join(' ').toLowerCase();
+      if (!canDoPullUps && /pull.?up|chin.?up|muscle.?up/i.test(movements)) return false;
+      if (!canDoRunning && /\brun\b|mile|800m|400m/i.test(movements)) return false;
 
       return true;
     })
