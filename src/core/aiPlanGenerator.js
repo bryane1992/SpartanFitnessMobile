@@ -187,6 +187,44 @@ function validateStrategy(raw, userProfile) {
     day.secondary_patterns = (day.secondary_patterns || []).filter(p => VALID_PATTERNS.includes(p));
   }
 
+  // Ensure runs exist on at least 2 days for endurance/race goals
+  const goals = (userProfile.goals || [userProfile.goal || '']).join(' ').toLowerCase();
+  const notes = (userProfile.additionalNotes || '').toLowerCase();
+  const hasEndurance = /endurance|athletic|spartan|race|run|marathon|10k|5k/i.test(goals + ' ' + notes);
+
+  if (hasEndurance) {
+    const runDays = s.dayConfigs.filter(d => d.run);
+    if (runDays.length < 2) {
+      // Add runs to days that don't have them, preferring middle and last days
+      const midIdx = Math.floor(daysPerWeek / 2);
+      const lastIdx = daysPerWeek - 1;
+      if (!s.dayConfigs[midIdx].run) {
+        s.dayConfigs[midIdx].run = { type: 'intervals', label: 'SPRINT INTERVALS' };
+      }
+      if (!s.dayConfigs[lastIdx].run) {
+        s.dayConfigs[lastIdx].run = { type: 'long_run', label: 'LONG RUN' };
+      }
+    }
+  }
+
+  // Ensure WODs exist on at least 2 days
+  const wodDays = s.dayConfigs.filter(d => d.wod);
+  if (wodDays.length < 2) {
+    for (let i = 0; i < s.dayConfigs.length && wodDays.length < 2; i++) {
+      if (!s.dayConfigs[i].wod && !s.dayConfigs[i].run) {
+        s.dayConfigs[i].wod = { type: 'AMRAP' };
+        wodDays.push(s.dayConfigs[i]);
+      }
+    }
+    // If still not enough (all days have runs), add WODs alongside runs
+    for (let i = 0; i < s.dayConfigs.length && wodDays.length < 2; i++) {
+      if (!s.dayConfigs[i].wod) {
+        s.dayConfigs[i].wod = { type: 'FOR TIME' };
+        wodDays.push(s.dayConfigs[i]);
+      }
+    }
+  }
+
   if (!s.patternPriorities) s.patternPriorities = {};
   if (!s.compoundEquipmentPreference) {
     const equip = (userProfile.equipment || []).map(e => e.toLowerCase());
@@ -458,9 +496,18 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
     if (recentlyUsed.has(ex.id)) score -= 8;
 
     // Strong seed exercise preference — curated exercises are better than random ExerciseDB ones
-    if (ex.source === 'seed' || !ex.source) score += 15;
-    // Penalize ExerciseDB exercises that are obscure variations
-    if (ex.source === 'api' && /reverse grip|guillotine|cambered|lever |floor fly|kneeling jump/i.test(ex.name)) score -= 15;
+    if (ex.source === 'seed' || !ex.source) score += 20;
+    // Filter out obscure ExerciseDB exercises
+    if (ex.source === 'api') {
+      // Reject exercises with gendered labels, version numbers, or absurdly long names
+      if (/\(female\)|\(male\)|v\.\s*\d|sitted|lying floor/i.test(ex.name) || ex.name.length > 45) {
+        score -= 50; // effectively excluded
+      }
+      // Penalize obscure variations that no coach would program
+      else if (/reverse grip|guillotine|cambered|lever |floor fly|kneeling jump|squat jump step/i.test(ex.name)) {
+        score -= 30;
+      }
+    }
 
     return { exercise: ex, score };
   });
