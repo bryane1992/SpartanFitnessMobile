@@ -1,14 +1,21 @@
-// AI Plan Generator v2 — Hybrid Architecture
-// Claude makes programming decisions, code builds workouts deterministically
+// AI Plan Generator v3 — Strategy-driven hybrid architecture
+// Claude returns a program STRATEGY (movement patterns, priorities)
+// Code builds workouts deterministically using composable day templates
 //
-// Previous approach: Claude generated full workout templates → 30+ post-processing fixes
-// New approach: Claude returns a plan CONFIG (day types, exercise priorities, WOD picks)
-//              Code builds workouts using proven patterns from planGenerator.js
+// New modules:
+// - raceRequirements.js — race profiles and must-include movements
+// - wodSelector.js — context-aware WOD filtering
+// - dayTemplates.js — composable block builder
+// - planValidator.js — validation before save
 
 import Constants from 'expo-constants';
 import { calculatePhases, getPhaseForWeek } from './phaseCalculator';
-import { calculateWeight, calculateSetsReps, calculateRunParams, getBodyCompParams, getTempoForExercise, getMesocyclePhase, STIMULUS_TYPES } from './progressionRules';
-import { getDatabase, savePlanDay, savePlanBlock, savePlanExercise, getExercisesByFilter, getWodsFromDb, updateBlockRunType } from '../data/database';
+import { calculateWeight, calculateSetsReps, calculateRunParams, getBodyCompParams, getMesocyclePhase, STIMULUS_TYPES } from './progressionRules';
+import { isDeloadWeek } from './phaseCalculator';
+import { savePlanDay, savePlanBlock, savePlanExercise, getExercisesByFilter, getWodsFromDb, updateBlockRunType } from '../data/database';
+import { getRaceRequirements, getRaceExerciseRequirements, getRaceDistance } from './raceRequirements';
+import { selectWOD } from './wodSelector';
+import { buildDayBlocks, getDefaultDayConfigs } from './dayTemplates';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-haiku-4-5-20251001';
@@ -19,93 +26,7 @@ function getApiKey() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Day templates — proven structure from planGenerator.js
-// Each template defines blocks with known durations and muscle groups
-// ═══════════════════════════════════════════════════════════════
-
-const DAY_TEMPLATES = {
-  lower_power: {
-    title: 'LOWER POWER',
-    blocks: [
-      { name: 'WARM-UP', type: 'MOVEMENT PREP', exerciseCount: 4, duration: '8 min', muscleGroups: ['full_body'], isWarmup: true },
-      { name: 'MAIN LIFTS', type: 'COMPOUND', exerciseCount: 3, duration: '25 min', muscleGroups: ['legs', 'glutes'], compoundsOnly: true },
-      { name: 'ACCESSORIES', type: 'SUPERSETS', exerciseCount: 3, duration: '12 min', muscleGroups: ['legs', 'glutes', 'arms'] },
-    ],
-  },
-  upper_push_pull: {
-    title: 'UPPER PUSH-PULL',
-    blocks: [
-      { name: 'WARM-UP', type: 'MOVEMENT PREP', exerciseCount: 4, duration: '8 min', muscleGroups: ['full_body'], isWarmup: true },
-      { name: 'PUSH LIFTS', type: 'COMPOUND', exerciseCount: 2, duration: '15 min', muscleGroups: ['chest', 'shoulders'], compoundsOnly: true },
-      { name: 'PULL LIFTS', type: 'COMPOUND', exerciseCount: 2, duration: '15 min', muscleGroups: ['back'], compoundsOnly: true },
-      { name: 'ACCESSORIES', type: 'ISOLATION', exerciseCount: 3, duration: '10 min', muscleGroups: ['arms', 'shoulders'] },
-    ],
-  },
-  sprint_conditioning: {
-    title: 'SPRINT & CONDITIONING',
-    blocks: [
-      { name: 'WARM-UP', type: 'DYNAMIC PREP', exerciseCount: 4, duration: '8 min', muscleGroups: ['full_body'], isWarmup: true },
-      { name: 'RUN', type: 'INTERVALS', exerciseCount: 3, duration: '25 min', muscleGroups: ['cardio'], hasGps: true, isRun: true },
-      { name: 'WOD', type: 'AMRAP', exerciseCount: 4, duration: '12 min', muscleGroups: ['full_body'], isWod: true },
-    ],
-  },
-  olympic_power: {
-    title: 'OLYMPIC STRENGTH',
-    blocks: [
-      { name: 'WARM-UP', type: 'MOVEMENT PREP', exerciseCount: 4, duration: '8 min', muscleGroups: ['full_body'], isWarmup: true },
-      { name: 'OLYMPIC LIFTS', type: 'COMPOUND', exerciseCount: 2, duration: '20 min', muscleGroups: ['full_body'], compoundsOnly: true, olympicOnly: true },
-      { name: 'STRENGTH', type: 'COMPOUND', exerciseCount: 2, duration: '15 min', muscleGroups: ['legs', 'shoulders'], compoundsOnly: true },
-      { name: 'CORE', type: 'FINISHER', exerciseCount: 3, duration: '8 min', muscleGroups: ['core'] },
-    ],
-  },
-  endurance_metabolic: {
-    title: 'ENDURANCE & METABOLIC',
-    blocks: [
-      { name: 'WARM-UP', type: 'PRE-RUN', exerciseCount: 3, duration: '8 min', muscleGroups: ['full_body'], isWarmup: true },
-      { name: 'LONG RUN', type: 'LONG_RUN', exerciseCount: 3, duration: '30 min', muscleGroups: ['cardio'], hasGps: true, isRun: true },
-      { name: 'WOD', type: 'FOR TIME', exerciseCount: 4, duration: '12 min', muscleGroups: ['full_body'], isWod: true },
-    ],
-  },
-  strength: {
-    title: 'FULL BODY STRENGTH',
-    blocks: [
-      { name: 'WARM-UP', type: 'MOVEMENT PREP', exerciseCount: 4, duration: '8 min', muscleGroups: ['full_body'], isWarmup: true },
-      { name: 'MAIN LIFTS', type: 'COMPOUND', exerciseCount: 3, duration: '25 min', muscleGroups: ['chest', 'back', 'legs'], compoundsOnly: true },
-      { name: 'ACCESSORIES', type: 'SUPERSETS', exerciseCount: 3, duration: '12 min', muscleGroups: ['arms', 'shoulders', 'back'] },
-      { name: 'CORE FINISHER', type: 'CIRCUIT', exerciseCount: 3, duration: '8 min', muscleGroups: ['core'] },
-    ],
-  },
-  wod_focus: {
-    title: 'WOD DAY',
-    blocks: [
-      { name: 'WARM-UP', type: 'DYNAMIC PREP', exerciseCount: 4, duration: '8 min', muscleGroups: ['full_body'], isWarmup: true },
-      { name: 'SKILL WORK', type: 'COMPOUND', exerciseCount: 2, duration: '15 min', muscleGroups: ['full_body', 'legs'], compoundsOnly: true },
-      { name: 'WOD', type: 'AMRAP', exerciseCount: 4, duration: '15 min', muscleGroups: ['full_body'], isWod: true },
-    ],
-  },
-  run_focus: {
-    title: 'RUN DAY',
-    blocks: [
-      { name: 'WARM-UP', type: 'DYNAMIC ACTIVATION', exerciseCount: 4, duration: '8 min', muscleGroups: ['full_body', 'cardio'], isWarmup: true },
-      { name: 'RUN', type: 'TEMPO', exerciseCount: 3, duration: '25 min', muscleGroups: ['cardio'], hasGps: true, isRun: true },
-      { name: 'FUNCTIONAL CORE', type: 'OBSTACLE PREP', exerciseCount: 3, duration: '10 min', muscleGroups: ['core', 'full_body'] },
-    ],
-  },
-  obstacle: {
-    title: 'OBSTACLE TRAINING',
-    blocks: [
-      { name: 'WARM-UP', type: 'ACTIVATE', exerciseCount: 4, duration: '8 min', muscleGroups: ['full_body'], isWarmup: true },
-      { name: 'STRENGTH CIRCUIT', type: 'FUNCTIONAL', exerciseCount: 4, duration: '20 min', muscleGroups: ['legs', 'back', 'full_body'], compoundsOnly: true },
-      { name: 'OBSTACLE SKILLS', type: 'SPARTAN SPECIFIC', exerciseCount: 3, duration: '12 min', muscleGroups: ['full_body', 'back', 'arms'] },
-    ],
-  },
-};
-
-// Valid day type keys for Claude to choose from
-const VALID_DAY_TYPES = Object.keys(DAY_TEMPLATES);
-
-// ═══════════════════════════════════════════════════════════════
-// Safe warmup exercises — never loaded, never runs
+// Safe warmup and cooldown exercise IDs (all exist in exerciseSeed)
 // ═══════════════════════════════════════════════════════════════
 
 const WARMUP_IDS = [
@@ -115,95 +36,51 @@ const WARMUP_IDS = [
   'arm_circles', 'inchworm',
 ];
 
-// Cooldown exercises mapped by body region — pick stretches that match the day's work
-const COOLDOWN_BY_FOCUS = {
-  lower: [
-    { id: 'hip_flexor_stretch', sets: '1', reps: '60s each', weight: 'BW' },
-    { id: 'pigeon_pose', sets: '1', reps: '60s each', weight: 'BW' },
-    { id: 'hamstring_stretch', sets: '1', reps: '45s each', weight: 'BW' },
-  ],
-  upper: [
-    { id: 'shoulder_stretch', sets: '1', reps: '45s each', weight: 'BW' },
-    { id: 'thoracic_rotation', sets: '1', reps: '30s each', weight: 'BW' },
-    { id: 'pvc_pass_throughs', sets: '1', reps: '10', weight: 'Shoulder mobility' },
-  ],
-  full: [
-    { id: 'hip_flexor_stretch', sets: '1', reps: '60s each', weight: 'BW' },
-    { id: 'shoulder_stretch', sets: '1', reps: '45s each', weight: 'BW' },
-    { id: 'thoracic_rotation', sets: '1', reps: '30s each', weight: 'BW' },
-    { id: 'hamstring_stretch', sets: '1', reps: '45s each', weight: 'BW' },
-  ],
-  run: [
-    { id: 'hip_flexor_stretch', sets: '1', reps: '60s each', weight: 'BW' },
-    { id: 'hamstring_stretch', sets: '1', reps: '60s each', weight: 'BW' },
-    { id: 'pigeon_pose', sets: '1', reps: '60s each', weight: 'BW' },
-    { id: 'samson_stretch', sets: '1', reps: '30s each', weight: 'BW' },
-  ],
-};
-
-// Map day template types to cooldown focus
-function getCooldownForDay(dayType) {
-  const FOCUS_MAP = {
-    lower_power: 'lower',
-    upper_push_pull: 'upper',
-    sprint_conditioning: 'run',
-    olympic_power: 'full',
-    endurance_metabolic: 'run',
-    strength: 'full',
-    wod_focus: 'full',
-    run_focus: 'run',
-    obstacle: 'full',
-  };
-  return COOLDOWN_BY_FOCUS[FOCUS_MAP[dayType] || 'full'];
-}
-
 // ═══════════════════════════════════════════════════════════════
-// Claude prompt — asks for plan CONFIG, not workout templates
-// Single API call, small response (~500 tokens vs ~4000 per phase)
+// Claude strategy prompt — asks for movement patterns, not exercises
 // ═══════════════════════════════════════════════════════════════
 
-const CONFIG_PROMPT = `You are an elite strength & conditioning coach. Design a training CONFIGURATION (not full workouts — the app builds those).
+const STRATEGY_PROMPT = `You are an elite S&C coach. Design a training STRATEGY for this athlete.
 
-Return valid JSON with this exact structure:
+Return valid JSON. Do NOT pick individual exercises — pick movement PATTERNS and priorities.
+The app builds specific workouts from your strategy.
+
+Valid movement patterns: squat, hinge, horizontal_push, horizontal_pull, vertical_push, vertical_pull, pull_up, carry, core, olympic, elbow_flexion, elbow_extension, plyometric
+
+Valid day types: lower_power, upper_push, upper_pull, upper_push_pull, sprint_conditioning, olympic_power, endurance_metabolic, obstacle, full_body, wod_focus
+
+Return this exact JSON structure:
 {
-  "planName": "descriptive program name",
-  "weeklySchedule": [
-    { "day": 0, "type": "<day_type>", "focus": "brief focus description" }
+  "planName": "descriptive name",
+  "dayConfigs": [
+    {
+      "type": "day_type",
+      "primary_patterns": ["squat", "hinge"],
+      "secondary_patterns": ["carry"],
+      "arm_finisher": true,
+      "core_block": false,
+      "run": null,
+      "wod": { "type": "AMRAP" }
+    }
   ],
-  "exercisePriorities": {
-    "primary_squat": "exercise_id",
-    "primary_hinge": "exercise_id",
-    "primary_push": "exercise_id",
-    "primary_pull": "exercise_id",
-    "primary_olympic": "exercise_id or null",
-    "accessories": ["exercise_id", "exercise_id", ...]
+  "patternPriorities": {
+    "horizontal_push": 9,
+    "pull_up": 9,
+    "squat": 7
   },
-  "wodSelections": {
-    "accumulation": ["wod_id", "wod_id", "wod_id"],
-    "intensification": ["wod_id", "wod_id", "wod_id"],
-    "realization": ["wod_id", "wod_id", "wod_id"]
-  },
-  "runPlan": {
-    "weeklyRunDays": [day_indices_that_have_runs],
-    "longRunDay": day_index_for_long_run
-  },
-  "programNotes": "coaching notes about the program design",
+  "compoundEquipmentPreference": ["barbell", "dumbbell"],
+  "programNotes": "coaching notes",
   "restDayAdvice": "recovery guidance"
 }
 
-VALID day types: ${VALID_DAY_TYPES.join(', ')}
-
 RULES:
-- weeklySchedule must have exactly N entries (matching training days/week)
-- Each day type should appear at most twice per week
-- For endurance/race goals: include at least 2 run days (sprint_conditioning, endurance_metabolic, or run_focus)
-- For strength goals: prioritize lower_power, upper_push_pull, olympic_power
-- exercisePriorities must use exercise IDs from the AVAILABLE list
-- wodSelections must use WOD IDs from the AVAILABLE list
-- Pick WODs that match user's equipment — don't pick WODs requiring gear they don't have
-- Accumulation WODs: longer, beginner-friendly (AMRAPs, bodyweight)
-- Intensification WODs: moderate, mixed modality
-- Realization WODs: short, intense, competition-style
+- dayConfigs must have exactly N entries matching training days per week
+- For endurance/race goals: include run blocks on 2-3 days
+- run.type options: "easy", "tempo", "intervals", "fartlek", "long_run", "race_pace"
+- For strength goals: prioritize squat, hinge, horizontal_push patterns
+- Arm emphasis: set arm_finisher:true on desired days
+- Obstacle race: include pull_up, carry patterns and wod blocks
+- Balance push/pull patterns across the week
 - JSON only, no other text`;
 
 // ═══════════════════════════════════════════════════════════════
@@ -214,258 +91,148 @@ export async function generateAIPlan(userProfile, onStatus) {
   const apiKey = getApiKey();
   if (onStatus) onStatus('Analyzing your goals and equipment...');
 
-  // Load exercise pool and WODs
+  // Load data
   const exercisePool = await loadExercisePool(userProfile);
-  const wodList = await getWodsFromDb();
+  const wodList = await loadWodList();
 
-  // Build the user context for Claude
-  const userPrompt = buildUserPrompt(userProfile, exercisePool, wodList);
+  // Get race requirements
+  const raceReqs = getRaceRequirements(userProfile);
+  const raceExerciseReqs = getRaceExerciseRequirements(raceReqs, userProfile.equipment);
+  const targetDistance = getRaceDistance(userProfile);
 
-  if (onStatus) onStatus('Designing your program...');
+  if (onStatus) onStatus('Designing your program strategy...');
 
-  let config;
+  // Get strategy from Claude (or fallback)
+  let strategy;
   try {
-    config = await callClaudeForConfig(apiKey, userPrompt);
-    config = validateAndFixConfig(config, userProfile, exercisePool, wodList);
+    const prompt = buildStrategyPrompt(userProfile, raceReqs);
+    const raw = await callClaude(apiKey, prompt);
+    strategy = validateStrategy(raw, userProfile);
   } catch (err) {
-    console.warn('[AI Plan] Claude config failed, using smart defaults:', err.message);
-    config = buildDefaultConfig(userProfile, exercisePool, wodList);
+    console.warn('[AI Plan] Strategy call failed, using defaults:', err.message);
+    strategy = buildDefaultStrategy(userProfile, raceReqs);
   }
 
   if (onStatus) onStatus('Building your workouts...');
 
-  // Build the full plan deterministically from the config
-  const result = await buildPlanFromConfig(config, userProfile, exercisePool, wodList, onStatus);
+  // Build the full plan
+  const result = await buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs, raceExerciseReqs, targetDistance, onStatus);
   return result;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Claude API call — single call for plan config
+// Claude API
 // ═══════════════════════════════════════════════════════════════
 
-async function callClaudeForConfig(apiKey, userPrompt) {
+async function callClaude(apiKey, userPrompt) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 120000);
-
   try {
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 2000,
-        system: CONFIG_PROMPT,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
+      body: JSON.stringify({ model: MODEL, max_tokens: 1500, system: STRATEGY_PROMPT, messages: [{ role: 'user', content: userPrompt }] }),
       signal: ctrl.signal,
     });
     clearTimeout(timer);
-
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => '');
-      throw new Error(`API ${res.status}: ${errBody.slice(0, 200)}`);
-    }
-
+    if (!res.ok) throw new Error(`API ${res.status}`);
     const data = await res.json();
     const usage = data.usage;
-    if (usage) console.log(`[AI Plan] Tokens in:${usage.input_tokens} out:${usage.output_tokens} stop:${data.stop_reason}`);
-
+    if (usage) console.log(`[AI Plan] Tokens in:${usage.input_tokens} out:${usage.output_tokens}`);
     let text = (data.content?.[0]?.text || '').trim();
-    // Extract JSON from any surrounding prose
-    const jsonStart = text.indexOf('{');
-    const jsonEnd = text.lastIndexOf('}');
-    if (jsonStart >= 0 && jsonEnd > jsonStart) {
-      text = text.substring(jsonStart, jsonEnd + 1);
-    }
-
+    const s = text.indexOf('{'), e = text.lastIndexOf('}');
+    if (s >= 0 && e > s) text = text.substring(s, e + 1);
     return JSON.parse(text);
-  } catch (err) {
-    clearTimeout(timer);
-    throw err;
-  }
+  } catch (err) { clearTimeout(timer); throw err; }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Build user prompt with available exercises and WODs
-// ═══════════════════════════════════════════════════════════════
-
-function buildUserPrompt(userProfile, exercisePool, wodList) {
+function buildStrategyPrompt(userProfile, raceReqs) {
   const p = [];
-  p.push(`PROFILE: ${userProfile.experience || 'intermediate'} level`);
+  p.push(`ATHLETE: ${userProfile.experience || 'intermediate'} level`);
   p.push(`GOALS: ${(userProfile.goals || [userProfile.goal]).join(', ')}`);
   p.push(`DAYS/WEEK: ${userProfile.trainingDaysPerWeek || 5}`);
   p.push(`TIME: ${userProfile.sessionDuration || 60} min`);
-
+  if (userProfile.equipment?.length) p.push(`EQUIPMENT: ${userProfile.equipment.join(', ')}`);
   if (userProfile.workingWeights) {
     const ww = userProfile.workingWeights;
-    p.push(`WORKING WEIGHTS (8-10RM): Squat ${ww.squat || '?'}, Bench ${ww.bench || '?'}, Deadlift ${ww.deadlift || '?'}, OHP ${ww.overhead_press || '?'}, Row ${ww.row || '?'}`);
+    p.push(`WORKING WEIGHTS (8-10RM): Squat ${ww.squat || '?'}, Bench ${ww.bench || '?'}, DL ${ww.deadlift || '?'}, OHP ${ww.overhead_press || '?'}, Row ${ww.row || '?'}`);
   }
-
-  if (userProfile.equipment?.length) p.push(`EQUIPMENT: ${userProfile.equipment.join(', ')}`);
+  if (userProfile.bodyCompGoals?.length) p.push(`BODY COMP: ${userProfile.bodyCompGoals.join(', ')}`);
   if (userProfile.exclusions?.length) p.push(`EXCLUSIONS: ${userProfile.exclusions.join(', ')}`);
+  if (raceReqs) p.push(`RACE: ${raceReqs.label} (${raceReqs.distance_miles} mi, ${raceReqs.obstacles} obstacles)`);
   if (userProfile.additionalNotes) p.push(`NOTES: ${userProfile.additionalNotes}`);
-
-  // Available exercise IDs (seed exercises only, for brevity)
-  const seedExercises = exercisePool.all.filter(e => e.source === 'seed' || !e.source);
-  p.push(`\nAVAILABLE EXERCISE IDS:\n${seedExercises.map(e => `${e.id} (${e.name}, ${e.muscle_group}, ${e.category})`).join('\n')}`);
-
-  // Available WOD IDs with equipment requirements
-  const wodSummary = wodList.map(w => {
-    const equip = w.equipment?.join(', ') || 'none';
-    return `${w.id}: ${w.name} (${w.type}, ${w.difficulty}, ${w.estimatedTime}, equip: ${equip})`;
-  });
-  p.push(`\nAVAILABLE WOD IDS:\n${wodSummary.join('\n')}`);
-
   return p.join('\n');
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Validate and fix Claude's config
+// Strategy validation and defaults
 // ═══════════════════════════════════════════════════════════════
 
-function validateAndFixConfig(config, userProfile, exercisePool, wodList) {
+function validateStrategy(raw, userProfile) {
   const daysPerWeek = userProfile.trainingDaysPerWeek || 5;
+  const s = raw;
 
-  // Validate weeklySchedule
-  if (!config.weeklySchedule || !Array.isArray(config.weeklySchedule)) {
-    throw new Error('Missing weeklySchedule');
+  // Validate dayConfigs count
+  if (!s.dayConfigs || !Array.isArray(s.dayConfigs)) s.dayConfigs = [];
+  while (s.dayConfigs.length < daysPerWeek) {
+    s.dayConfigs.push({ type: 'strength', primary_patterns: ['squat', 'horizontal_push'], secondary_patterns: [], arm_finisher: false });
   }
-  // Ensure correct number of days
-  if (config.weeklySchedule.length !== daysPerWeek) {
-    config.weeklySchedule = config.weeklySchedule.slice(0, daysPerWeek);
-    while (config.weeklySchedule.length < daysPerWeek) {
-      config.weeklySchedule.push({ day: config.weeklySchedule.length, type: 'strength', focus: 'Full body' });
-    }
-  }
-  // Validate day types
-  for (const day of config.weeklySchedule) {
-    if (!VALID_DAY_TYPES.includes(day.type)) {
-      day.type = 'strength'; // Safe fallback
-    }
+  s.dayConfigs = s.dayConfigs.slice(0, daysPerWeek);
+
+  // Ensure valid patterns
+  const VALID_PATTERNS = ['squat', 'hinge', 'horizontal_push', 'horizontal_pull', 'vertical_push', 'vertical_pull', 'pull_up', 'carry', 'core', 'olympic', 'elbow_flexion', 'elbow_extension', 'plyometric'];
+  for (const day of s.dayConfigs) {
+    day.primary_patterns = (day.primary_patterns || []).filter(p => VALID_PATTERNS.includes(p));
+    day.secondary_patterns = (day.secondary_patterns || []).filter(p => VALID_PATTERNS.includes(p));
   }
 
-  // Validate exercise priorities — ensure IDs exist in pool
-  if (!config.exercisePriorities) config.exercisePriorities = {};
-  const allIds = new Set(exercisePool.all.map(e => e.id));
-  for (const [key, val] of Object.entries(config.exercisePriorities)) {
-    if (key === 'accessories' && Array.isArray(val)) {
-      config.exercisePriorities.accessories = val.filter(id => allIds.has(id));
-    } else if (val && !allIds.has(val)) {
-      config.exercisePriorities[key] = null;
-    }
+  if (!s.patternPriorities) s.patternPriorities = {};
+  if (!s.compoundEquipmentPreference) {
+    const equip = (userProfile.equipment || []).map(e => e.toLowerCase());
+    s.compoundEquipmentPreference = equip.includes('barbell') ? ['barbell', 'dumbbell', 'kettlebell'] : ['dumbbell', 'kettlebell', 'bodyweight'];
   }
 
-  // Validate WOD selections — ensure IDs exist
-  const wodIds = new Set(wodList.map(w => w.id));
-  if (!config.wodSelections) config.wodSelections = {};
-  for (const phase of ['accumulation', 'intensification', 'realization']) {
-    if (!config.wodSelections[phase] || !Array.isArray(config.wodSelections[phase])) {
-      config.wodSelections[phase] = [];
-    }
-    config.wodSelections[phase] = config.wodSelections[phase].filter(id => wodIds.has(id));
-    // Ensure at least 3 WODs per phase
-    while (config.wodSelections[phase].length < 3) {
-      const available = wodList.filter(w => !config.wodSelections[phase].includes(w.id));
-      if (available.length === 0) break;
-      config.wodSelections[phase].push(available[Math.floor(Math.random() * available.length)].id);
-    }
-  }
-
-  // Validate run plan
-  if (!config.runPlan) config.runPlan = { weeklyRunDays: [], longRunDay: null };
-
-  return config;
+  return s;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Default config — used when Claude fails
-// ═══════════════════════════════════════════════════════════════
-
-function buildDefaultConfig(userProfile, exercisePool, wodList) {
+function buildDefaultStrategy(userProfile, raceReqs) {
+  const goals = userProfile.goals || [userProfile.goal || 'general_fitness'];
+  const equip = (userProfile.equipment || []).map(e => e.toLowerCase());
+  const hasBarbell = equip.some(e => /barbell|squat rack/i.test(e));
+  const hasSpartanGoal = !!raceReqs || goals.some(g => /spartan|obstacle|athletic/i.test(g));
   const daysPerWeek = userProfile.trainingDaysPerWeek || 5;
-  const goals = userProfile.goals || [userProfile.goal || 'balanced'];
-  const hasEndurance = goals.some(g => ['endurance', 'athletic'].includes(g))
-    || /spartan|race|run/i.test(userProfile.additionalNotes || '');
 
-  // Default schedules by day count
-  const SCHEDULES = {
-    3: hasEndurance
-      ? ['lower_power', 'upper_push_pull', 'endurance_metabolic']
-      : ['lower_power', 'upper_push_pull', 'strength'],
-    4: hasEndurance
-      ? ['lower_power', 'upper_push_pull', 'sprint_conditioning', 'endurance_metabolic']
-      : ['lower_power', 'upper_push_pull', 'olympic_power', 'strength'],
-    5: hasEndurance
-      ? ['lower_power', 'upper_push_pull', 'sprint_conditioning', 'olympic_power', 'endurance_metabolic']
-      : ['lower_power', 'upper_push_pull', 'olympic_power', 'strength', 'wod_focus'],
-    6: ['lower_power', 'upper_push_pull', 'sprint_conditioning', 'olympic_power', 'endurance_metabolic', 'wod_focus'],
-  };
-
-  const schedule = SCHEDULES[daysPerWeek] || SCHEDULES[5];
-
-  // Filter WODs by user equipment
-  const userEquip = new Set((userProfile.equipment || []).map(e => e.toLowerCase()));
-  const compatibleWods = wodList.filter(w => {
-    if (!w.equipment || w.equipment.length === 0) return true;
-    return w.equipment.every(eq => userEquip.has(eq) || eq === 'none');
-  });
-  const fallbackWods = compatibleWods.length > 0 ? compatibleWods : wodList;
-
-  const easyWods = fallbackWods.filter(w => w.difficulty === 'beginner' || w.difficulty === 'intermediate');
-  const hardWods = fallbackWods.filter(w => w.difficulty === 'intermediate' || w.difficulty === 'advanced');
-  const peakWods = fallbackWods.filter(w => w.difficulty === 'advanced' || w.difficulty === 'elite');
-
-  const pickN = (arr, n) => {
-    const shuffled = [...arr].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, n).map(w => w.id);
-  };
+  const dayConfigs = getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanGoal);
 
   return {
-    planName: `${userProfile.experience || 'Intermediate'} ${hasEndurance ? 'Spartan' : 'Strength'} Program`,
-    weeklySchedule: schedule.map((type, i) => ({ day: i, type, focus: DAY_TEMPLATES[type]?.title || type })),
-    exercisePriorities: {
-      primary_squat: 'back_squat',
-      primary_hinge: 'deadlift',
-      primary_push: 'bench_press',
-      primary_pull: 'barbell_row',
-      primary_olympic: 'power_clean',
-      accessories: ['face_pulls', 'db_curl', 'lateral_raise', 'tricep_pushdown', 'db_walking_lunges'],
+    planName: `${userProfile.experience || 'Intermediate'} ${hasSpartanGoal ? 'Spartan' : 'Strength'} Program`,
+    dayConfigs,
+    patternPriorities: {
+      squat: 7, hinge: 7, horizontal_push: 8, horizontal_pull: 7,
+      vertical_push: 6, pull_up: hasSpartanGoal ? 9 : 6,
+      carry: hasSpartanGoal ? 8 : 4, core: 5,
+      elbow_flexion: 6, elbow_extension: 6,
     },
-    wodSelections: {
-      accumulation: pickN(easyWods.length >= 3 ? easyWods : fallbackWods, 3),
-      intensification: pickN(hardWods.length >= 3 ? hardWods : fallbackWods, 3),
-      realization: pickN(peakWods.length >= 3 ? peakWods : fallbackWods, 3),
-    },
-    runPlan: {
-      weeklyRunDays: schedule.reduce((days, type, i) => {
-        if (/run|sprint|endurance/.test(type)) days.push(i);
-        return days;
-      }, []),
-      longRunDay: schedule.indexOf('endurance_metabolic'),
-    },
-    programNotes: 'Auto-generated program based on your profile.',
-    restDayAdvice: 'Light walking, foam rolling, mobility work.',
+    compoundEquipmentPreference: hasBarbell ? ['barbell', 'dumbbell', 'kettlebell'] : ['dumbbell', 'kettlebell', 'bodyweight'],
+    programNotes: 'Auto-generated program.',
+    restDayAdvice: 'Light walking, foam rolling, mobility.',
   };
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Build the full plan deterministically from config
+// Build the full plan
 // ═══════════════════════════════════════════════════════════════
 
-async function buildPlanFromConfig(config, userProfile, exercisePool, wodList, onStatus) {
+async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs, raceExerciseReqs, targetDistance, onStatus) {
   const planId = generateUUID();
   const startDate = getNextMonday();
   const eventDate = userProfile.eventDate || addWeeks(startDate, 16);
   const { totalWeeks, phases } = calculatePhases(startDate, eventDate);
   const trainingDays = userProfile.trainingDays || Array.from({ length: userProfile.trainingDaysPerWeek || 5 }, (_, i) => i);
+  const sessionMinutes = parseInt(userProfile.sessionDuration) || 60;
 
-  // Index WODs by ID for fast lookup
-  const wodById = {};
-  for (const w of wodList) wodById[w.id] = w;
-
-  // Track recently used exercises for variety
   const recentlyUsed = new Set();
-  const planIssues = [];
+  const weekWodIds = []; // track WODs used this week
 
   for (let week = 1; week <= totalWeeks; week++) {
     const phase = getPhaseForWeek(phases, week);
@@ -474,15 +241,12 @@ async function buildPlanFromConfig(config, userProfile, exercisePool, wodList, o
     const mesoPhase = getMesocyclePhase(week);
     const stimulus = STIMULUS_TYPES[mesoPhase.defaultStimulus];
 
-    // Determine phaseKey for WOD selection
+    // Determine display phase for race prep override
     const weeksFromEnd = totalWeeks - week;
-    let phaseKey;
-    if (weeksFromEnd < 3 && totalWeeks > 12) {
-      phaseKey = 'realization'; // race prep uses peak WODs
-    } else {
-      const cw = ((week - 1) % 12) + 1;
-      phaseKey = cw <= 4 ? 'accumulation' : cw <= 8 ? 'intensification' : 'realization';
-    }
+    const isRacePrep = weeksFromEnd < 3 && totalWeeks > 12;
+    const displayPhase = isRacePrep ? 'race_prep' : phase.phase;
+
+    weekWodIds.length = 0; // reset weekly WOD tracking
 
     for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
       const date = addDays(weekStartDate, dayOfWeek);
@@ -491,88 +255,84 @@ async function buildPlanFromConfig(config, userProfile, exercisePool, wodList, o
       if (trainingDayIndex === -1) {
         await savePlanDay({
           planId, date, dayOfWeek, weekNumber: week,
-          phase: phase.phase, title: 'REST DAY',
-          focus: config.restDayAdvice || 'Recovery & mobility',
+          phase: displayPhase, title: 'REST DAY',
+          focus: strategy.restDayAdvice || 'Recovery & mobility',
           color: '#333', emoji: '', isRestDay: true,
         });
         continue;
       }
 
-      // Get the day config from Claude's schedule
-      const dayConfig = config.weeklySchedule[trainingDayIndex % config.weeklySchedule.length];
-      const template = DAY_TEMPLATES[dayConfig.type] || DAY_TEMPLATES.strength;
+      // Get day config from strategy
+      const dayConfig = strategy.dayConfigs[trainingDayIndex % strategy.dayConfigs.length];
+
+      // Build composable block list from day config
+      const blocks = buildDayBlocks(dayConfig, displayPhase, sessionMinutes);
+
+      // Determine day title and focus
+      const title = dayConfig.type?.replace(/_/g, ' ').toUpperCase() || 'TRAINING';
+      const focusLabel = isRacePrep
+        ? `TAPER \u2022 RACE PREP \u2022 Week ${week}`
+        : `${mesoPhase.label} \u2022 ${stimulus.label} \u2022 Week ${week}`;
 
       const dayId = await savePlanDay({
         planId, date, dayOfWeek, weekNumber: week,
-        phase: phase.phase,
-        title: `${template.title}`,
-        focus: weeksFromEnd < 3 && totalWeeks > 12
-          ? `TAPER • RACE PREP • Week ${week}`
-          : `${mesoPhase.label} • ${stimulus.label} • Week ${week}`,
+        phase: displayPhase, title,
+        focus: focusLabel,
         color: phase.color, emoji: '', isRestDay: false,
       });
 
-      // Track exercises used today — no duplicates across blocks in same day
       const usedToday = new Set();
 
-      // Build each block
-      for (let blockIdx = 0; blockIdx < template.blocks.length; blockIdx++) {
-        const blockTemplate = template.blocks[blockIdx];
+      for (let bi = 0; bi < blocks.length; bi++) {
+        const block = blocks[bi];
 
         const blockId = await savePlanBlock({
-          planDayId: dayId, sortOrder: blockIdx,
-          name: blockTemplate.name, type: blockTemplate.type,
-          timeCap: blockTemplate.duration,
-          isAmrap: blockTemplate.isWod || false,
-          hasGps: blockTemplate.hasGps || false,
+          planDayId: dayId, sortOrder: bi,
+          name: block.name, type: block.type,
+          timeCap: block.duration,
+          isAmrap: block.isWod || false,
+          hasGps: block.hasGps || false,
         });
 
         let exercises;
-        if (blockTemplate.isRun) {
-          // ── Run block: use proven run generation ──
-          const runType = pickRunType(dayConfig.type, week, phase.phase, userProfile.experience);
+
+        if (block.isRun) {
+          // ── Run block ──
+          const runType = block.runType?.toUpperCase() || pickRunType(displayPhase, week);
           await updateBlockRunType(blockId, runType);
-          exercises = generateRunExercises(week, phase.phase, totalWeeks, exercisePool, runType, userProfile.experience, userProfile);
-        } else if (blockTemplate.isWarmup) {
-          // ── Warmup: safe hardcoded exercises ──
-          exercises = selectWarmupExercises(blockTemplate, exercisePool);
-        } else if (blockTemplate.isWod) {
-          // ── WOD: pull directly from seed data ──
-          exercises = selectWodExercises(blockTemplate, config.wodSelections, phaseKey, week, wodById, userProfile);
+          exercises = generateRunExercises(week, displayPhase, totalWeeks, exercisePool, runType, userProfile.experience, targetDistance);
+        } else if (block.isWarmup) {
+          // ── Warmup ──
+          exercises = selectWarmupExercises(block.warmupPool || WARMUP_IDS, block.exerciseCount, exercisePool);
+        } else if (block.isCooldown) {
+          // ── Cooldown ──
+          exercises = selectCooldownExercises(block.cooldownPool || [], exercisePool);
+        } else if (block.isWod) {
+          // ── WOD from seed data ──
+          const dayPatterns = dayConfig.primary_patterns || [];
+          const spartanBias = raceReqs ? 0.7 : 0.2;
+          const wod = selectWOD(wodList, {
+            phase: displayPhase, dayPatterns,
+            userEquipment: userProfile.equipment || [],
+            spartanBias, excludeWodIds: weekWodIds,
+            targetMinutes: parseInt(block.duration) || 12,
+          });
+          exercises = buildWodExercises(wod);
+          if (wod) weekWodIds.push(wod.id);
         } else {
-          // ── Lifts/accessories: scored selection + progressionRules ──
-          exercises = selectExercises(blockTemplate, exercisePool, recentlyUsed, week, phase.phase, userProfile, config.exercisePriorities, usedToday);
+          // ── Lifts / accessories ──
+          exercises = selectExercises(block, exercisePool, recentlyUsed, usedToday, week, displayPhase, userProfile, strategy, raceExerciseReqs);
         }
 
-        // Save exercises and track for day-level dedup
-        for (let exIdx = 0; exIdx < exercises.length; exIdx++) {
-          const ex = exercises[exIdx];
+        for (let ei = 0; ei < exercises.length; ei++) {
+          const ex = exercises[ei];
           await savePlanExercise({
-            planBlockId: blockId, exerciseId: ex.id, sortOrder: exIdx,
+            planBlockId: blockId, exerciseId: ex.id, sortOrder: ei,
             sets: ex.sets, reps: ex.reps, weight: ex.weight,
             rest: ex.rest || null, notes: ex.notes || null,
           });
-          recentlyUsed.add(ex.id);
           usedToday.add(ex.id);
-        }
-      }
-
-      // Add cooldown matched to the day's muscle groups
-      const sessionMin = parseInt(userProfile.sessionDuration) || 60;
-      if (sessionMin >= 45) {
-        const cooldownExercises = getCooldownForDay(dayConfig.type);
-        const cooldownBlockId = await savePlanBlock({
-          planDayId: dayId, sortOrder: template.blocks.length,
-          name: 'COOLDOWN', type: 'MOBILITY', timeCap: '5 min',
-          isAmrap: false, hasGps: false,
-        });
-        for (let ci = 0; ci < cooldownExercises.length; ci++) {
-          const ce = cooldownExercises[ci];
-          await savePlanExercise({
-            planBlockId: cooldownBlockId, exerciseId: ce.id, sortOrder: ci,
-            sets: `${ce.sets}x${ce.reps}`, reps: ce.reps, weight: ce.weight,
-            rest: null, notes: null,
-          });
+          recentlyUsed.add(ex.id);
         }
       }
     }
@@ -581,33 +341,26 @@ async function buildPlanFromConfig(config, userProfile, exercisePool, wodList, o
     if (onStatus && week % 4 === 0) onStatus(`Week ${week}/${totalWeeks}...`);
   }
 
-  if (planIssues.length > 0) {
-    console.warn(`[AI Plan] ${planIssues.length} issues found:`);
-    for (const issue of planIssues) console.warn(`  ${issue}`);
-  } else {
-    console.log('[AI Plan] No validation issues found');
-  }
-
+  console.log('[AI Plan] Plan generated successfully');
   return {
     planId, totalWeeks, phases, startDate, eventDate,
-    planName: config.planName || 'AI Training Program',
-    programNotes: config.programNotes || '',
-    issues: planIssues,
+    planName: strategy.planName || 'AI Training Program',
+    programNotes: strategy.programNotes || '',
   };
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Exercise selection — from planGenerator.js, enhanced with AI priorities
+// Exercise selection — strategy-driven scoring
 // ═══════════════════════════════════════════════════════════════
 
 async function loadExercisePool(userProfile) {
-  const styles = userProfile.workoutStyles || [userProfile.workoutStyle || 'hybrid'];
+  const styles = [...new Set([...(userProfile.workoutStyles || [userProfile.workoutStyle || 'hybrid']), 'hybrid'])];
   const exerciseMap = new Map();
   for (const style of styles) {
     const exercises = await getExercisesByFilter({
       style, exclusions: userProfile.exclusions || [],
       equipment: userProfile.equipment || [],
-      difficulty: userProfile.experience || 'intermediate',
+      difficulty: null,
     });
     for (const ex of exercises) exerciseMap.set(ex.id, ex);
   }
@@ -620,147 +373,172 @@ async function loadExercisePool(userProfile) {
   return { all: allExercises, byMuscle };
 }
 
-function selectExercises(blockTemplate, pool, recentlyUsed, weekNumber, phase, userProfile, priorities = {}, usedToday = new Set()) {
-  const { muscleGroups, exerciseCount, compoundsOnly, olympicOnly } = blockTemplate;
+async function loadWodList() {
+  try {
+    return await getWodsFromDb();
+  } catch { return []; }
+}
+
+function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase, userProfile, strategy, raceExerciseReqs) {
+  const { muscleGroups, exerciseCount, compoundsOnly, olympicOnly, patterns } = block;
   const bodyCompGoal = userProfile.bodyCompGoal || 'maintain';
   const bodyCompParams = getBodyCompParams(bodyCompGoal);
-  const candidates = [];
 
-  for (const mg of muscleGroups) {
-    const exercises = pool.byMuscle[mg] || [];
-    candidates.push(...exercises);
+  // Gather candidates from relevant muscle groups
+  const candidates = [];
+  const seen = new Set();
+  for (const mg of (muscleGroups || [])) {
+    for (const ex of (pool.byMuscle[mg] || [])) {
+      if (!seen.has(ex.id)) { seen.add(ex.id); candidates.push(ex); }
+    }
   }
 
-  // User's equipment for scoring
-  const userEquip = new Set((userProfile.equipment || []).map(e => e.toLowerCase()));
-  const hasBarbell = userEquip.has('barbell') || userEquip.has('barbell & rack') || userEquip.has('squat rack');
-  const goals = (userProfile.goals || [userProfile.goal || '']).map(g => g.toLowerCase());
-  const wantsChest = goals.some(g => /chest|muscle|size/i.test(g));
-  const wantsArms = goals.some(g => /arm|muscle|size/i.test(g));
-  const wantsSpartan = goals.some(g => /spartan|obstacle|endurance|athletic/i.test(g))
-    || /spartan/i.test(userProfile.additionalNotes || '');
+  // Equipment preference order from strategy
+  const equipPref = strategy.compoundEquipmentPreference || ['barbell', 'dumbbell', 'kettlebell'];
 
-  // Priority exercise IDs from Claude's config
-  const priorityIds = new Set();
-  if (priorities.primary_squat) priorityIds.add(priorities.primary_squat);
-  if (priorities.primary_hinge) priorityIds.add(priorities.primary_hinge);
-  if (priorities.primary_push) priorityIds.add(priorities.primary_push);
-  if (priorities.primary_pull) priorityIds.add(priorities.primary_pull);
-  if (priorities.primary_olympic) priorityIds.add(priorities.primary_olympic);
-  if (priorities.accessories) priorities.accessories.forEach(id => priorityIds.add(id));
+  // Race required exercise IDs
+  const raceRequiredIds = new Set();
+  for (const req of (raceExerciseReqs || [])) {
+    req.exercises.forEach(id => raceRequiredIds.add(id));
+  }
 
+  // Score candidates
   const scored = candidates.map(ex => {
-    let score = Math.random() * 5;
+    let score = Math.random() * 3;
+
+    // Compound filtering
     if (compoundsOnly && ex.is_compound) score += 15;
-    if (compoundsOnly && !ex.is_compound) score -= 20;
+    if (compoundsOnly && !ex.is_compound) score -= 25;
     if (olympicOnly && /clean|snatch|jerk/i.test(ex.name)) score += 20;
-    if (olympicOnly && !/clean|snatch|jerk|push.*press/i.test(ex.name)) score -= 15;
-    if (usedToday.has(ex.id)) score -= 100; // Never repeat within same day
-    if (recentlyUsed.has(ex.id)) score -= 10;
-    if (ex.is_compound && (phase === 'build' || phase === 'peak')) score += 5;
-    if (ex.category === 'bodyweight' && ex.muscle_group === 'full_body') score += 3;
-    if (ex.source === 'seed' || !ex.source) score += 8;
+    if (olympicOnly && !/clean|snatch|jerk|push.*press/i.test(ex.name)) score -= 20;
 
-    // Prefer barbell when user has one — barbell compounds are king for strength
-    if (hasBarbell && ex.category === 'barbell' && compoundsOnly) score += 12;
-    // Don't use DB/KB versions of exercises when barbell is available for compounds
-    if (hasBarbell && compoundsOnly && (ex.category === 'dumbbell' || ex.category === 'kettlebell')) score -= 8;
+    // Equipment preference from strategy
+    const equipRank = equipPref.indexOf(ex.category);
+    if (equipRank === 0) score += 12;
+    else if (equipRank === 1) score += 6;
+    else if (equipRank === 2) score += 2;
 
-    // Goal-based boosts
-    if (wantsChest && ex.muscle_group === 'chest') score += 5;
-    if (wantsArms && ex.muscle_group === 'arms') score += 5;
-    if (wantsSpartan && /pull.?up|dead.?hang|farmer|carry|rope|climb|monkey|burpee/i.test(ex.name)) score += 8;
+    // Pattern priority from strategy
+    if (patterns && strategy.patternPriorities) {
+      for (const pattern of patterns) {
+        const pri = strategy.patternPriorities[pattern] || 5;
+        // Check if this exercise matches the pattern
+        if (exerciseMatchesPattern(ex, pattern)) score += pri * 2;
+      }
+    }
 
-    // AI priority boost — Claude's preferred exercises get a big bonus
-    if (priorityIds.has(ex.id)) score += 25;
+    // Race requirement boost
+    if (raceRequiredIds.has(ex.id)) score += 15;
+
+    // Dedup
+    if (usedToday.has(ex.id)) score -= 100;
+    if (recentlyUsed.has(ex.id)) score -= 8;
+
+    // Seed exercise preference
+    if (ex.source === 'seed' || !ex.source) score += 6;
+
     return { exercise: ex, score };
   });
 
   scored.sort((a, b) => b.score - a.score);
 
+  // Pick top N
   const selected = [];
   const usedIds = new Set();
   for (const item of scored) {
     if (usedIds.has(item.exercise.id)) continue;
-    if (selected.length >= exerciseCount) break;
+    if (selected.length >= (exerciseCount || 3)) break;
     usedIds.add(item.exercise.id);
 
     const ex = item.exercise;
     const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal);
     const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
-    let notes = null;
 
     selected.push({
       id: ex.id,
       sets: `${sets}x${reps}`,
       reps: `${reps}`,
-      weight: weight,
+      weight,
       rest: bodyCompParams.restSeconds,
-      notes,
+      notes: null,
     });
   }
 
   return selected;
 }
 
-function selectWarmupExercises(blockTemplate, pool) {
-  const available = WARMUP_IDS
+// Check if an exercise matches a movement pattern
+function exerciseMatchesPattern(exercise, pattern) {
+  const name = (exercise.name || '').toLowerCase();
+  const mg = exercise.muscle_group;
+  const MATCHES = {
+    squat: () => /squat|goblet|lunge|split|step.?up|pistol/i.test(name),
+    hinge: () => /deadlift|rdl|romanian|swing|hip thrust|good morning/i.test(name),
+    horizontal_push: () => /bench|push.?up|dip|fly|press/i.test(name) && !/overhead|shoulder/i.test(name) && mg === 'chest',
+    horizontal_pull: () => /row|inverted/i.test(name) && mg === 'back',
+    vertical_push: () => /overhead|shoulder|press|push.?press|jerk/i.test(name) && mg === 'shoulders',
+    vertical_pull: () => /pull.?up|chin.?up|lat.*pull|pulldown/i.test(name),
+    pull_up: () => /pull.?up|chin.?up|muscle.?up/i.test(name),
+    carry: () => /carry|farmer|walk.*kb|walk.*db|suitcase/i.test(name),
+    core: () => mg === 'core' || /plank|hollow|dead.?bug|pallof|bird.?dog|sit.?up|crunch/i.test(name),
+    olympic: () => /clean|snatch|jerk/i.test(name),
+    elbow_flexion: () => /curl|chin/i.test(name),
+    elbow_extension: () => /tricep|skull|pushdown|extension|dip/i.test(name),
+    plyometric: () => /jump|box|bound|skip/i.test(name),
+  };
+  return MATCHES[pattern]?.() || false;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Warmup and cooldown — safe, pattern-matched
+// ═══════════════════════════════════════════════════════════════
+
+function selectWarmupExercises(warmupPool, count, pool) {
+  const available = warmupPool
     .map(id => pool.all.find(e => e.id === id))
     .filter(Boolean);
 
   const shuffled = available.sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, blockTemplate.exerciseCount).map(ex => {
-    const s = ex.default_sets?.toString() || '1';
-    const r = ex.default_reps || '10';
+  return shuffled.slice(0, count || 4).map(ex => ({
+    id: ex.id,
+    sets: `1x${ex.default_reps || '10'}`,
+    reps: ex.default_reps || '10',
+    weight: ex.default_weight || 'BW',
+    rest: null, notes: null,
+  }));
+}
+
+function selectCooldownExercises(cooldownPool, pool) {
+  return cooldownPool.map(id => {
+    const ex = pool.all.find(e => e.id === id);
+    if (!ex) return null;
     return {
       id: ex.id,
-      sets: `${s}x${r}`,
-      reps: r,
-      weight: ex.default_weight || 'BW',
+      sets: `1x${ex.default_reps || '30s'}`,
+      reps: ex.default_reps || '30s',
+      weight: 'BW',
       rest: null, notes: null,
     };
-  });
+  }).filter(Boolean);
 }
 
 // ═══════════════════════════════════════════════════════════════
-// WOD selection — pulls directly from seed data, never freeform
+// WOD exercises from seed data — never freeform
 // ═══════════════════════════════════════════════════════════════
 
-function selectWodExercises(blockTemplate, wodSelections, phaseKey, week, wodById, userProfile) {
-  const phaseWods = wodSelections[phaseKey] || wodSelections.accumulation || [];
-  if (phaseWods.length === 0) {
-    // Fallback: bodyweight circuit
+function buildWodExercises(wod) {
+  if (!wod) {
     return [
-      { id: 'air_squats', sets: '1x15', reps: '15', weight: 'BW', rest: null, notes: 'AMRAP round' },
+      { id: 'air_squats', sets: '1x15', reps: '15', weight: 'BW', rest: null, notes: 'Bodyweight circuit' },
       { id: 'push_ups', sets: '1x10', reps: '10', weight: 'BW', rest: null, notes: null },
-      { id: 'sit_ups', sets: '1x15', reps: '15', weight: 'BW', rest: null, notes: null },
       { id: 'burpees', sets: '1x5', reps: '5', weight: 'BW', rest: null, notes: null },
     ];
   }
 
-  // Rotate through WODs by week
-  const wodId = phaseWods[(week - 1) % phaseWods.length];
-  const wod = wodById[wodId];
-  if (!wod) {
-    return [
-      { id: 'burpees', sets: '1x10', reps: '10', weight: 'BW', rest: null, notes: 'Default WOD' },
-      { id: 'air_squats', sets: '1x15', reps: '15', weight: 'BW', rest: null, notes: null },
-      { id: 'push_ups', sets: '1x10', reps: '10', weight: 'BW', rest: null, notes: null },
-    ];
-  }
-
-  // Parse WOD movements into exercises
-  // "15 Pull-Ups" → { name: "Pull-Ups", reps: "15" }
-  // "400m Run" → { name: "Run", reps: "400m" }
-  // "Thrusters (95/65 lb)" → { name: "Thrusters", reps: from scheme, weight: "95/65 lb" }
   const exercises = [];
-  const scheme = parseScheme(wod.scheme);
-
   for (let i = 0; i < wod.movements.length; i++) {
     const movement = wod.movements[i];
-    const parsed = parseWodMovement(movement, scheme, i);
-
-    // Map movement name to exercise ID
+    const parsed = parseWodMovement(movement, wod.scheme, i);
     const exerciseId = fuzzyMatchWodMovement(parsed.name);
 
     exercises.push({
@@ -769,187 +547,102 @@ function selectWodExercises(blockTemplate, wodSelections, phaseKey, week, wodByI
       reps: parsed.reps,
       weight: parsed.weight || wod.rxWeight || 'BW',
       rest: null,
-      notes: i === 0 ? `${wod.name} — ${wod.type}${wod.timeCap ? ` (${wod.timeCap})` : ''}: ${wod.description}` : null,
+      notes: i === 0 ? `${wod.name} \u2014 ${wod.type}${wod.timeCap ? ` (${wod.timeCap})` : ''}: ${wod.description}` : null,
     });
   }
-
   return exercises;
 }
 
-function parseScheme(scheme) {
-  if (!scheme) return [];
-  // "21-15-9" → [21, 15, 9]
-  // "50-40-30-20-10" → [50, 40, 30, 20, 10]
-  // "5 rounds" → [5]
-  // "AMRAP 20" → []
-  const nums = scheme.match(/\d+/g);
-  return nums ? nums.map(Number) : [];
-}
-
 function parseWodMovement(movement, scheme, index) {
-  // "15 Pull-Ups" → { name: "Pull-Ups", reps: "15", weight: null }
   const repNameMatch = movement.match(/^(\d+)\s+(.+)$/);
   if (repNameMatch) {
     const name = repNameMatch[2].replace(/\s*\([^)]+\)/, '').trim();
     const weightMatch = movement.match(/\(([^)]+)\)/);
     return { name, reps: repNameMatch[1], weight: weightMatch ? weightMatch[1] : null };
   }
-
-  // "400m Run" → { name: "Run", reps: "400m", weight: null }
   const distMatch = movement.match(/^(\d+\s*m)\s+(.+)$/i);
-  if (distMatch) {
-    return { name: distMatch[2].trim(), reps: distMatch[1], weight: null };
-  }
-
-  // "Thrusters (95/65 lb)" → { name: "Thrusters", reps: from scheme, weight: "95/65 lb" }
+  if (distMatch) return { name: distMatch[2].trim(), reps: distMatch[1], weight: null };
   const nameOnly = movement.replace(/\s*\([^)]+\)/, '').trim();
   const weightMatch = movement.match(/\(([^)]+)\)/);
-  const reps = scheme.length > 0 ? scheme.join('-') : '10';
-
+  const schemeNums = (scheme || '').match(/\d+/g);
+  const reps = schemeNums ? schemeNums.join('-') : '10';
   return { name: nameOnly, reps, weight: weightMatch ? weightMatch[1] : null };
 }
 
-// Simple mapping of WOD movement names to exercise IDs
 function fuzzyMatchWodMovement(name) {
   const n = name.toLowerCase().replace(/[^a-z\s]/g, '').trim();
   const MAP = {
-    'pull ups': 'pull_ups', 'pullups': 'pull_ups', 'chest to bar': 'pull_ups',
-    'push ups': 'push_ups', 'pushups': 'push_ups',
-    'air squats': 'air_squats', 'squats': 'air_squats',
-    'burpees': 'burpees', 'burpee': 'burpees',
-    'sit ups': 'sit_ups', 'situps': 'sit_ups',
-    'thrusters': 'barbell_thrusters', 'thruster': 'barbell_thrusters',
-    'deadlifts': 'deadlift', 'deadlift': 'deadlift',
-    'cleans': 'power_clean', 'clean': 'power_clean', 'squat cleans': 'power_clean',
-    'clean jerk': 'clean_and_jerk', 'clean  jerk': 'clean_and_jerk',
-    'snatch': 'snatch', 'snatches': 'snatch', 'squat snatches': 'snatch',
-    'push jerk': 'push_jerk', 'push jerks': 'push_jerk', 'jerk': 'push_jerk',
-    'overhead squats': 'front_squat', 'overhead squat': 'front_squat',
-    'box jumps': 'box_jumps', 'box jump': 'box_jumps',
-    'kb swings': 'kb_swings', 'kettlebell swings': 'kb_swings',
-    'wall balls': 'wall_balls', 'wall ball': 'wall_balls',
-    'double unders': 'jump_rope', 'doubleunders': 'jump_rope',
-    'ring dips': 'dips', 'dips': 'dips',
-    'muscle ups': 'muscle_ups', 'muscleups': 'muscle_ups',
-    'handstand push ups': 'handstand_push_ups', 'hspu': 'handstand_push_ups',
-    'pistol squats': 'pistol_squats', 'pistol': 'pistol_squats',
-    'run': 'easy_run', 'running': 'easy_run', 'mile run': 'easy_run',
-    'row': 'burpees', 'rowing': 'burpees', // Most people don't have rowers
-    'push press': 'push_jerk',
-    'back extensions': 'back_extension',
-    'step ups': 'step_ups', 'box step ups': 'step_ups',
-    'farmer walk': 'farmer_walks', 'farmer carry': 'farmer_walks',
+    'pull ups': 'pull_ups', 'pullups': 'pull_ups', 'push ups': 'push_ups', 'pushups': 'push_ups',
+    'air squats': 'air_squats', 'squats': 'air_squats', 'burpees': 'burpees', 'burpee': 'burpees',
+    'sit ups': 'sit_ups', 'thrusters': 'barbell_thrusters', 'thruster': 'barbell_thrusters',
+    'deadlifts': 'deadlift', 'deadlift': 'deadlift', 'cleans': 'power_clean', 'clean': 'power_clean',
+    'clean jerk': 'clean_and_jerk', 'snatch': 'snatch', 'snatches': 'snatch',
+    'push jerk': 'push_jerk', 'jerk': 'push_jerk', 'box jumps': 'box_jumps',
+    'kb swings': 'kb_swings', 'kettlebell swings': 'kb_swings', 'wall balls': 'wall_balls',
+    'double unders': 'jump_rope', 'ring dips': 'dips', 'dips': 'dips',
+    'muscle ups': 'muscle_ups', 'handstand push ups': 'handstand_push_ups',
+    'pistol squats': 'pistol_squats', 'run': 'easy_run', 'running': 'easy_run',
+    'mile run': 'easy_run', 'row': 'burpees', 'rowing': 'burpees',
+    'push press': 'push_jerk', 'step ups': 'step_ups', 'farmer walk': 'farmer_walk',
+    'overhead squats': 'front_squat', 'toes to bar': 'sit_ups',
   };
-
   for (const [key, id] of Object.entries(MAP)) {
     if (n.includes(key)) return id;
   }
-  return 'burpees'; // Safe fallback
+  return 'burpees';
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Run generation — from planGenerator.js, proven reliable
+// Run generation
 // ═══════════════════════════════════════════════════════════════
 
-function pickRunType(dayType, weekNumber, phase, experience) {
-  if (dayType === 'endurance_metabolic') {
-    return phase === 'race_prep' ? 'EASY' : 'LONG_RUN';
-  }
-
+function pickRunType(phase, weekNumber) {
   const RUN_ROTATION = {
     foundation: ['EASY', 'INTERVALS', 'EASY', 'FARTLEK'],
     build: ['TEMPO', 'INTERVALS', 'FARTLEK', 'TEMPO'],
     peak: ['INTERVALS', 'RACE_PACE', 'TEMPO', 'INTERVALS'],
     race_prep: ['EASY', 'TEMPO', 'EASY', 'EASY'],
   };
-
   const rotation = RUN_ROTATION[phase] || RUN_ROTATION.foundation;
-  let runType = rotation[(weekNumber - 1) % rotation.length];
-
-  if (experience === 'beginner' && phase === 'foundation') {
-    runType = 'EASY';
-  }
-
-  return runType;
+  return rotation[(weekNumber - 1) % rotation.length];
 }
 
-function generateRunExercises(weekNumber, phase, totalWeeks, pool, runType, experience, userProfile) {
-  // Parse target race distance from user goals
-  const targetDist = getTargetRaceDistance(userProfile) || 6.2;
-  const runParams = calculateRunParams(weekNumber, phase, totalWeeks, targetDist);
-  const expMult = experience === 'beginner' ? 0.7
-    : experience === 'intermediate' ? 0.85
-    : experience === 'advanced' ? 1.0 : 1.1;
+function generateRunExercises(weekNumber, phase, totalWeeks, pool, runType, experience, targetDistance) {
+  const runParams = calculateRunParams(weekNumber, phase, totalWeeks, targetDistance);
+  const expMult = experience === 'beginner' ? 0.7 : experience === 'intermediate' ? 0.85 : experience === 'advanced' ? 1.0 : 1.1;
 
   const rawDist = parseFloat(runParams.distance);
-  // Round to nearest 0.5 mi for easy measuring (1.4 → 1.5, 2.3 → 2.5, 3.7 → 3.5)
-  const scaledDist = Math.round(rawDist * expMult * 2) / 2;
+  const scaledDist = Math.round(rawDist * expMult * 2) / 2; // round to 0.5
   const distance = `${scaledDist} mi`;
   const longRunMin = `${Math.round(scaledDist * 9)}-${Math.round(scaledDist * 11)} min`;
+  const scaledIntervals = Math.max(2, Math.round(runParams.intervals * expMult));
 
   const exercises = [
     { id: 'easy_jog', sets: '5 min', reps: '5 min', weight: 'Build pace', rest: null, notes: 'Warm into it' },
   ];
 
-  const scaledIntervals = Math.max(2, Math.round(runParams.intervals * expMult));
-
   switch (runType) {
     case 'INTERVALS':
-      exercises.push({
-        id: 'interval_run',
-        sets: `${scaledIntervals} rounds`,
-        reps: phase === 'peak' ? '90s hard / 60s easy' : '2 min hard / 1 min easy',
-        weight: phase === 'peak' ? 'Race pace' : '80-85% effort',
-        rest: null, notes: `Target: ${distance}`,
-      });
+      exercises.push({ id: 'interval_run', sets: `${scaledIntervals} rounds`, reps: phase === 'peak' ? '90s hard / 60s easy' : '2 min hard / 1 min easy', weight: phase === 'peak' ? 'Race pace' : '80-85% effort', rest: null, notes: `Target: ${distance}` });
       break;
     case 'TEMPO':
-      exercises.push({
-        id: 'tempo_run', sets: `${distance}`,
-        reps: distance,
-        weight: runParams.paceType + ' pace',
-        rest: null, notes: `Target: ${distance}`,
-      });
+      exercises.push({ id: 'tempo_run', sets: distance, reps: distance, weight: runParams.paceType + ' pace', rest: null, notes: `Target: ${distance}` });
       break;
     case 'FARTLEK':
-      exercises.push({
-        id: 'tempo_run', sets: '25 min variable',
-        reps: '25 min variable',
-        weight: 'Alternate fast/easy every 2-3 min',
-        rest: null, notes: `Target: ${distance}`,
-      });
+      exercises.push({ id: 'tempo_run', sets: '25 min variable', reps: '25 min variable', weight: 'Alternate fast/easy every 2-3 min', rest: null, notes: `Target: ${distance}` });
       break;
     case 'LONG_RUN':
-      exercises.push({
-        id: 'easy_run', sets: distance,
-        reps: distance,
-        weight: 'Conversational pace',
-        rest: null, notes: `Target: ${distance} (${longRunMin})`,
-      });
+      exercises.push({ id: 'easy_run', sets: distance, reps: distance, weight: 'Conversational pace', rest: null, notes: `Target: ${distance} (${longRunMin})` });
       break;
     case 'RACE_PACE':
-      exercises.push({
-        id: 'interval_run', sets: distance,
-        reps: distance,
-        weight: 'Goal race pace',
-        rest: null, notes: `Target: ${distance} at race effort`,
-      });
+      exercises.push({ id: 'interval_run', sets: distance, reps: distance, weight: 'Goal race pace', rest: null, notes: `Target: ${distance} at race effort` });
       break;
-    case 'EASY':
-    default:
-      exercises.push({
-        id: 'easy_run', sets: distance,
-        reps: distance,
-        weight: 'Easy conversational pace',
-        rest: null, notes: `Target: ${distance}`,
-      });
+    case 'EASY': default:
+      exercises.push({ id: 'easy_run', sets: distance, reps: distance, weight: 'Easy conversational pace', rest: null, notes: `Target: ${distance}` });
       break;
   }
 
-  exercises.push(
-    { id: 'easy_jog', sets: '5 min', reps: '5 min', weight: 'Cool down', rest: null, notes: 'Easy jog to finish' },
-  );
-
+  exercises.push({ id: 'easy_jog', sets: '5 min', reps: '5 min', weight: 'Cool down', rest: null, notes: 'Easy jog to finish' });
   return exercises;
 }
 
@@ -957,44 +650,11 @@ function generateRunExercises(weekNumber, phase, totalWeeks, pool, runType, expe
 // Helpers
 // ═══════════════════════════════════════════════════════════════
 
-// Parse target race distance from user goals and notes
-function getTargetRaceDistance(profile) {
-  if (!profile) return null;
-  const all = `${(profile.additionalNotes || '')} ${(profile.goals || []).join(' ')}`.toLowerCase();
-  if (all.includes('marathon') && !all.includes('half')) return 26.2;
-  if (all.includes('half marathon') || all.includes('half-marathon')) return 13.1;
-  if (all.includes('spartan beast') || all.includes('21k')) return 13.1;
-  if (all.includes('10k') || all.includes('spartan super')) return 6.2;
-  if (all.includes('spartan sprint') || all.includes('5k')) return 3.1;
-  if (all.includes('endurance') || all.includes('athletic') || all.includes('spartan')) return 6.2;
-  const distMatch = all.match(/(\d+(?:\.\d+)?)\s*(?:mile|mi)\s*(?:race|run|goal)/i);
-  if (distMatch) return parseFloat(distMatch[1]);
-  return null;
-}
-
-function generateUUID() {
-  return 'xxxx-xxxx-xxxx'.replace(/x/g, () =>
-    Math.floor(Math.random() * 16).toString(16)
-  );
-}
-
-function addDays(dateStr, days) {
-  const date = new Date(dateStr + 'T12:00:00Z');
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().split('T')[0];
-}
-
-function addWeeks(dateStr, weeks) {
-  return addDays(dateStr, weeks * 7);
-}
-
+function generateUUID() { return 'xxxx-xxxx-xxxx'.replace(/x/g, () => Math.floor(Math.random() * 16).toString(16)); }
+function addDays(d, n) { const dt = new Date(d + 'T12:00:00Z'); dt.setUTCDate(dt.getUTCDate() + n); return dt.toISOString().split('T')[0]; }
+function addWeeks(d, w) { return addDays(d, w * 7); }
 function getNextMonday() {
-  const now = new Date();
-  const day = now.getDay();
-  const daysUntilMonday = day === 0 ? 1 : day === 1 ? 0 : 8 - day;
-  now.setDate(now.getDate() + daysUntilMonday);
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  const n = new Date(), d = n.getDay(), dm = d === 0 ? 1 : d === 1 ? 0 : 8 - d;
+  n.setDate(n.getDate() + dm);
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
 }

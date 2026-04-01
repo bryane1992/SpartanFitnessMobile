@@ -165,63 +165,99 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
   const seedWeight = parseFloat(exercise.default_weight) || 0;
   if (seedWeight === 0 || exercise.default_weight === 'BW') return exercise.default_weight;
 
-  // Use user's working weights when available — much better than seed defaults
-  const baseWeight = getUserBaseWeight(exercise, workingWeights) || seedWeight;
+  // Step 1: Get base from user's working weights (much better than seed defaults)
+  const userBase = getUserBaseWeight(exercise, workingWeights);
+  const baseWeight = userBase || seedWeight;
 
-  const bodyComp = getBodyCompParams(bodyCompGoal);
-  const mesoPhase = getMesocyclePhase(weekNumber);
-  const expMultiplier = workingWeights ? 1.0 : getExperienceMultiplier(experience); // Skip exp scaling if we have real weights
+  // Step 2: Classify exercise — compound vs isolation
+  const isCompound = exercise.is_compound;
+  const category = isCompound ? 'compound' : 'isolation';
 
-  // Weekly progression: +2.5% per week for compounds, +1.5% for isolation
-  const weeklyProgression = exercise.is_compound ? 1.025 : 1.015;
-  const weekProgression = Math.pow(weeklyProgression, weekNumber - 1);
+  // Step 3: Phase intensity — higher starting percentages than v2
+  const PHASE_INTENSITY = {
+    foundation: { compound: 0.75, isolation: 0.65 },
+    build:      { compound: 0.85, isolation: 0.75 },
+    peak:       { compound: 0.95, isolation: 0.85 },
+    race_prep:  { compound: 0.80, isolation: 0.70 },
+  };
+  const phaseKey = phase === 'race_prep' ? 'race_prep' : phase === 'peak' ? 'peak' : phase === 'build' ? 'build' : 'foundation';
+  const phaseIntensity = PHASE_INTENSITY[phaseKey]?.[category] || 0.75;
 
-  let weight = baseWeight
-    * bodyComp.weightMultiplier
-    * mesoPhase.intensityMultiplier
-    * expMultiplier
-    * weekProgression;
+  // Step 4: Weekly progression within the phase (not cumulative across all weeks)
+  const weekInPhase = ((weekNumber - 1) % 4) + 1;
+  const weeklyBump = isCompound ? 0.025 : 0.015;
+  const progressionMultiplier = 1 + ((weekInPhase - 1) * weeklyBump);
 
-  // Deload: reduce by 30% (not 40% — keep enough stimulus)
+  // Step 5: Experience multiplier (only when no working weights — working weights ARE the user's level)
+  const expMult = userBase ? 1.0 : getExperienceMultiplier(experience);
+
+  // Step 6: Calculate
+  let weight = baseWeight * phaseIntensity * progressionMultiplier * expMult;
+
+  // Step 7: Deload — 70% of working weight
   if (isDeloadWeek(weekNumber)) {
-    weight *= 0.7;
+    weight *= 0.70;
   }
 
-  // Round to nearest 5 lbs
-  weight = Math.round(weight / 5) * 5;
-
-  // Cap to equipment limits
-  if (equipmentDetails) {
-    const category = exercise.category;
-    if (category === 'barbell' && equipmentDetails.barbell?.maxWeight) {
-      const maxLoad = parseFloat(equipmentDetails.barbell.maxWeight);
-      if (weight > maxLoad) weight = Math.round(maxLoad / 5) * 5;
-    }
-    if (category === 'kettlebell' && equipmentDetails.kettlebell?.weights) {
-      const kbWeights = equipmentDetails.kettlebell.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0).sort((a, b) => a - b);
-      if (kbWeights.length > 0) {
-        // Find closest available KB weight
-        const closest = kbWeights.reduce((prev, curr) => Math.abs(curr - weight) < Math.abs(prev - weight) ? curr : prev);
-        weight = closest;
-      }
-    }
-    if (category === 'dumbbell') {
-      if (equipmentDetails.dumbbells?.maxWeight) {
-        // Adjustable dumbbells — cap at max weight per hand
-        const maxDb = parseFloat(equipmentDetails.dumbbells.maxWeight);
-        if (weight > maxDb) weight = Math.round(maxDb / 5) * 5;
-      } else if (equipmentDetails.dumbbells?.weights) {
-        // Fixed dumbbells — snap to closest available
-        const dbWeights = equipmentDetails.dumbbells.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0).sort((a, b) => a - b);
-        if (dbWeights.length > 0) {
-          const closest = dbWeights.reduce((prev, curr) => Math.abs(curr - weight) < Math.abs(prev - weight) ? curr : prev);
-          weight = closest;
-        }
-      }
-    }
+  // Step 8: Apply floor — prevents absurdly light weights
+  const floor = getMinimumWeight(exercise, experience, workingWeights);
+  if (!isDeloadWeek(weekNumber)) {
+    weight = Math.max(weight, floor);
   }
 
-  return `${weight} lb`;
+  // Step 9: Cap to equipment limits
+  weight = capToEquipment(weight, exercise, equipmentDetails);
+
+  // Step 10: Round to nearest practical increment
+  if (exercise.category === 'kettlebell' && equipmentDetails?.kettlebell?.weights) {
+    // Snap to nearest available KB
+    const kbWeights = equipmentDetails.kettlebell.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0).sort((a, b) => a - b);
+    if (kbWeights.length > 0) {
+      weight = kbWeights.reduce((prev, curr) => Math.abs(curr - weight) < Math.abs(prev - weight) ? curr : prev);
+    }
+  } else {
+    weight = Math.round(weight / 5) * 5;
+  }
+
+  return `${Math.max(5, weight)} lb`;
+}
+
+// Experience-aware minimum weights — prevents goblet squat at 15 lb for intermediate lifters
+function getMinimumWeight(exercise, experience, workingWeights) {
+  const name = (exercise.name || '').toLowerCase();
+  const cat = exercise.category;
+
+  // If we have working weights, floors are based on them
+  if (workingWeights) {
+    const userBase = getUserBaseWeight(exercise, workingWeights);
+    if (userBase) return userBase * 0.50; // Never below 50% of their known capacity
+  }
+
+  // Generic floors by experience and equipment type
+  const floors = {
+    beginner:     { barbell: 25, dumbbell: 10, kettlebell: 15, bodyweight: 0 },
+    intermediate: { barbell: 45, dumbbell: 20, kettlebell: 25, bodyweight: 0 },
+    advanced:     { barbell: 65, dumbbell: 30, kettlebell: 35, bodyweight: 0 },
+    elite:        { barbell: 95, dumbbell: 40, kettlebell: 45, bodyweight: 0 },
+  };
+
+  return floors[experience]?.[cat] || floors.intermediate?.[cat] || 10;
+}
+
+// Cap weight to equipment limits
+function capToEquipment(weight, exercise, equipmentDetails) {
+  if (!equipmentDetails) return weight;
+  const cat = exercise.category;
+
+  if (cat === 'barbell' && equipmentDetails.barbell?.maxWeight) {
+    const max = parseFloat(equipmentDetails.barbell.maxWeight);
+    if (weight > max) weight = max;
+  }
+  if (cat === 'dumbbell' && equipmentDetails.dumbbells?.maxWeight) {
+    const max = parseFloat(equipmentDetails.dumbbells.maxWeight);
+    if (weight > max) weight = max;
+  }
+  return weight;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -331,41 +367,46 @@ function getUserBaseWeight(exercise, workingWeights) {
   const ohp = parseFloat(workingWeights.overhead_press) || 0;
   const row = parseFloat(workingWeights.row) || 0;
 
-  // Bench variants
-  if (/incline.*bench|incline.*press/i.test(name)) return bench * 0.75 || null;
+  // Bench variants — raised ratios for realism
+  if (/incline.*bench|incline.*press/i.test(name)) return bench * 0.80 || null;
   if (/decline.*bench/i.test(name)) return bench * 0.90 || null;
-  if (/db.*bench|dumbbell.*bench|db.*press/i.test(name)) return bench * 0.35 || null; // per hand
+  if (/db.*bench|dumbbell.*bench|db.*press/i.test(name)) return bench * 0.50 || null; // per hand
   if (/floor\s*press/i.test(name)) return bench * 0.85 || null;
-  if (/db.*fly|chest\s*fly/i.test(name)) return bench * 0.25 || null;
+  if (/db.*fly|chest\s*fly/i.test(name)) return bench * 0.30 || null;
 
   // Squat variants
   if (/front\s*squat/i.test(name)) return squat * 0.80 || null;
-  if (/goblet/i.test(name)) return squat * 0.40 || null;
-  if (/split\s*squat|lunge|step.?up|bulgarian/i.test(name)) return squat * 0.35 || null; // per leg
+  if (/goblet/i.test(name)) return squat * 0.55 || null;
+  if (/split\s*squat|lunge|step.?up|bulgarian/i.test(name)) return squat * 0.40 || null; // per leg
+  if (/leg\s*press/i.test(name)) return squat * 1.20 || null;
 
   // Deadlift variants
   if (/sumo/i.test(name)) return dl * 0.95 || null;
   if (/romanian|rdl|stiff/i.test(name)) return dl * 0.65 || null;
-  if (/trap\s*bar/i.test(name)) return dl * 0.90 || null;
-  if (/hip\s*thrust/i.test(name)) return dl * 0.75 || null;
+  if (/trap\s*bar/i.test(name)) return dl * 0.95 || null;
+  if (/hip\s*thrust/i.test(name)) return dl * 0.80 || null;
+  if (/kb.*swing|kettlebell.*swing/i.test(name)) return dl * 0.35 || null;
 
   // Overhead variants
   if (/push\s*press/i.test(name)) return ohp * 1.15 || null;
-  if (/db.*shoulder|db.*ohp|db.*overhead/i.test(name)) return ohp * 0.35 || null;
-  if (/lateral\s*raise/i.test(name)) return ohp * 0.20 || null;
+  if (/db.*shoulder|db.*ohp|db.*overhead/i.test(name)) return ohp * 0.50 || null;
+  if (/lateral\s*raise/i.test(name)) return ohp * 0.25 || null;
+  if (/face\s*pull|reverse\s*fly/i.test(name)) return ohp * 0.25 || null;
 
   // Row variants
-  if (/db.*row|dumbbell.*row/i.test(name)) return row * 0.40 || null;
+  if (/db.*row|dumbbell.*row/i.test(name)) return row * 0.55 || null;
+  if (/cable.*row|seated.*row/i.test(name)) return row * 0.80 || null;
+  if (/inverted/i.test(name)) return null; // bodyweight
 
   // Olympic lifts — scale from deadlift
-  if (/power\s*clean|hang.*clean/i.test(name)) return dl * 0.55 || null;
-  if (/clean.*jerk/i.test(name)) return dl * 0.50 || null;
-  if (/snatch/i.test(name)) return dl * 0.45 || null;
+  if (/power\s*clean|hang.*clean/i.test(name)) return dl * 0.60 || null;
+  if (/clean.*jerk/i.test(name)) return dl * 0.55 || null;
+  if (/snatch/i.test(name)) return dl * 0.50 || null;
   if (/push\s*jerk/i.test(name)) return ohp * 1.25 || null;
 
-  // Arms
-  if (/curl/i.test(name)) return bench * 0.20 || null;
-  if (/tricep|skull|pushdown/i.test(name)) return bench * 0.25 || null;
+  // Arms — scale from bench
+  if (/curl/i.test(name)) return bench * 0.25 || null;
+  if (/tricep|skull|pushdown/i.test(name)) return bench * 0.30 || null;
 
   return null;
 }
