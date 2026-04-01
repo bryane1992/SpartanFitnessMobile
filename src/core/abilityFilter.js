@@ -95,16 +95,25 @@ export function getAbilityScore(exercise, userProfile) {
   const canPull = canDoBodyweightPull(userProfile);
   const canBB = canDoBarbell(userProfile);
   const id = exercise.id || '';
+  const name = (exercise.name || '').toLowerCase();
+  const experience = (userProfile.experience || '').toLowerCase();
+  const bodyWeight = parseFloat(userProfile.weight) || 0;
 
-  // Bodyweight pulling
-  if (/pull_ups|chin_ups|muscle_ups/i.test(id) && !canPull) return -50;
-  if (/^dips$/i.test(id) && !canPull) return -30;
+  // Bodyweight pulling — hard exclude for those who can't
+  if (/pull_ups|chin_ups|muscle_ups/i.test(id) && !canPull) return -100;
+  if (/^dips$/i.test(id) && !canPull) return -50;
 
-  // Barbell compounds for beginners
+  // Hanging exercises require grip strength — exclude for heavy beginners
+  if (/toes.?to.?bar|hanging|knee.?raise/i.test(name) && experience === 'beginner' && bodyWeight > 180) return -50;
+
+  // Barbell compounds for beginners — penalize but don't hard exclude (goblet squat etc should win via scoring)
   if (/^bench_press$|^back_squat$|^front_squat$|^deadlift$|^overhead_press$/i.test(id) && !canBB) return -30;
 
-  // Complex Olympic lifts
-  if (/clean|snatch|jerk/i.test(exercise.name) && userProfile.experience === 'beginner') return -50;
+  // Complex Olympic lifts for beginners
+  if (/clean|snatch|jerk/i.test(name) && experience === 'beginner') return -100;
+
+  // Advanced bodyweight movements for beginners
+  if (/pistol|handstand|muscle.?up|ring|l.?sit/i.test(name) && experience === 'beginner') return -50;
 
   return 0;
 }

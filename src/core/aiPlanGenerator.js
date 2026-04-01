@@ -317,7 +317,17 @@ async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs,
     // Determine display phase — only use race_prep if archetype has taper
     const weeksFromEnd = totalWeeks - week;
     const isRacePrep = archetype?.hasTaper && weeksFromEnd < 3 && totalWeeks > 12;
-    const displayPhase = isRacePrep ? 'race_prep' : phase.phase;
+    // For non-racers, never show race_prep — cycle back to earlier phases
+    let displayPhase;
+    if (isRacePrep) {
+      displayPhase = 'race_prep';
+    } else if (phase.phase === 'race_prep' && !archetype?.hasTaper) {
+      // Non-racer hitting the phase calculator's race_prep → cycle back
+      const cycleWeek = ((week - 1) % 12) + 1;
+      displayPhase = cycleWeek <= 4 ? 'foundation' : cycleWeek <= 8 ? 'build' : 'peak';
+    } else {
+      displayPhase = phase.phase;
+    }
 
     weekWodIds.length = 0; // reset weekly WOD tracking
 
@@ -559,13 +569,19 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
     // Filter out obscure ExerciseDB exercises aggressively
     if (ex.source === 'api') {
       const eName = ex.name || '';
+      // Hard exclude: gendered, versioned, seated misspellings, absurd combos
       if (/\(female\)|\(male\)|v\.\s*\d|sitted|lying floor/i.test(eName) || eName.length > 40) {
-        score -= 100; // hard exclude
-      } else if (/reverse grip|guillotine|cambered|lever |floor fly|kneeling jump|squat jump step|step rear lunge|bent v\.|side bent|wide reverse|close grip to skull|behind neck|behind the neck|decline close grip/i.test(eName)) {
-        score -= 100; // hard exclude
-      } else if (eName.split(' ').length > 5 || eName.length > 35) {
-        score -= 50; // penalize overly wordy exercise names
+        score -= 100;
+      } else if (/reverse grip|guillotine|cambered|lever |floor fly|kneeling jump|squat jump step|step rear lunge|bent v\.|side bent|wide reverse|close grip to skull|behind neck|behind the neck|decline close grip|rollerout from|press sit.?up|standing twist|standing ab roll|alternate leg raise/i.test(eName)) {
+        score -= 100;
+      } else if (eName.split(' ').length > 4 || eName.length > 32) {
+        score -= 50;
       }
+    }
+
+    // For beginners: strongly prefer simple, guided exercises
+    if (userProfile.experience === 'beginner' && ex.source === 'api' && ex.difficulty !== 'beginner') {
+      score -= 20; // beginners should mostly get seed exercises
     }
 
     return { exercise: ex, score };
@@ -735,10 +751,18 @@ function buildWodExercises(wod, equipmentDetails) {
     let weight = parsed.weight || wod.rxWeight || 'BW';
     weight = scaleWodWeight(weight, exerciseId, equipmentDetails);
 
+    // Fix distance-based reps on non-cardio exercises (e.g., "Burpees 200m" from row substitution)
+    let reps = parsed.reps;
+    if (/^\d+\s*m$/i.test(reps) && !/run|row|bike|ski|sprint/i.test(exerciseId)) {
+      // Convert meters to equivalent rep count (roughly 1 rep per 10m)
+      const meters = parseInt(reps);
+      reps = `${Math.max(5, Math.round(meters / 10))}`;
+    }
+
     exercises.push({
       id: exerciseId,
-      sets: `1x${parsed.reps}`,
-      reps: parsed.reps,
+      sets: `1x${reps}`,
+      reps,
       weight,
       rest: null,
       notes: i === 0 ? `${wod.name} \u2014 ${wod.type}${wod.timeCap ? ` (${wod.timeCap})` : ''}: ${wod.description}` : null,
