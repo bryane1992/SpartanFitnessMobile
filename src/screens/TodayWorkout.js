@@ -37,6 +37,7 @@ export default function TodayWorkout({ navigation }) {
   const [swapModal, setSwapModal] = useState(null);
   const [detailExerciseId, setDetailExerciseId] = useState(null);
   const [coachVisible, setCoachVisible] = useState(false);
+  const [repSuggestion, setRepSuggestion] = useState(null); // coach suggestion for rep drop-off
 
   useEffect(() => {
     loadTodayWorkout();
@@ -147,6 +148,36 @@ export default function TodayWorkout({ navigation }) {
           </View>
         </View>
       ) : null}
+      {repSuggestion ? (
+        <View style={styles.adjustmentPrompt}>
+          <Text style={styles.adjustmentPromptTitle}>COACH SUGGESTION</Text>
+          <Text style={styles.adjustmentPromptText}>{repSuggestion.message}</Text>
+          <View style={styles.adjustmentButtons}>
+            {repSuggestion.options.map((opt, i) => (
+              <TouchableOpacity
+                key={i}
+                style={i === 0 ? styles.adjustmentBtnYes : styles.adjustmentBtnNo}
+                onPress={async () => {
+                  if (opt.type === 'reduce_weight') {
+                    const prescribed = parseFloat(repSuggestion.options.find(o => o.newWeight)?.newWeight);
+                    const original = parseFloat(workout?.blocks?.flatMap(b => b.exercises || []).find(e => e.id === repSuggestion.planExerciseId)?.weight);
+                    if (prescribed > 0 && original > 0) {
+                      const { adjustFutureWeights } = require('../data/database');
+                      await adjustFutureWeights(repSuggestion.exerciseId, prescribed / original);
+                    }
+                  }
+                  setRepSuggestion(null);
+                }}
+              >
+                <Text style={i === 0 ? styles.adjustmentBtnYesText : styles.adjustmentBtnNoText}>{opt.label}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.adjustmentBtnNo} onPress={() => setRepSuggestion(null)}>
+              <Text style={styles.adjustmentBtnNoText}>DISMISS</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
       {lastAdjustment ? (
         <View style={styles.adjustmentToast}>
           <Text style={styles.adjustmentText}>
@@ -228,6 +259,36 @@ export default function TodayWorkout({ navigation }) {
                         });
                       }}
                       onNamePress={() => setDetailExerciseId(exercise.exercise_id)}
+                      onRepDropOff={(data) => {
+                        const isCompound = /bench|squat|deadlift|row|press|clean|jerk|snatch/i.test(data.exerciseName);
+                        const avgReps = Math.round(data.actualReps.reduce((a, b) => a + b, 0) / data.actualReps.length);
+                        const weightNum = parseFloat(data.weight) || 0;
+                        const reducedWeight = `${Math.round((weightNum * 0.9) / 5) * 5} lb`;
+                        const reducedReps = Math.max(3, data.targetReps - 2);
+
+                        if (isCompound) {
+                          setRepSuggestion({
+                            exerciseName: data.exerciseName,
+                            exerciseId: data.exerciseId,
+                            planExerciseId: data.planExerciseId,
+                            message: `You hit ${data.actualReps.join('/')} on ${data.exerciseName} at ${data.weight} (target: ${data.targetSets}x${data.targetReps}).`,
+                            options: [
+                              { label: `Drop to ${data.targetSets}x${reducedReps} at ${data.weight}`, type: 'reduce_reps', newReps: reducedReps },
+                              { label: `Reduce to ${reducedWeight}, keep ${data.targetSets}x${data.targetReps}`, type: 'reduce_weight', newWeight: reducedWeight },
+                            ],
+                          });
+                        } else {
+                          setRepSuggestion({
+                            exerciseName: data.exerciseName,
+                            exerciseId: data.exerciseId,
+                            planExerciseId: data.planExerciseId,
+                            message: `${data.actualReps.join('/')} on ${data.exerciseName} at ${data.weight} (target: ${data.targetSets}x${data.targetReps}). Looks a bit heavy.`,
+                            options: [
+                              { label: `Adjust to ${reducedWeight}`, type: 'reduce_weight', newWeight: reducedWeight },
+                            ],
+                          });
+                        }
+                      }}
                     />
                   ))}
 
@@ -318,13 +379,18 @@ export default function TodayWorkout({ navigation }) {
 // Exercise Row Component with logging
 // ═══════════════════════════════════════════════════════════════
 
-function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress, onNamePress }) {
+function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress, onNamePress, onRepDropOff }) {
   const isDone = !!exercise.is_completed;
   const name = String(exercise.name || 'Exercise');
   const sets = String(exercise.sets || '');
   const weight = exercise.weight ? String(exercise.weight) : '';
   const rest = exercise.rest ? String(exercise.rest) : '';
   const swapped = exercise.swapped_from ? ' (swapped)' : '';
+
+  // Parse target reps from prescribed sets (e.g., "4x10" → 10)
+  const targetReps = parseInt((sets.match(/x(\d+)/) || [])[1]) || 0;
+  const targetSets = parseInt(sets) || 0;
+  const repsHint = targetSets > 1 ? `e.g. ${Array(targetSets).fill(targetReps).join(',')}` : 'Reps';
 
   return (
     <View>
@@ -365,10 +431,35 @@ function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress,
         <View style={styles.logRow}>
           <TextInput
             style={styles.logInput}
-            placeholder="Reps"
-            placeholderTextColor="rgba(255,255,255,0.2)"
+            placeholder={repsHint}
+            placeholderTextColor="rgba(255,255,255,0.15)"
             defaultValue={String(exercise.actual_reps || '')}
-            onEndEditing={(e) => onLogChange('reps', e.nativeEvent.text)}
+            onEndEditing={(e) => {
+              const text = e.nativeEvent.text;
+              onLogChange('reps', text);
+              // Detect rep drop-off
+              if (text && targetReps > 0 && text.includes(',') && onRepDropOff) {
+                const repSets = text.split(',').map(r => parseInt(r.trim())).filter(r => !isNaN(r));
+                if (repSets.length >= 2) {
+                  const missedSets = repSets.filter(r => r < targetReps - 1).length;
+                  const lastSet = repSets[repSets.length - 1];
+                  const lastSetDrop = lastSet / targetReps;
+                  if (missedSets >= 2 || lastSetDrop < 0.75) {
+                    onRepDropOff({
+                      exerciseName: name,
+                      exerciseId: exercise.exercise_id,
+                      planExerciseId: exercise.id,
+                      targetReps,
+                      targetSets,
+                      actualReps: repSets,
+                      weight: exercise.weight,
+                      isCompound: exercise.is_compound,
+                      category: exercise.category,
+                    });
+                  }
+                }
+              }
+            }}
           />
           <TextInput
             style={styles.logInput}
