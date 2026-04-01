@@ -20,6 +20,7 @@ Spartan Fitness Mobile is a React Native app (Expo SDK 54, Expo Go compatible) f
 - GPS Run Tracker with segment timeline
 - Stats screen: week-over-week lift deltas, run progression, all-time PRs
 - Plan export includes full onboarding profile for debugging
+- Autoregulation: logging actual weight >10% different from prescribed adjusts all future weeks live
 
 **Architecture:** Strategy-driven hybrid. Claude picks movement patterns, code builds workouts. Weight starts near user's 8-10RM in foundation, progresses beyond it by peak. See CLAUDE.md for full pipeline.
 

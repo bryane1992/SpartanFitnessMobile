@@ -690,26 +690,36 @@ export async function updateExerciseLog(planExerciseId, actualReps, actualWeight
   );
 }
 
-// Adjust prescribed weight for an exercise in all future unfinished weeks
-// Called when user logs an actual_weight significantly different from prescribed
-export async function adjustFutureWeights(exerciseId, newWeight, currentDate) {
+// Scale prescribed weight for an exercise in all future unfinished weeks
+// Uses a ratio so progressive overload is maintained (not flat replacement)
+// e.g., prescribed 50 lb, actual 125 lb → ratio 2.5x → week 5 at 60 lb becomes 150 lb
+export async function adjustFutureWeights(exerciseId, ratio, currentDate) {
   const database = await getDatabase();
   const today = currentDate || new Date().toISOString().split('T')[0];
 
-  const result = await database.runAsync(
-    `UPDATE plan_exercises SET weight = ?
-     WHERE exercise_id = ?
-       AND is_completed = 0
-       AND plan_block_id IN (
-         SELECT pb.id FROM plan_blocks pb
-         JOIN plan_days pd ON pd.id = pb.plan_day_id
-         WHERE pd.date > ?
-       )`,
-    [newWeight, exerciseId, today]
+  // Get all future unfinished instances with their current weights
+  const futureExercises = await database.getAllAsync(
+    `SELECT pe.id, pe.weight FROM plan_exercises pe
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     WHERE pe.exercise_id = ?
+       AND pe.is_completed = 0
+       AND pd.date > ?
+     ORDER BY pd.date ASC`,
+    [exerciseId, today]
   );
 
-  console.log(`[Autoregulate] Adjusted ${exerciseId} to ${newWeight} for ${result.changes} future exercises`);
-  return result.changes;
+  let updated = 0;
+  for (const ex of futureExercises) {
+    const currentWeight = parseFloat(ex.weight);
+    if (isNaN(currentWeight) || currentWeight <= 0) continue;
+    const newWeight = Math.round(currentWeight * ratio / 5) * 5;
+    await database.runAsync('UPDATE plan_exercises SET weight = ? WHERE id = ?', [`${newWeight} lb`, ex.id]);
+    updated++;
+  }
+
+  console.log(`[Autoregulate] Scaled ${exerciseId} by ${ratio.toFixed(2)}x for ${updated} future exercises`);
+  return updated;
 }
 
 export async function saveAmrapRounds(planBlockId, rounds) {

@@ -199,6 +199,9 @@ User's 8-10RM (onboarding) → × 1.3 = Estimated 1RM
 
 Related exercises scale via `getUserBaseWeight()` ratios (incline=0.80, DB=0.50/hand, curls=0.25, etc.)
 
+### Live Autoregulation
+When a user logs an actual weight >10% different from prescribed, `adjustFutureWeights()` updates all future unfinished instances of that exercise. No plan regeneration needed — works on the existing plan in real-time. Green toast confirms the adjustment.
+
 ## Elite Programming Principles
 
 1. **Mesocycle periodization** — 12-week cycles: accumulation → intensification → realization

@@ -28,6 +28,9 @@ export default function TodayWorkout({ navigation }) {
     saveAmrapRounds,
     completeDay,
     lastAdjustment,
+    pendingAdjustment,
+    confirmAdjustment,
+    dismissAdjustment,
   } = useWorkoutStore();
 
   const [expandedBlocks, setExpandedBlocks] = useState({});
@@ -127,10 +130,27 @@ export default function TodayWorkout({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {pendingAdjustment ? (
+        <View style={styles.adjustmentPrompt}>
+          <Text style={styles.adjustmentPromptTitle}>WEIGHT ADJUSTMENT</Text>
+          <Text style={styles.adjustmentPromptText}>
+            {`You logged ${pendingAdjustment.actual} on ${pendingAdjustment.exerciseName} (prescribed ${pendingAdjustment.prescribed}) — ${pendingAdjustment.pctDiff}% ${pendingAdjustment.direction}.`}
+          </Text>
+          <Text style={styles.adjustmentPromptSub}>Scale future workouts to match?</Text>
+          <View style={styles.adjustmentButtons}>
+            <TouchableOpacity style={styles.adjustmentBtnYes} onPress={confirmAdjustment}>
+              <Text style={styles.adjustmentBtnYesText}>YES, ADJUST</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.adjustmentBtnNo} onPress={dismissAdjustment}>
+              <Text style={styles.adjustmentBtnNoText}>KEEP AS-IS</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
       {lastAdjustment ? (
         <View style={styles.adjustmentToast}>
           <Text style={styles.adjustmentText}>
-            {`${lastAdjustment.exerciseName} adjusted to ${lastAdjustment.newWeight} for ${lastAdjustment.count} future workout${lastAdjustment.count > 1 ? 's' : ''}`}
+            {`${lastAdjustment.exerciseName} scaled to ${lastAdjustment.newWeight} for ${lastAdjustment.count} future workout${lastAdjustment.count > 1 ? 's' : ''}`}
           </Text>
         </View>
       ) : null}
@@ -374,6 +394,70 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0A0A0A',
+  },
+  adjustmentPrompt: {
+    backgroundColor: 'rgba(255,65,54,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,65,54,0.3)',
+    marginHorizontal: 12,
+    marginTop: 4,
+    marginBottom: 2,
+    borderRadius: 10,
+    padding: 14,
+  },
+  adjustmentPromptTitle: {
+    color: '#FF4136',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginBottom: 6,
+  },
+  adjustmentPromptText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  adjustmentPromptSub: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 11,
+    marginTop: 4,
+    fontFamily: 'monospace',
+  },
+  adjustmentButtons: {
+    flexDirection: 'row',
+    marginTop: 10,
+    gap: 8,
+  },
+  adjustmentBtnYes: {
+    flex: 1,
+    backgroundColor: 'rgba(1,255,112,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(1,255,112,0.3)',
+    borderRadius: 6,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  adjustmentBtnYesText: {
+    color: '#01FF70',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  adjustmentBtnNo: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 6,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  adjustmentBtnNoText: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   adjustmentToast: {
     backgroundColor: 'rgba(1,255,112,0.12)',

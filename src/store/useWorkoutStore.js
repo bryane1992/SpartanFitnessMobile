@@ -26,7 +26,8 @@ const useWorkoutStore = create((set, get) => ({
   // Today's view
   todayWorkout: null,
   selectedDate: new Date().toISOString().split('T')[0],
-  lastAdjustment: null, // { exerciseName, newWeight, count } — for toast display
+  lastAdjustment: null, // { exerciseName, newWeight, count } — for success toast
+  pendingAdjustment: null, // { exerciseName, exerciseId, prescribed, actual, ratio, direction, pctDiff } — for user prompt
 
   // Plan overview
   planDays: [],
@@ -133,8 +134,8 @@ const useWorkoutStore = create((set, get) => ({
     try {
       await dbUpdateExerciseLog(planExerciseId, actualReps, actualWeight, notes);
 
-      // Autoregulation: if user logged a weight, compare to prescribed and adjust future weeks
-      if (actualWeight) {
+      // Autoregulation: detect significant weight difference and prompt user
+      if (actualWeight && String(actualWeight).trim()) {
         const workout = get().todayWorkout;
         if (workout?.blocks) {
           for (const block of workout.blocks) {
@@ -145,15 +146,19 @@ const useWorkoutStore = create((set, get) => ({
               if (!isNaN(prescribed) && !isNaN(actual) && prescribed > 0 && actual > 0) {
                 const diff = (actual - prescribed) / prescribed;
                 if (Math.abs(diff) > 0.10) {
-                  // >10% difference — adjust future weeks
-                  // Apply the actual weight as the new baseline, rounded to nearest 5
-                  const newWeight = `${Math.round(actual / 5) * 5} lb`;
-                  const adjusted = await dbAdjustFutureWeights(exercise.exercise_id, newWeight);
-                  if (adjusted > 0) {
-                    set({ lastAdjustment: { exerciseName: exercise.name, newWeight, count: adjusted } });
-                    // Clear the toast after 4 seconds
-                    setTimeout(() => set({ lastAdjustment: null }), 4000);
-                  }
+                  // Store the pending adjustment for the UI to prompt
+                  const ratio = actual / prescribed;
+                  set({
+                    pendingAdjustment: {
+                      exerciseName: exercise.name,
+                      exerciseId: exercise.exercise_id,
+                      prescribed: `${prescribed} lb`,
+                      actual: `${Math.round(actual / 5) * 5} lb`,
+                      ratio,
+                      direction: diff > 0 ? 'higher' : 'lower',
+                      pctDiff: Math.abs(Math.round(diff * 100)),
+                    },
+                  });
                 }
               }
               break;
@@ -164,6 +169,26 @@ const useWorkoutStore = create((set, get) => ({
     } catch (e) {
       console.error('Error updating exercise log:', e);
     }
+  },
+
+  confirmAdjustment: async () => {
+    const pending = get().pendingAdjustment;
+    if (!pending) return;
+    try {
+      const adjusted = await dbAdjustFutureWeights(pending.exerciseId, pending.ratio);
+      set({
+        pendingAdjustment: null,
+        lastAdjustment: { exerciseName: pending.exerciseName, newWeight: pending.actual, count: adjusted },
+      });
+      setTimeout(() => set({ lastAdjustment: null }), 4000);
+    } catch (e) {
+      console.error('Error adjusting future weights:', e);
+      set({ pendingAdjustment: null });
+    }
+  },
+
+  dismissAdjustment: () => {
+    set({ pendingAdjustment: null });
   },
 
   saveAmrapRounds: async (planBlockId, rounds) => {
