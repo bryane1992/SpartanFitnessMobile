@@ -73,18 +73,20 @@ function deriveWodMetadata(wod) {
 export function selectWOD(wodPool, options = {}) {
   const {
     phase = 'foundation',
-    dayPatterns = [],         // movement patterns already in today's lifts
-    userEquipment = [],       // user's available equipment
-    spartanBias = 0,          // 0-1, how much to prefer Spartan WODs
-    preferredTags = [],       // e.g., ['amrap', 'chipper']
+    dayPatterns = [],
+    userEquipment = [],
+    spartanBias = 0,
+    preferredTags = [],
+    maxDifficultyOverride = null, // archetype cap
     excludeWodIds = [],       // WODs already used this week
     targetMinutes = 12,       // desired WOD duration
   } = options;
 
   const equip = new Set(userEquipment.map(e => e.toLowerCase()));
 
-  // Max difficulty by phase
-  const maxDifficulty = { foundation: 2, build: 3, peak: 4, race_prep: 3 }[phase] || 3;
+  // Max difficulty by phase, capped by archetype if provided
+  const phaseMax = { foundation: 2, build: 3, peak: 4, race_prep: 3 }[phase] || 3;
+  const maxDifficulty = maxDifficultyOverride != null ? Math.min(phaseMax, maxDifficultyOverride) : phaseMax;
 
   const scored = wodPool
     .filter(wod => {

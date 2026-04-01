@@ -57,6 +57,24 @@ const WORKOUT_STYLES = [
   { id: 'hybrid', label: 'Hybrid', icon: '', desc: 'Best of everything, mixed methods' },
 ];
 
+const EQUIPMENT_PRESETS = {
+  full_gym: {
+    label: 'Full Gym',
+    desc: 'Commercial gym with everything',
+    equipment: ['dumbbells', 'barbell', 'squat_rack', 'bench', 'pull_up_bar', 'kettlebell', 'cables', 'machines', 'cardio_machines'],
+  },
+  home_gym: {
+    label: 'Home Gym',
+    desc: 'Barbell, rack, bench, DBs, KBs',
+    equipment: ['dumbbells', 'barbell', 'squat_rack', 'bench', 'pull_up_bar', 'kettlebell'],
+  },
+  bodyweight: {
+    label: 'Bodyweight Only',
+    desc: 'No equipment or minimal gear',
+    equipment: ['outdoor'],
+  },
+};
+
 const EXCLUSIONS = [
   { id: 'olympic_lift', label: 'Olympic Lifts', icon: '', desc: 'Clean, snatch, jerk — complex barbell movements' },
   { id: 'max_effort', label: 'Max Effort / 1RM', icon: '', desc: 'Singles and heavy triples near your max' },
@@ -109,6 +127,8 @@ export default function Onboarding({ navigation }) {
   const [workingWeights, setWorkingWeights] = useState({});
   // Step 4: Equipment
   const [selectedEquipment, setSelectedEquipment] = useState([]);
+  const [selectedPreset, setSelectedPreset] = useState(null);
+  const [showAdvancedEquip, setShowAdvancedEquip] = useState(false);
   // Step 5: Equipment Details (specific weights)
   const [equipmentDetails, setEquipmentDetails] = useState({});
   // Step 6: Schedule (days + duration)
@@ -510,25 +530,60 @@ export default function Onboarding({ navigation }) {
     </View>
   );
 
+  const selectPreset = (presetKey) => {
+    const preset = EQUIPMENT_PRESETS[presetKey];
+    setSelectedPreset(presetKey);
+    setSelectedEquipment(preset.equipment);
+    setShowAdvancedEquip(false);
+  };
+
   const renderStep4 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>What equipment do you have?</Text>
-      <Text style={styles.stepSubtitle}>Select all that apply</Text>
+      <Text style={styles.stepSubtitle}>Pick your setup</Text>
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll}>
-        {EQUIPMENT.map(equip => (
+        {/* Preset buttons */}
+        {Object.entries(EQUIPMENT_PRESETS).map(([key, preset]) => (
           <TouchableOpacity
-            key={equip.id}
-            style={[styles.optionCard, selectedEquipment.includes(equip.id) && styles.optionCardSelected]}
-            onPress={() => toggleEquipment(equip.id)}
+            key={key}
+            style={[styles.presetCard, selectedPreset === key && styles.presetCardSelected]}
+            onPress={() => selectPreset(key)}
           >
-            <View style={styles.optionContent}>
-              <Text style={[styles.optionLabel, selectedEquipment.includes(equip.id) && styles.optionLabelSelected]}>{equip.label}</Text>
-              <Text style={styles.optionDesc}>{equip.desc}</Text>
-            </View>
-            {selectedEquipment.includes(equip.id) && <View style={styles.checkMark} />}
+            <Text style={[styles.presetLabel, selectedPreset === key && styles.presetLabelSelected]}>{preset.label}</Text>
+            <Text style={styles.presetDesc}>{preset.desc}</Text>
+            {selectedPreset === key ? <Text style={styles.presetCheck}>{'\u2713'}</Text> : null}
           </TouchableOpacity>
         ))}
+
+        {/* Advanced toggle */}
+        <TouchableOpacity
+          style={styles.advancedToggle}
+          onPress={() => setShowAdvancedEquip(!showAdvancedEquip)}
+        >
+          <Text style={styles.advancedToggleText}>
+            {showAdvancedEquip ? 'HIDE ADVANCED OPTIONS \u25B2' : 'CUSTOMIZE EQUIPMENT \u25BC'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Full equipment checklist (collapsed by default) */}
+        {showAdvancedEquip ? (
+          <View>
+            {EQUIPMENT.map(equip => (
+              <TouchableOpacity
+                key={equip.id}
+                style={[styles.optionCard, selectedEquipment.includes(equip.id) && styles.optionCardSelected]}
+                onPress={() => toggleEquipment(equip.id)}
+              >
+                <View style={styles.optionContent}>
+                  <Text style={[styles.optionLabel, selectedEquipment.includes(equip.id) && styles.optionLabelSelected]}>{equip.label}</Text>
+                  <Text style={styles.optionDesc}>{equip.desc}</Text>
+                </View>
+                {selectedEquipment.includes(equip.id) && <View style={styles.checkMark} />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={styles.buttonRow}>
@@ -1143,6 +1198,56 @@ const styles = StyleSheet.create({
   optionsScroll: {
     flex: 1,
   },
+  // Equipment presets
+  presetCard: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    padding: 18,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  presetCardSelected: {
+    borderColor: '#FF4136',
+    backgroundColor: 'rgba(255,65,54,0.06)',
+  },
+  presetLabel: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    flex: 1,
+  },
+  presetLabelSelected: {
+    color: '#FF4136',
+  },
+  presetDesc: {
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 11,
+    position: 'absolute',
+    bottom: 6,
+    left: 18,
+  },
+  presetCheck: {
+    color: '#FF4136',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  advancedToggle: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  advancedToggleText: {
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    fontFamily: 'monospace',
+  },
+
   optionCard: {
     backgroundColor: '#1A1A1A',
     borderRadius: 14,

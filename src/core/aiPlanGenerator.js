@@ -17,6 +17,8 @@ import { getRaceRequirements, getRaceExerciseRequirements, getRaceDistance } fro
 import { selectWOD } from './wodSelector';
 import { buildDayBlocks, getDefaultDayConfigs } from './dayTemplates';
 import { logValidation } from './planValidator';
+import { detectArchetype, adjustArchetypeForEquipment } from './archetypes';
+import { getAbilityScore } from './abilityFilter';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-haiku-4-5-20251001';
@@ -96,6 +98,11 @@ export async function generateAIPlan(userProfile, onStatus) {
   const exercisePool = await loadExercisePool(userProfile);
   const wodList = await loadWodList();
 
+  // Detect user archetype
+  let archetype = detectArchetype(userProfile);
+  archetype = adjustArchetypeForEquipment(archetype, userProfile.equipment);
+  console.log(`[AI Plan] Archetype: ${archetype.archetype} (${archetype.label})`);
+
   // Get race requirements
   const raceReqs = getRaceRequirements(userProfile);
   const raceExerciseReqs = getRaceExerciseRequirements(raceReqs, userProfile.equipment);
@@ -113,13 +120,13 @@ export async function generateAIPlan(userProfile, onStatus) {
     console.log('[AI Plan] After validation dayConfigs:', JSON.stringify(strategy.dayConfigs.map(d => ({ type: d.type, run: !!d.run, wod: !!d.wod }))));
   } catch (err) {
     console.warn('[AI Plan] Strategy call failed, using defaults:', err.message);
-    strategy = buildDefaultStrategy(userProfile, raceReqs);
+    strategy = buildDefaultStrategy(userProfile, raceReqs, archetype);
   }
 
   if (onStatus) onStatus('Building your workouts...');
 
   // Build the full plan
-  const result = await buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs, raceExerciseReqs, targetDistance, onStatus);
+  const result = await buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs, raceExerciseReqs, targetDistance, onStatus, archetype);
   return result;
 }
 
@@ -243,17 +250,17 @@ function validateStrategy(raw, userProfile) {
   return s;
 }
 
-function buildDefaultStrategy(userProfile, raceReqs) {
+function buildDefaultStrategy(userProfile, raceReqs, archetype) {
   const goals = userProfile.goals || [userProfile.goal || 'general_fitness'];
   const equip = (userProfile.equipment || []).map(e => e.toLowerCase());
   const hasBarbell = equip.some(e => /barbell|squat rack/i.test(e));
   const hasSpartanGoal = !!raceReqs || goals.some(g => /spartan|obstacle|athletic/i.test(g));
   const daysPerWeek = userProfile.trainingDaysPerWeek || 5;
 
-  const dayConfigs = getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanGoal);
+  const dayConfigs = getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanGoal, archetype);
 
   return {
-    planName: `${userProfile.experience || 'Intermediate'} ${hasSpartanGoal ? 'Spartan' : 'Strength'} Program`,
+    planName: `${userProfile.experience || 'Intermediate'} ${archetype?.label || (hasSpartanGoal ? 'Spartan' : 'Strength')} Program`,
     dayConfigs,
     patternPriorities: {
       squat: 7, hinge: 7, horizontal_push: 8, horizontal_pull: 7,
@@ -261,7 +268,7 @@ function buildDefaultStrategy(userProfile, raceReqs) {
       carry: hasSpartanGoal ? 8 : 4, core: 5,
       elbow_flexion: 6, elbow_extension: 6,
     },
-    compoundEquipmentPreference: hasBarbell ? ['barbell', 'dumbbell', 'kettlebell'] : ['dumbbell', 'kettlebell', 'bodyweight'],
+    compoundEquipmentPreference: archetype?.equipmentPreference || (hasBarbell ? ['barbell', 'dumbbell', 'kettlebell'] : ['dumbbell', 'kettlebell', 'bodyweight']),
     programNotes: 'Auto-generated program.',
     restDayAdvice: 'Light walking, foam rolling, mobility.',
   };
@@ -271,7 +278,7 @@ function buildDefaultStrategy(userProfile, raceReqs) {
 // Build the full plan
 // ═══════════════════════════════════════════════════════════════
 
-async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs, raceExerciseReqs, targetDistance, onStatus) {
+async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs, raceExerciseReqs, targetDistance, onStatus, archetype) {
   const planId = generateUUID();
   const startDate = getNextMonday();
   const eventDate = userProfile.eventDate || addWeeks(startDate, 16);
@@ -369,6 +376,7 @@ async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs,
             userEquipment: userProfile.equipment || [],
             spartanBias, excludeWodIds: weekWodIds,
             targetMinutes: parseInt(block.duration) || 12,
+            maxDifficultyOverride: archetype?.maxWodDifficulty,
           });
           exercises = buildWodExercises(wod, userProfile.equipmentDetails);
           if (wod) weekWodIds.push(wod.id);
@@ -497,11 +505,12 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
     if (olympicOnly && /clean|snatch|jerk/i.test(ex.name)) score += 20;
     if (olympicOnly && !/clean|snatch|jerk|push.*press/i.test(ex.name)) score -= 20;
 
-    // Equipment preference from strategy
+    // Equipment preference from strategy (and archetype)
     const equipRank = equipPref.indexOf(ex.category);
-    if (equipRank === 0) score += 12;
-    else if (equipRank === 1) score += 6;
-    else if (equipRank === 2) score += 2;
+    if (equipRank === 0) score += 15;
+    else if (equipRank === 1) score += 8;
+    else if (equipRank === 2) score += 3;
+    else if (equipRank === -1) score -= 5; // equipment type not in preference list
 
     // Pattern priority from strategy
     if (patterns && strategy.patternPriorities) {
@@ -518,6 +527,9 @@ function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase
     // Dedup
     if (usedToday.has(ex.id)) score -= 100;
     if (recentlyUsed.has(ex.id)) score -= 8;
+
+    // Ability check — penalize exercises user can't realistically do
+    score += getAbilityScore(ex, userProfile);
 
     // Strong seed exercise preference — curated exercises are better than random ExerciseDB ones
     if (ex.source === 'seed' || !ex.source) score += 20;

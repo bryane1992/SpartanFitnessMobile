@@ -235,9 +235,58 @@ export function buildDayBlocks(dayConfig, phase, sessionMinutes = 60) {
 // Get default day configs based on common training splits
 // ═══════════════════════════════════════════════════════════════
 
-export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanGoal) {
+export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanGoal, archetype) {
   const wantChest = goals.some(g => /chest|muscle|size/i.test(g));
   const wantArms = goals.some(g => /arm|muscle|size/i.test(g));
+  const splitModel = archetype?.splitModel || 'full_body_3x';
+
+  // Full Body 3x — for beginners, general fitness, fat loss with 3 training days
+  if (splitModel === 'full_body_3x' && daysPerWeek <= 3) {
+    return [
+      { type: 'full_body_a', primary_patterns: ['squat', 'horizontal_push'], secondary_patterns: ['horizontal_pull'], arm_finisher: wantArms, wod: archetype?.conditioningStyle === 'circuit' ? { type: 'CIRCUIT' } : { type: 'AMRAP' } },
+      { type: 'full_body_b', primary_patterns: ['hinge', 'vertical_push'], secondary_patterns: ['vertical_pull'], arm_finisher: wantArms, run: { type: 'easy', label: 'EASY RUN' } },
+      { type: 'full_body_c', primary_patterns: ['squat', 'horizontal_pull'], secondary_patterns: ['horizontal_push'], core_block: true, wod: { type: 'FOR TIME' } },
+    ].slice(0, daysPerWeek);
+  }
+
+  // Full Body 5x — fat loss, general fitness with more days
+  if (splitModel === 'full_body_5x') {
+    return [
+      { type: 'full_body_push', primary_patterns: ['squat', 'horizontal_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true, wod: { type: 'CIRCUIT' } },
+      { type: 'full_body_pull', primary_patterns: ['hinge', 'horizontal_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, run: { type: 'intervals', label: 'HIIT INTERVALS' } },
+      { type: 'full_body_legs', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['core'], core_block: true, wod: { type: 'CIRCUIT' } },
+      { type: 'full_body_upper', primary_patterns: ['horizontal_push', 'vertical_pull'], secondary_patterns: ['carry'], arm_finisher: true, run: { type: 'easy', label: 'EASY CARDIO' } },
+      { type: 'full_body_metabolic', primary_patterns: ['hinge', 'horizontal_pull'], secondary_patterns: [], run: { type: 'long_run', label: 'LONG WALK/JOG' }, wod: { type: 'CIRCUIT' } },
+    ].slice(0, daysPerWeek);
+  }
+
+  // Push/Pull/Legs — hypertrophy
+  if (splitModel === 'push_pull_legs') {
+    const base = [
+      { type: 'push', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true },
+      { type: 'pull', primary_patterns: ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true },
+      { type: 'legs', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['core'], core_block: true },
+    ];
+    if (daysPerWeek >= 5) {
+      return [...base, { type: 'push_b', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true },
+        { type: 'pull_b', primary_patterns: ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true }];
+    }
+    if (daysPerWeek >= 4) {
+      return [...base, { type: 'legs_b', primary_patterns: ['squat', 'hinge'], secondary_patterns: [], wod: { type: 'AMRAP' } }];
+    }
+    return base;
+  }
+
+  // Endurance focused — runners
+  if (splitModel === 'endurance_focused') {
+    return [
+      { type: 'easy_run_strength', primary_patterns: ['squat'], secondary_patterns: ['core'], run: { type: 'easy', label: 'EASY RUN' } },
+      { type: 'tempo', primary_patterns: [], secondary_patterns: [], run: { type: 'tempo', label: 'TEMPO RUN' }, core_block: true },
+      { type: 'strength_core', primary_patterns: ['hinge', 'horizontal_push'], secondary_patterns: ['horizontal_pull'], arm_finisher: wantArms },
+      { type: 'intervals', primary_patterns: [], secondary_patterns: [], run: { type: 'intervals', label: 'SPEED INTERVALS' }, core_block: true },
+      { type: 'long_run', primary_patterns: [], secondary_patterns: [], run: { type: 'long_run', label: 'LONG RUN' } },
+    ].slice(0, daysPerWeek);
+  }
 
   const DEFAULTS = {
     3: [
