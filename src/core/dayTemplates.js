@@ -240,23 +240,31 @@ export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanG
   const wantArms = goals.some(g => /arm|muscle|size/i.test(g));
   const splitModel = archetype?.splitModel || 'full_body_3x';
 
-  // Full Body 3x — for beginners, general fitness, fat loss with 3 training days
-  if (splitModel === 'full_body_3x' && daysPerWeek <= 3) {
-    return [
-      { type: 'full_body_a', primary_patterns: ['squat', 'horizontal_push'], secondary_patterns: ['horizontal_pull'], arm_finisher: wantArms, wod: archetype?.conditioningStyle === 'circuit' ? { type: 'CIRCUIT' } : { type: 'AMRAP' } },
-      { type: 'full_body_b', primary_patterns: ['hinge', 'vertical_push'], secondary_patterns: ['vertical_pull'], arm_finisher: wantArms, run: { type: 'easy', label: 'EASY RUN' } },
-      { type: 'full_body_c', primary_patterns: ['squat', 'horizontal_pull'], secondary_patterns: ['horizontal_push'], core_block: true, wod: { type: 'FOR TIME' } },
-    ].slice(0, daysPerWeek);
+  // Full Body 3-4x — for beginners, general fitness, fat loss
+  if (splitModel === 'full_body_3x') {
+    const condStyle = archetype?.conditioningStyle || 'circuit';
+    const wod = condStyle === 'none' ? null : { type: condStyle === 'circuit' ? 'CIRCUIT' : 'AMRAP' };
+    const base = [
+      { type: 'full_body_a', primary_patterns: ['squat', 'horizontal_push'], secondary_patterns: ['horizontal_pull'], arm_finisher: wantArms, wod },
+      { type: 'full_body_b', primary_patterns: ['hinge', 'vertical_push'], secondary_patterns: ['vertical_pull'], arm_finisher: wantArms, core_block: true },
+      { type: 'full_body_c', primary_patterns: ['squat', 'horizontal_pull'], secondary_patterns: ['horizontal_push'], wod: { type: 'CIRCUIT' } },
+    ];
+    if (daysPerWeek >= 4) {
+      base.push({ type: 'full_body_d', primary_patterns: ['hinge', 'horizontal_push'], secondary_patterns: ['core'], arm_finisher: wantArms, wod });
+    }
+    return base.slice(0, daysPerWeek);
   }
 
   // Full Body 5x — fat loss, general fitness with more days
   if (splitModel === 'full_body_5x') {
+    const condStyle = archetype?.conditioningStyle || 'circuit';
+    const wod = condStyle === 'none' ? null : { type: condStyle === 'circuit' ? 'CIRCUIT' : condStyle === 'hiit' ? 'CIRCUIT' : 'AMRAP' };
     return [
-      { type: 'full_body_push', primary_patterns: ['squat', 'horizontal_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true, wod: { type: 'CIRCUIT' } },
-      { type: 'full_body_pull', primary_patterns: ['hinge', 'horizontal_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, run: { type: 'intervals', label: 'HIIT INTERVALS' } },
-      { type: 'full_body_legs', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['core'], core_block: true, wod: { type: 'CIRCUIT' } },
-      { type: 'full_body_upper', primary_patterns: ['horizontal_push', 'vertical_pull'], secondary_patterns: ['carry'], arm_finisher: true, run: { type: 'easy', label: 'EASY CARDIO' } },
-      { type: 'full_body_metabolic', primary_patterns: ['hinge', 'horizontal_pull'], secondary_patterns: [], run: { type: 'long_run', label: 'LONG WALK/JOG' }, wod: { type: 'CIRCUIT' } },
+      { type: 'full_body_push', primary_patterns: ['squat', 'horizontal_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true, wod },
+      { type: 'full_body_pull', primary_patterns: ['hinge', 'horizontal_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, wod },
+      { type: 'full_body_legs', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['core'], core_block: true, wod },
+      { type: 'full_body_upper', primary_patterns: ['horizontal_push', 'vertical_pull'], secondary_patterns: ['carry'], arm_finisher: true, wod },
+      { type: 'full_body_metabolic', primary_patterns: ['hinge', 'horizontal_pull'], secondary_patterns: [], core_block: true, wod },
     ].slice(0, daysPerWeek);
   }
 
