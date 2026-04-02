@@ -42,6 +42,8 @@ export function buildExerciseMenu(userProfile, archetype) {
   // Bodyweight always available
   availableEquip.add('bodyweight');
 
+  console.log(`[MenuBuilder] Exercise source check: count=${exercises.length}, first has difficulty=${typeof exercises[0]?.difficulty}`);
+
   const filtered = exercises.filter(ex => {
     try {
     // Equipment check
@@ -123,8 +125,16 @@ export function buildWodMenu(userProfile, archetype) {
   const maxTier = archetype?.maxWodDifficulty || 3;
   const userEquip = new Set((userProfile.equipment || []).map(e => e.toLowerCase()));
 
+  console.log(`[MenuBuilder] WOD source check: first wod has difficulty=${typeof wods[0]?.difficulty}, estimatedTime=${typeof wods[0]?.estimatedTime}`);
+
   const filtered = wods.filter(wod => {
-    const meta = getWodMetadata(wod);
+    let meta;
+    try {
+      meta = getWodMetadata(wod);
+    } catch (e) {
+      console.error(`[MenuBuilder] getWodMetadata failed for ${wod.id || wod.name}: ${e.message}`);
+      return false;
+    }
 
     // Tier filter
     const tierNum = { beginner: 1, intermediate: 2, advanced: 3 }[meta.tier] || 2;
