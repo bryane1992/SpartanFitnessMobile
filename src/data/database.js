@@ -224,8 +224,8 @@ export async function initDatabase() {
   // Seed WODs — INSERT OR IGNORE ensures new WODs are added without duplicating
   await seedWodData(database);
 
-  // Schema migration: add ExerciseDB columns (idempotent)
-  const newColumns = [
+  // Schema migrations (idempotent — try each, ignore if already exists)
+  const migrations = [
     "ALTER TABLE exercises ADD COLUMN source TEXT DEFAULT 'seed'",
     "ALTER TABLE exercises ADD COLUMN gif_url TEXT",
     "ALTER TABLE exercises ADD COLUMN instructions TEXT",
@@ -233,8 +233,9 @@ export async function initDatabase() {
     "ALTER TABLE exercises ADD COLUMN body_parts TEXT",
     "ALTER TABLE exercises ADD COLUMN api_id TEXT",
     "ALTER TABLE exercises ADD COLUMN description TEXT",
+    "ALTER TABLE plan_blocks ADD COLUMN amrap_rounds TEXT",
   ];
-  for (const sql of newColumns) {
+  for (const sql of migrations) {
     try { await database.runAsync(sql); } catch (e) { /* column already exists */ }
   }
 
