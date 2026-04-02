@@ -753,6 +753,8 @@ export async function upgradeExercisesForNewEquipment(addedEquipment, exerciseSw
   let totalSwaps = 0;
 
   for (const [oldExId, newExId] of Object.entries(exerciseSwapMap)) {
+    // Only swap where the new exercise doesn't already exist on the same DAY
+    // Prevents: bench press as main lift AND bench press as accessory
     const result = await database.runAsync(
       `UPDATE plan_exercises SET exercise_id = ?, notes = 'Upgraded for new equipment'
        WHERE exercise_id = ?
@@ -761,8 +763,14 @@ export async function upgradeExercisesForNewEquipment(addedEquipment, exerciseSw
            SELECT pb.id FROM plan_blocks pb
            JOIN plan_days pd ON pd.id = pb.plan_day_id
            WHERE pd.date > ?
+           AND pd.id NOT IN (
+             SELECT pd2.id FROM plan_days pd2
+             JOIN plan_blocks pb2 ON pb2.plan_day_id = pd2.id
+             JOIN plan_exercises pe2 ON pe2.plan_block_id = pb2.id
+             WHERE pe2.exercise_id = ?
+           )
          )`,
-      [newExId, oldExId, today]
+      [newExId, oldExId, today, newExId]
     );
     if (result.changes > 0) {
       console.log(`[Equipment Upgrade] ${oldExId} → ${newExId}: ${result.changes} exercises swapped`);
