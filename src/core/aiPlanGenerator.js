@@ -698,10 +698,14 @@ function buildWodExercises(wod, equipmentDetails) {
     ];
   }
   const exercises = [];
+  const usedIds = new Set();
   for (let i = 0; i < wod.movements.length; i++) {
     const movement = wod.movements[i];
     const parsed = parseWodMovement(movement, wod.scheme, i);
     const exerciseId = fuzzyMatchWodMovement(parsed.name);
+    // Skip duplicate exercise IDs in the same WOD
+    if (usedIds.has(exerciseId)) continue;
+    usedIds.add(exerciseId);
     let weight = parsed.weight || wod.rxWeight || 'BW';
     weight = scaleWodWeight(weight, exerciseId, equipmentDetails);
     let reps = parsed.reps;

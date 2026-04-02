@@ -18,10 +18,11 @@ export default function WodTimer({ type, timeCap, onComplete, onRoundsChange }) 
   })();
 
   const wodType = (type || '').toUpperCase();
-  const isCountdown = /AMRAP|EMOM/.test(wodType);
-  const isEMOM = /EMOM/.test(wodType);
-  const isAMRAP = /AMRAP/.test(wodType);
-  const isForTime = /FOR TIME|FORTIME/.test(wodType);
+  // Detect timer mode from type — AMRAP and EMOM count down, everything else counts up
+  const isAMRAP = /AMRAP/i.test(wodType) || /AMRAP/i.test(timeCap || '');
+  const isEMOM = /EMOM/i.test(wodType);
+  const isCountdown = isAMRAP || isEMOM;
+  const isForTime = !isCountdown;
 
   useEffect(() => {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };

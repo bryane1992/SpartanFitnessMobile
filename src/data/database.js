@@ -848,24 +848,29 @@ export async function swapWodBlock(planBlockId, newWodId) {
   // Delete existing exercises in this block
   await database.runAsync('DELETE FROM plan_exercises WHERE plan_block_id = ?', [planBlockId]);
 
-  // Parse movements and insert new exercises
+  // Parse movements and insert new exercises (skip duplicates)
   const movements = JSON.parse(wod.movements || '[]');
+  const usedExerciseIds = new Set();
+  let sortOrder = 0;
   for (let i = 0; i < movements.length; i++) {
     const movement = movements[i];
-    // Simple parse: "15 Pull-Ups" → reps=15, name=Pull-Ups
     const repMatch = movement.match(/^(\d+)\s+(.+)$/);
     const name = repMatch ? repMatch[2].replace(/\s*\([^)]+\)/, '').trim() : movement;
     const reps = repMatch ? repMatch[1] : '10';
 
-    // Map movement name to exercise ID (basic mapping)
     const exerciseId = mapWodMovementToId(name);
+
+    // Skip duplicate exercise IDs in the same WOD
+    if (usedExerciseIds.has(exerciseId)) continue;
+    usedExerciseIds.add(exerciseId);
 
     await database.runAsync(
       `INSERT INTO plan_exercises (plan_block_id, exercise_id, sort_order, sets, reps, weight, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [planBlockId, exerciseId, i, `1x${reps}`, reps, wod.rx_weight || 'BW',
-       i === 0 ? `${wod.name} — ${wod.type}${wod.time_cap ? ` (${wod.time_cap})` : ''}: ${wod.description || ''}` : null]
+      [planBlockId, exerciseId, sortOrder, `1x${reps}`, reps, wod.rx_weight || 'BW',
+       sortOrder === 0 ? `${wod.name} — ${wod.type}${wod.time_cap ? ` (${wod.time_cap})` : ''}: ${wod.description || ''}` : null]
     );
+    sortOrder++;
   }
 
   // Update block name, type, and time cap to match new WOD
