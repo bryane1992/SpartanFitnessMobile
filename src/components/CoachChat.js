@@ -233,13 +233,27 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
             }
             break;
           case 'swapWod':
+            console.log('[AI Coach] swapWod action received:', JSON.stringify(action));
             if (action.planBlockId && action.newWodId) {
               const blockId = parseInt(action.planBlockId) || action.planBlockId;
               console.log(`[AI Coach] Swapping WOD block ${blockId} → ${action.newWodId}`);
-              await swapWodBlock(blockId, action.newWodId);
-              await store.loadTodayWorkout();
+              const success = await swapWodBlock(blockId, action.newWodId);
+              console.log(`[AI Coach] WOD swap result: ${success}`);
+              if (success) await store.loadTodayWorkout();
             } else {
-              console.warn('[AI Coach] WOD swap missing IDs:', action);
+              // Try to find the WOD block from today's workout if planBlockId is missing
+              if (action.newWodId && workout?.blocks) {
+                const wodBlock = workout.blocks.find(b => b.is_amrap || /wod|circuit|amrap|emom/i.test(b.name || ''));
+                if (wodBlock) {
+                  console.log(`[AI Coach] Auto-detected WOD block ${wodBlock.id}, swapping → ${action.newWodId}`);
+                  const success = await swapWodBlock(wodBlock.id, action.newWodId);
+                  if (success) await store.loadTodayWorkout();
+                } else {
+                  console.warn('[AI Coach] No WOD block found in today\'s workout');
+                }
+              } else {
+                console.warn('[AI Coach] WOD swap missing IDs:', action);
+              }
             }
             break;
           case 'flagInjury':
