@@ -189,6 +189,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
               const peId = parseInt(action.planExerciseId) || action.planExerciseId;
               console.log(`[AI Coach] Swapping plan_exercise ${peId} → ${action.newExerciseId}`);
               await store.swapExercise(peId, action.newExerciseId, null);
+              await store.loadTodayWorkout(); // refresh UI to show new exercise
             } else {
               console.warn('[AI Coach] Swap missing IDs:', action);
             }
