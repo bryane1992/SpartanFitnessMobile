@@ -63,12 +63,13 @@ export function buildExerciseMenu(userProfile, archetype) {
     if (pattern === 'olympic' && excludes.has('olympic_lift')) return false;
     if (pattern === 'olympic' && userProfile.experience === 'beginner') return false;
 
-    // For overweight_beginner: exclude barbell compounds from the menu entirely
-    // Claude can't pick what it can't see — machines and cables only
-    if (archetype?.exerciseComplexity === 'simple' && ex.category === 'barbell') return false;
+    // For overweight_beginner WITH machine/cable access: exclude barbell compounds
+    // If they only have barbell, keep it — better than nothing
+    const hasMachineAccess = userEquip.has('machines') || userEquip.has('cables');
+    if (archetype?.exerciseComplexity === 'simple' && ex.category === 'barbell' && hasMachineAccess) return false;
 
-    // Also exclude advanced bodyweight for beginners
-    if (archetype?.exerciseComplexity === 'simple' && /push_press|push_jerk|handstand|pistol|muscle_up/i.test(ex.id)) return false;
+    // Even without machines, exclude technical barbell for beginners
+    if (archetype?.exerciseComplexity === 'simple' && /push_press|push_jerk|snatch|clean_and_jerk|handstand|pistol|muscle_up/i.test(ex.id)) return false;
 
     // Running filter
     if (cantRun && pattern === 'cardio' && /run|jog|sprint/i.test(ex.name)) return false;
