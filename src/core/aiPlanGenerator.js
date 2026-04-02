@@ -85,6 +85,7 @@ export async function generateAIPlan(userProfile, onStatus) {
   const exerciseMenu = buildExerciseMenu(userProfile, archetype);
   const wodMenu = buildWodMenu(userProfile, archetype);
   console.log(`[AI Plan] Exercise menu: ${exerciseMenu.length} exercises, WOD menu: ${wodMenu.length} WODs`);
+  console.log(`[AI Plan] WOD menu IDs: ${wodMenu.map(w => `${w.id}(${w.tier})`).join(', ')}`);
 
   // Step 3: Race requirements
   const raceReqs = getRaceRequirements(userProfile);
@@ -179,7 +180,9 @@ async function callClaudeV5(apiKey, userProfile, archetype, exerciseMenu, wodMen
     }
     parsed.wodPool = (parsed.wodPool || []).filter(id => validWodIds.has(id));
 
-    console.log('[AI Plan] Claude selections:', JSON.stringify((parsed.days || []).map(d => ({ title: d.title, compounds: d.compounds?.length, wod: d.wod }))));
+    console.log('[AI Plan] Claude selections:', JSON.stringify((parsed.days || []).map(d => ({ title: d.title, compounds: d.compounds, wod: d.wod, rationale: d.rationale?.slice(0, 80) }))));
+    console.log('[AI Plan] WOD pool:', parsed.wodPool);
+    if (parsed.excludedRationale) console.log('[AI Plan] Excluded:', parsed.excludedRationale.slice(0, 200));
     return parsed;
   } catch (err) { clearTimeout(timer); throw err; }
 }

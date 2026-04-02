@@ -47,8 +47,21 @@ export function getWodMetadata(wod) {
   } else if (diffScore >= 3 || totalEstimatedReps > 200 || containsOlympic || estTime > 20) {
     tier = 'advanced';
   }
-  // Bodyweight-only WODs under 100 reps are beginner-safe
-  if (!containsBarbell && !containsOlympic && !containsRunning && totalEstimatedReps <= 80) {
+  // Ascending EMOM / "death by" — these are deceptively hard (1+2+3+...+15 = 120+ reps)
+  if (/ascending|death by|until failure/i.test(scheme + ' ' + (wod.description || ''))) {
+    difficulty = Math.max(difficulty, 3); // at least intermediate
+    totalEstimatedReps = Math.max(totalEstimatedReps, 120); // ascending to ~15 rounds
+  }
+
+  // Recalculate tier after all adjustments
+  if (diffScore <= 1 && totalEstimatedReps <= 100 && !containsOlympic && !containsBarbell && estTime <= 10) {
+    tier = 'beginner';
+  } else if (diffScore >= 3 || totalEstimatedReps > 200 || containsOlympic || estTime > 20) {
+    tier = 'advanced';
+  }
+
+  // Bodyweight-only WODs under 80 reps with short duration are beginner-safe
+  if (!containsBarbell && !containsOlympic && !containsRunning && totalEstimatedReps <= 80 && estTime <= 10) {
     tier = 'beginner';
   }
 
