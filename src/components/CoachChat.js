@@ -280,9 +280,12 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         i === msgIndex ? { ...m, options: [], chosenOption: option.label } : m
       ));
 
-      // Close coach after WOD swap so user sees the updated workout immediately
-      if (option.action?.type === 'swapWod') {
-        setTimeout(() => onClose(), 500);
+      // Close coach after WOD swap — reload workout first, then close
+      if (option.action?.type === 'swapWod' || option.action?.type === 'swap') {
+        await useWorkoutStore.getState().loadTodayWorkout();
+        const updated = useWorkoutStore.getState().todayWorkout;
+        console.log('[AI Coach] Workout reloaded, WOD blocks:', updated?.blocks?.filter(b => /wod|circuit/i.test(b.name || '')).map(b => `${b.name}: ${b.exercises?.length} exs`));
+        setTimeout(() => onClose(), 300);
       }
 
       // Add a confirmation message
