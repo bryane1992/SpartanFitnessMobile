@@ -280,6 +280,11 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         i === msgIndex ? { ...m, options: [], chosenOption: option.label } : m
       ));
 
+      // Close coach after WOD swap so user sees the updated workout immediately
+      if (option.action?.type === 'swapWod') {
+        setTimeout(() => onClose(), 500);
+      }
+
       // Add a confirmation message
       setMessages(prev => [...prev, {
         role: 'assistant',
