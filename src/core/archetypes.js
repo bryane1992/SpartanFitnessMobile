@@ -68,6 +68,20 @@ const ARCHETYPES = {
     repRange: { compound: [8, 12], isolation: [10, 15] },
     restSeconds: '60-90s',
   },
+  skinny_beginner: {
+    label: 'Muscle Builder (Beginner)',
+    splitModel: 'full_body_3x',
+    equipmentPreference: ['dumbbell', 'barbell', 'kettlebell', 'bodyweight', 'machine', 'cable'],
+    exerciseComplexity: 'moderate',
+    periodization: 'hypertrophy',
+    conditioningStyle: 'none',
+    hasTaper: false,
+    maxWodDifficulty: 1,
+    bodyweightPullAllowed: true,
+    repRange: { compound: [8, 12], isolation: [10, 15] },
+    restSeconds: '60-90s',
+    minSets: 3,
+  },
   general_fitness: {
     label: 'General Fitness',
     splitModel: 'full_body_3x',
@@ -95,6 +109,12 @@ export function detectArchetype(userProfile) {
   // Check for race/obstacle mentions
   const hasRace = /spartan|obstacle|mud run|tough mudder|marathon|half marathon|10k|5k|race/i.test(notes + ' ' + goals.join(' '));
   const hasSpartan = /spartan|obstacle/i.test(notes + ' ' + goals.join(' '));
+
+  // Skinny beginner wanting to bulk — needs volume, not conditioning
+  const isUnderweight = bmi > 0 && bmi < 22 && experience === 'beginner' && bodyCompGoals.some(g => /bulk/i.test(g));
+  if (isUnderweight) {
+    return { archetype: 'skinny_beginner', ...ARCHETYPES.skinny_beginner };
+  }
 
   // Overweight beginner — highest priority check
   if (experience === 'beginner' && (bmi >= 30 || bodyWeight >= 220)) {

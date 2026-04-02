@@ -398,8 +398,15 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         if (ex) await savePlanExercise({ planBlockId: warmupBlockId, exerciseId: ex.id, sortOrder: i, sets: `1x${ex.default_reps || '10'}`, reps: ex.default_reps || '10', weight: ex.default_weight || 'BW', rest: null, notes: null });
       }
 
-      // ── COMPOUNDS — expand pool respecting archetype + phase progression ──
-      const compoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig, archetype, week);
+      // ── COMPOUNDS — expand pool, filter out non-compound exercises ──
+      const NEVER_MAIN_LIFT = /plank|dead.?bug|bird.?dog|v.?up|sit.?up|mountain.?climb|russian.?twist|cable.?wood|pallof|wall.?ball|ball.?slam|battle.?rope|lunge.?matrix|cossack|dead.?hang|farmer.?walk/i;
+      const rawCompoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig, archetype, week);
+      const compoundPool = rawCompoundPool.filter(id => {
+        const ex = exerciseById[id];
+        if (!ex) return false;
+        if (NEVER_MAIN_LIFT.test(ex.name)) return false;
+        return true;
+      });
       const compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, bt.mainLiftCount, weeklyExerciseCount);
       if (compoundIds.length > 0) {
         const compBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'MAIN LIFTS', type: 'COMPOUND', timeCap: `${bt.mainLifts} min`, isAmrap: false, hasGps: false });

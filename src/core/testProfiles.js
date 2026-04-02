@@ -166,6 +166,29 @@ export const TEST_PROFILES = {
       additionalNotes: 'Very overweight, want to get started safely.',
     },
   },
+
+  skinny_beginner_db_only: {
+    label: '155lb Male Beginner, Build Muscle, DB Only',
+    expected: 'skinny_beginner — DB exercises, 3 sets minimum, no advanced WODs, hypertrophy focus',
+    profile: {
+      goals: ['build_muscle', 'get_stronger'],
+      sex: 'male',
+      height: '5\'10"',
+      weight: '155',
+      bmi: '22.2',
+      experience: 'beginner',
+      workingWeights: {},
+      equipment: ['dumbbells', 'bench'],
+      equipmentDetails: { dumbbells: { maxWeight: '50' } },
+      trainingDaysPerWeek: 4,
+      trainingDays: [0, 1, 3, 4],
+      sessionDuration: 45,
+      workoutStyles: ['traditional'],
+      bodyCompGoals: ['bulk'],
+      exclusions: [],
+      additionalNotes: 'Haven\'t worked out in a long time. Want to build muscle and bulk up.',
+    },
+  },
 };
 
 // Run archetype detection on all profiles and log results

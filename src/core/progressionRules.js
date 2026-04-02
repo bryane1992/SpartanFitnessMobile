@@ -320,14 +320,20 @@ export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal, ses
   const weekInPhase = weekNumber % 4 || 4;
   let sets = targetSets || setRange[0];
 
-  // Session duration cap: 60-min or less sessions max 3 sets per exercise
+  // Minimum sets by goal — hypertrophy needs 3 sets minimum
+  const MIN_SETS_BY_GOAL = { bulk: 3, build_muscle: 3, get_stronger: 3, cut: 2, maintain: 2, endurance: 2 };
+  const goalMin = MIN_SETS_BY_GOAL[bodyCompGoal] || 2;
+
+  // Session duration cap — but never below goal minimum
   if (session <= 60 && sets > 3) sets = 3;
-  if (session <= 45 && sets > 2) sets = 2;
+  if (session <= 45 && sets > 3) sets = 3; // keep at 3 for muscle goals, reduce exercise count instead
+  sets = Math.max(sets, goalMin);
 
   // Deload: fewer sets, lower reps
+  // Deload: reduce sets, keep reps at phase working range (never below 8)
   if (isDeloadWeek(weekNumber)) {
-    sets = Math.max(2, sets - 1);
-    reps = repRange[0];
+    sets = 2;
+    reps = Math.max(8, reps); // never below 8 reps on deload — 2×4 is meaningless
   }
 
   // Preserve special rep formats
