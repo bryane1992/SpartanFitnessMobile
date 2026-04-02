@@ -886,9 +886,10 @@ export async function swapWodBlock(planBlockId, newWodId) {
 }
 
 function mapWodMovementToId(name) {
-  const n = name.toLowerCase();
+  const n = name.toLowerCase().replace(/[-_]/g, ' ');
   if (n.includes('pull up') || n.includes('pullup')) return 'pull_ups';
   if (n.includes('push up') || n.includes('pushup')) return 'push_ups';
+  if (n.includes('sit up') || n.includes('situp')) return 'sit_ups';
   if (n.includes('air squat') || n.includes('squat')) return 'air_squats';
   if (n.includes('burpee')) return 'burpees';
   if (n.includes('sit up') || n.includes('situp')) return 'sit_ups';

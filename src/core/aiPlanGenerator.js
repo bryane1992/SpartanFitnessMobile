@@ -736,15 +736,15 @@ function parseWodMovement(movement, scheme, index) {
 }
 
 function fuzzyMatchWodMovement(name) {
-  const n = name.toLowerCase().replace(/[^a-z\s]/g, '').trim();
+  const n = name.toLowerCase().replace(/[-_]/g, ' ').replace(/[^a-z\s]/g, '').trim();
   const MAP = [
     ['handstand push ups', 'handstand_push_ups'], ['muscle ups', 'muscle_ups'],
     ['front squats', 'front_squat'], ['front squat', 'front_squat'],
     ['overhead squats', 'front_squat'], ['pistol squats', 'pistol_squats'],
-    ['air squats', 'air_squats'], ['squats', 'air_squats'],
-    ['pull ups', 'pull_ups'], ['pullups', 'pull_ups'],
-    ['push ups', 'push_ups'], ['pushups', 'push_ups'],
-    ['burpees', 'burpees'], ['sit ups', 'sit_ups'],
+    ['air squats', 'air_squats'], ['airsquats', 'air_squats'], ['squats', 'air_squats'],
+    ['pull ups', 'pull_ups'], ['pullups', 'pull_ups'], ['pull-ups', 'pull_ups'],
+    ['push ups', 'push_ups'], ['pushups', 'push_ups'], ['push-ups', 'push_ups'],
+    ['burpees', 'burpees'], ['sit ups', 'sit_ups'], ['situps', 'sit_ups'], ['sit-ups', 'sit_ups'],
     ['toes to bar', 'sit_ups'], ['thrusters', 'barbell_thrusters'],
     ['deadlifts', 'deadlift'], ['deadlift', 'deadlift'],
     ['hang power cleans', 'hang_clean'], ['power cleans', 'power_clean'],
