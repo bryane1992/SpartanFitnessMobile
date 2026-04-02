@@ -744,6 +744,35 @@ export async function adjustFutureWeights(exerciseId, ratio, currentDate) {
   return updated;
 }
 
+// Upgrade future exercises to use newly available equipment
+// Swaps existing exercises with better alternatives that require the new equipment
+// Only touches future unfinished exercises — completed workouts stay unchanged
+export async function upgradeExercisesForNewEquipment(addedEquipment, exerciseSwapMap) {
+  const database = await getDatabase();
+  const today = new Date().toISOString().split('T')[0];
+  let totalSwaps = 0;
+
+  for (const [oldExId, newExId] of Object.entries(exerciseSwapMap)) {
+    const result = await database.runAsync(
+      `UPDATE plan_exercises SET exercise_id = ?, notes = 'Upgraded for new equipment'
+       WHERE exercise_id = ?
+         AND is_completed = 0
+         AND plan_block_id IN (
+           SELECT pb.id FROM plan_blocks pb
+           JOIN plan_days pd ON pd.id = pb.plan_day_id
+           WHERE pd.date > ?
+         )`,
+      [newExId, oldExId, today]
+    );
+    if (result.changes > 0) {
+      console.log(`[Equipment Upgrade] ${oldExId} → ${newExId}: ${result.changes} exercises swapped`);
+      totalSwaps += result.changes;
+    }
+  }
+
+  return totalSwaps;
+}
+
 export async function saveAmrapRounds(planBlockId, rounds) {
   const database = await getDatabase();
   await database.runAsync(

@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import useWorkoutStore from '../store/useWorkoutStore';
-import { initDatabase, deleteAllPlanData, syncExerciseDb, getExerciseCount, exportPlanAsText } from '../data/database';
+import { initDatabase, deleteAllPlanData, syncExerciseDb, getExerciseCount, exportPlanAsText, upgradeExercisesForNewEquipment } from '../data/database';
 import { testArchetypes, TEST_PROFILES, getTestProfile } from '../core/testProfiles';
 
 const STYLE_LABELS = {
@@ -135,6 +135,32 @@ export default function Settings({ navigation }) {
     setEditEquipment(prev => prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]);
   };
 
+  // Equipment upgrade swap maps — when new equipment is added, swap exercises
+  const EQUIPMENT_UPGRADES = {
+    pull_up_bar: {
+      lat_pulldown: 'pull_ups',           // machine pull → real pull-ups
+      close_grip_lat_pulldown: 'chin_ups', // close-grip → chin-ups
+      band_assisted_pull_ups: 'pull_ups',  // assisted → real
+    },
+    barbell: {
+      db_bench_press: 'bench_press',       // DB bench → barbell bench
+      db_goblet_squat: 'back_squat',       // goblet → back squat
+      db_romanian_deadlift: 'deadlift',    // DB RDL → barbell deadlift
+      db_shoulder_press: 'overhead_press',  // DB OHP → barbell OHP
+    },
+    squat_rack: {
+      leg_press: 'back_squat',             // leg press → rack squats
+    },
+    kettlebell: {
+      db_swing: 'kb_swings',               // DB swing → KB swing
+      db_goblet_squat: 'kb_goblet_squat',  // DB goblet → KB goblet
+    },
+    cables: {
+      db_fly: 'cable_fly',                 // DB fly → cable fly
+      reverse_fly: 'face_pulls',           // DB reverse fly → cable face pulls
+    },
+  };
+
   const saveEquipmentChanges = async () => {
     if (!profile) return;
     const oldEquip = new Set(profile.equipment || []);
@@ -148,31 +174,65 @@ export default function Settings({ navigation }) {
     setProfile(updated);
     setShowEquipModal(false);
 
-    if (added.length > 0 || removed.length > 0) {
-      const changes = [];
-      if (added.length > 0) changes.push(`Added: ${added.join(', ')}`);
-      if (removed.length > 0) changes.push(`Removed: ${removed.join(', ')}`);
+    if (added.length === 0 && removed.length === 0) return;
 
+    const changes = [];
+    if (added.length > 0) changes.push(`Added: ${added.join(', ')}`);
+    if (removed.length > 0) changes.push(`Removed: ${removed.join(', ')}`);
+
+    // Build swap map from added equipment
+    const swapMap = {};
+    for (const equip of added) {
+      const upgrades = EQUIPMENT_UPGRADES[equip];
+      if (upgrades) Object.assign(swapMap, upgrades);
+    }
+    const swapCount = Object.keys(swapMap).length;
+
+    if (swapCount > 0 && added.length > 0) {
       Alert.alert(
         'Equipment Updated',
-        `${changes.join('\n')}\n\nWould you like to update your future workouts to use your new equipment?`,
+        `${changes.join('\n')}\n\nUpgrade future workouts to use your new ${added.join(' & ')}? This keeps your completed workouts and just swaps in better exercises going forward.`,
+        [
+          { text: 'Keep Current Exercises', style: 'cancel' },
+          {
+            text: 'Upgrade Exercises',
+            onPress: async () => {
+              try {
+                const total = await upgradeExercisesForNewEquipment(added, swapMap);
+                Alert.alert('Upgraded', `${total} exercises updated across future workouts to use your new equipment.`);
+                await useWorkoutStore.getState().loadTodayWorkout();
+              } catch (e) {
+                console.error('Equipment upgrade error:', e);
+                Alert.alert('Error', 'Failed to upgrade exercises. Try regenerating the plan.');
+              }
+            },
+          },
+        ]
+      );
+    } else if (removed.length > 0) {
+      Alert.alert(
+        'Equipment Updated',
+        `${changes.join('\n')}\n\nYou removed equipment. Regenerate your plan to remove exercises that need it?`,
         [
           { text: 'Keep Current Plan', style: 'cancel' },
           {
-            text: 'Update Future Workouts',
+            text: 'Regenerate Plan',
+            style: 'destructive',
             onPress: async () => {
               setIsRegenerating(true);
               try {
                 await initDatabase();
                 await generateNewPlan(updated);
               } catch (e) {
-                console.error('Error regenerating with new equipment:', e);
+                console.error('Error regenerating:', e);
               }
               setIsRegenerating(false);
             },
           },
         ]
       );
+    } else {
+      Alert.alert('Equipment Updated', changes.join('\n'));
     }
   };
 
