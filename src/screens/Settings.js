@@ -7,6 +7,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -39,6 +40,20 @@ const GOAL_LABELS = {
   general_fitness: 'General Fitness',
 };
 
+const EQUIPMENT_LIST = [
+  { id: 'dumbbells', label: 'Dumbbells' },
+  { id: 'barbell', label: 'Barbell & Plates' },
+  { id: 'squat_rack', label: 'Squat Rack' },
+  { id: 'bench', label: 'Bench' },
+  { id: 'pull_up_bar', label: 'Pull-Up Bar' },
+  { id: 'kettlebell', label: 'Kettlebells' },
+  { id: 'cables', label: 'Cable Machine' },
+  { id: 'machines', label: 'Gym Machines' },
+  { id: 'bands', label: 'Resistance Bands' },
+  { id: 'cardio_machines', label: 'Cardio Machines' },
+  { id: 'outdoor', label: 'Outdoor Space' },
+];
+
 export default function Settings({ navigation }) {
   const [profile, setProfile] = useState(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -48,6 +63,8 @@ export default function Settings({ navigation }) {
   const [syncProgress, setSyncProgress] = useState('');
   const [claudeKey, setClaudeKey] = useState('');
   const [hasClaudeKey, setHasClaudeKey] = useState(false);
+  const [showEquipModal, setShowEquipModal] = useState(false);
+  const [editEquipment, setEditEquipment] = useState([]);
   const { generateNewPlan, totalWeeks, planPhases, currentPlanId } = useWorkoutStore();
 
   useEffect(() => {
@@ -107,6 +124,56 @@ export default function Settings({ navigation }) {
       setIsSyncing(false);
       setSyncProgress('');
     }, 2000);
+  };
+
+  const handleUpdateEquipment = () => {
+    setEditEquipment(profile?.equipment || []);
+    setShowEquipModal(true);
+  };
+
+  const toggleEditEquip = (id) => {
+    setEditEquipment(prev => prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]);
+  };
+
+  const saveEquipmentChanges = async () => {
+    if (!profile) return;
+    const oldEquip = new Set(profile.equipment || []);
+    const newEquip = new Set(editEquipment);
+    const added = editEquipment.filter(e => !oldEquip.has(e));
+    const removed = [...oldEquip].filter(e => !newEquip.has(e));
+
+    // Save updated profile
+    const updated = { ...profile, equipment: editEquipment };
+    await AsyncStorage.setItem('userProfile', JSON.stringify(updated));
+    setProfile(updated);
+    setShowEquipModal(false);
+
+    if (added.length > 0 || removed.length > 0) {
+      const changes = [];
+      if (added.length > 0) changes.push(`Added: ${added.join(', ')}`);
+      if (removed.length > 0) changes.push(`Removed: ${removed.join(', ')}`);
+
+      Alert.alert(
+        'Equipment Updated',
+        `${changes.join('\n')}\n\nWould you like to update your future workouts to use your new equipment?`,
+        [
+          { text: 'Keep Current Plan', style: 'cancel' },
+          {
+            text: 'Update Future Workouts',
+            onPress: async () => {
+              setIsRegenerating(true);
+              try {
+                await initDatabase();
+                await generateNewPlan(updated);
+              } catch (e) {
+                console.error('Error regenerating with new equipment:', e);
+              }
+              setIsRegenerating(false);
+            },
+          },
+        ]
+      );
+    }
   };
 
   const handleRegenerate = () => {
@@ -233,7 +300,9 @@ export default function Settings({ navigation }) {
               {profile.sessionDuration ? (
                 <ProfileRow label="Session" value={`${profile.sessionDuration} min`} />
               ) : null}
-              <ProfileRow label="Equipment" value={profile.equipment?.join(', ')} />
+              <TouchableOpacity onPress={handleUpdateEquipment}>
+                <ProfileRow label="Equipment" value={`${(profile.equipment || []).length} items (tap to edit)`} />
+              </TouchableOpacity>
               {profile.equipmentDetails?.barbell?.maxWeight ? (
                 <ProfileRow label="Barbell Max" value={`${profile.equipmentDetails.barbell.maxWeight} lbs`} />
               ) : null}
@@ -382,6 +451,36 @@ export default function Settings({ navigation }) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Equipment Update Modal */}
+      <Modal visible={showEquipModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>UPDATE EQUIPMENT</Text>
+            <Text style={styles.modalSub}>Select all equipment you currently have</Text>
+            <ScrollView style={{ maxHeight: 400 }}>
+              {EQUIPMENT_LIST.map(eq => (
+                <TouchableOpacity
+                  key={eq.id}
+                  style={[styles.equipItem, editEquipment.includes(eq.id) && styles.equipItemSelected]}
+                  onPress={() => toggleEditEquip(eq.id)}
+                >
+                  <Text style={[styles.equipLabel, editEquipment.includes(eq.id) && styles.equipLabelSelected]}>{eq.label}</Text>
+                  {editEquipment.includes(eq.id) ? <Text style={styles.equipCheck}>{'\u2713'}</Text> : null}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setShowEquipModal(false)}>
+                <Text style={styles.modalBtnText}>CANCEL</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtnSave} onPress={saveEquipmentChanges}>
+                <Text style={styles.modalBtnSaveText}>SAVE CHANGES</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -495,4 +594,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginTop: 15,
   },
+  // Equipment modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  modalTitle: { color: '#FF4136', fontSize: 16, fontWeight: '900', letterSpacing: 2, marginBottom: 4 },
+  modalSub: { color: 'rgba(255,255,255,0.3)', fontSize: 11, fontFamily: 'monospace', marginBottom: 16 },
+  equipItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 8, marginBottom: 4, backgroundColor: 'rgba(255,255,255,0.03)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  equipItemSelected: { borderColor: '#FF4136', backgroundColor: 'rgba(255,65,54,0.06)' },
+  equipLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: '600' },
+  equipLabelSelected: { color: '#fff' },
+  equipCheck: { color: '#FF4136', fontSize: 16, fontWeight: '900' },
+  modalButtons: { flexDirection: 'row', marginTop: 16, gap: 10 },
+  modalBtnCancel: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  modalBtnSave: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 8, backgroundColor: 'rgba(255,65,54,0.15)', borderWidth: 1, borderColor: 'rgba(255,65,54,0.3)' },
+  modalBtnText: { color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: '700', letterSpacing: 1 },
+  modalBtnSaveText: { color: '#FF4136', fontSize: 12, fontWeight: '700', letterSpacing: 1 },
 });
