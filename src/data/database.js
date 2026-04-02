@@ -778,6 +778,64 @@ export async function upgradeExercisesForNewEquipment(addedEquipment, exerciseSw
     }
   }
 
+  // Cleanup: remove duplicate exercises on the same day
+  // After all swaps, some days might have the same exercise in multiple blocks
+  const duplicates = await database.getAllAsync(
+    `SELECT pe.id, pe.exercise_id, pb.plan_day_id, pe.sort_order
+     FROM plan_exercises pe
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     WHERE pd.date > ? AND pe.is_completed = 0
+     ORDER BY pb.plan_day_id, pe.exercise_id, pe.sort_order`,
+    [today]
+  );
+
+  const seenPerDay = {};
+  let dupsRemoved = 0;
+  for (const row of duplicates) {
+    const key = `${row.plan_day_id}_${row.exercise_id}`;
+    if (seenPerDay[key]) {
+      // Duplicate — delete this one (keep the first occurrence)
+      await database.runAsync('DELETE FROM plan_exercises WHERE id = ?', [row.id]);
+      dupsRemoved++;
+    } else {
+      seenPerDay[key] = true;
+    }
+  }
+  if (dupsRemoved > 0) {
+    console.log(`[Equipment Upgrade] Removed ${dupsRemoved} same-day duplicates`);
+  }
+
+  // Also check for similar exercises (same movement pattern) in the same block
+  // e.g., DB Bench + Barbell Bench in the same MAIN LIFTS block
+  const blockExercises = await database.getAllAsync(
+    `SELECT pe.id, pe.exercise_id, pe.plan_block_id, e.muscle_group, e.is_compound
+     FROM plan_exercises pe
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     JOIN exercises e ON e.id = pe.exercise_id
+     WHERE pd.date > ? AND pe.is_completed = 0
+     ORDER BY pe.plan_block_id, pe.sort_order`,
+    [today]
+  );
+
+  const seenPerBlock = {};
+  let blockDupsRemoved = 0;
+  for (const row of blockExercises) {
+    // Key by block + muscle group + compound status (catches bench + DB bench in same block)
+    const key = `${row.plan_block_id}_${row.muscle_group}_${row.is_compound}`;
+    if (seenPerBlock[key]) {
+      // Same muscle group compound in same block — remove the duplicate
+      await database.runAsync('DELETE FROM plan_exercises WHERE id = ?', [row.id]);
+      blockDupsRemoved++;
+    } else {
+      seenPerBlock[key] = true;
+    }
+  }
+  if (blockDupsRemoved > 0) {
+    console.log(`[Equipment Upgrade] Removed ${blockDupsRemoved} same-block muscle group duplicates`);
+  }
+
   return totalSwaps;
 }
 
