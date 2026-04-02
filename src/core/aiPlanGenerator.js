@@ -66,6 +66,7 @@ RULES:
 - Pick WODs appropriate for the user's experience level
 - Each compound should be a different movement pattern (don't double up squats)
 - Consider the user's notes for constraints (injuries, can't run, etc.)
+- "title" should be a FUN, CREATIVE workout name that captures the day's vibe (e.g., "IRON CURTAIN" for heavy press day, "GRIP & RIP" for deadlift + carries, "THUNDER THIGHS" for leg day, "GUN SHOW" for arms emphasis, "THE FURNACE" for metabolic conditioning). Make it motivating and memorable — NOT generic like "FULL BODY A"
 - JSON only, no other text`;
 
 // ═══════════════════════════════════════════════════════════════
@@ -248,7 +249,18 @@ function buildDefaultSelections(dayConfigs, exerciseMenu, wodMenu, archetype) {
     const core = config.core_block ? pickFromPattern('core', 2) : [];
     const wod = config.wod && wodMenu.length > 0 ? wodMenu[i % wodMenu.length].id : null;
 
-    return { dayIndex: i, title: config.type?.replace(/_/g, ' ').toUpperCase(), compounds, accessories, arms, core, wod, rationale: 'Auto-selected defaults' };
+    // Fun fallback names based on day type
+    const FUN_NAMES = {
+      full_body_a: 'THE FOUNDATION', full_body_b: 'TOTAL BODY BLAST', full_body_c: 'FULL SEND',
+      full_body_d: 'THE GRIND', full_body_push: 'PUSH IT', full_body_pull: 'GRIP & RIP',
+      full_body_legs: 'THUNDER THIGHS', full_body_upper: 'UPPER DECK',
+      full_body_metabolic: 'THE FURNACE', lower_power: 'LEG DAY MAYHEM',
+      upper_push: 'IRON CURTAIN', upper_pull: 'BACK ATTACK', obstacle: 'OBSTACLE CRUSHER',
+      endurance_metabolic: 'CARDIO KING', push: 'PRESS PARTY', pull: 'ROW & GO',
+      legs: 'SQUAT CITY', sprint_conditioning: 'SPRINT & BURN',
+    };
+    const title = FUN_NAMES[config.type] || config.type?.replace(/_/g, ' ').toUpperCase() || 'TRAINING';
+    return { dayIndex: i, title, compounds, accessories, arms, core, wod, rationale: 'Auto-selected defaults' };
   });
 
   return {
