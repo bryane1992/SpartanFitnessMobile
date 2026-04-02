@@ -15,6 +15,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendCoachMessage } from '../data/coachApi';
 import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, getPlanRationales } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
+import { buildExerciseMenu } from '../core/menuBuilder';
+import { detectArchetype, adjustArchetypeForEquipment } from '../core/archetypes';
 
 const QUICK_ACTIONS = [
   { label: 'Swap this', prompt: 'I need to swap the current exercise for something else.' },
@@ -77,7 +79,16 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
       const parsedProfile = profile ? JSON.parse(profile) : null;
       const injuries = await getActiveInjuries();
 
-      // Gather alternatives — filter out exercises already in today's workout
+      // Build constrained swap pool from archetype-filtered menu
+      let allowedSwapIds = null;
+      try {
+        let arch = detectArchetype(parsedProfile || {});
+        arch = adjustArchetypeForEquipment(arch, parsedProfile?.equipment);
+        const menu = buildExerciseMenu(parsedProfile || {}, arch);
+        allowedSwapIds = new Set(menu.map(e => e.id));
+      } catch {}
+
+      // Gather alternatives — filtered by constrained menu + today's workout
       const alternatives = {};
       const todayExerciseIds = new Set();
       if (workout?.blocks) {
@@ -92,8 +103,11 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
             try {
               const alts = await getAlternatives(ex.exercise_id || ex.id, parsedProfile);
               if (alts && alts.length > 0) {
-                // Filter out exercises already in today's workout
-                const filtered = alts.filter(a => !todayExerciseIds.has(a.id));
+                // Filter: not in today's workout AND in the constrained menu
+                const filtered = alts.filter(a =>
+                  !todayExerciseIds.has(a.id) &&
+                  (!allowedSwapIds || allowedSwapIds.has(a.id))
+                );
                 if (filtered.length > 0) {
                   alternatives[ex.id] = filtered.slice(0, 3).map(a => ({ id: a.id, name: a.name }));
                 }
