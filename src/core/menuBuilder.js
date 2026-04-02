@@ -58,8 +58,9 @@ export function buildExerciseMenu(userProfile, archetype) {
     if (cantRun && pattern === 'cardio' && /run|jog|sprint/i.test(ex.name)) return false;
 
     // Difficulty filter for beginners — exclude advanced exercises
-    if (userProfile.experience === 'beginner' && ex.difficulty === 'advanced') return false;
-    if (userProfile.experience === 'beginner' && ex.difficulty === 'elite') return false;
+    const exDiff = (ex.difficulty || 'intermediate').toLowerCase();
+    if (userProfile.experience === 'beginner' && exDiff === 'advanced') return false;
+    if (userProfile.experience === 'beginner' && exDiff === 'elite') return false;
 
     // Heavy beginner specific exclusions
     const bodyWeight = parseFloat(userProfile.weight) || 0;
@@ -76,10 +77,10 @@ export function buildExerciseMenu(userProfile, archetype) {
   // Format for Claude prompt — compact, one line per exercise
   return filtered.map(ex => ({
     id: ex.id,
-    name: ex.name,
+    name: ex.name || ex.id,
     pattern: getMovementPattern(ex),
-    equipment: ex.category,
-    difficulty: ex.difficulty || 'intermediate',
+    equipment: ex.category || 'bodyweight',
+    difficulty: (ex.difficulty || 'intermediate').toLowerCase(),
   }));
 }
 

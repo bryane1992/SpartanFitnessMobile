@@ -83,10 +83,21 @@ export async function generateAIPlan(userProfile, onStatus) {
   console.log(`[AI Plan] Archetype: ${archetype.archetype} (${archetype.label})`);
 
   // Step 2: Build filtered menus (deterministic)
-  const exerciseMenu = buildExerciseMenu(userProfile, archetype);
-  const wodMenu = buildWodMenu(userProfile, archetype);
-  console.log(`[AI Plan] Exercise menu: ${exerciseMenu.length} exercises, WOD menu: ${wodMenu.length} WODs`);
-  console.log(`[AI Plan] WOD menu IDs: ${wodMenu.map(w => `${w.id}(${w.tier})`).join(', ')}`);
+  let exerciseMenu, wodMenu;
+  try {
+    exerciseMenu = buildExerciseMenu(userProfile, archetype);
+    wodMenu = buildWodMenu(userProfile, archetype);
+    console.log(`[AI Plan] Exercise menu: ${exerciseMenu.length} exercises, WOD menu: ${wodMenu.length} WODs`);
+    console.log(`[AI Plan] WOD menu IDs: ${wodMenu.map(w => `${w.id}(${w.tier})`).join(', ')}`);
+  } catch (menuErr) {
+    console.error('[AI Plan] Menu building failed:', menuErr.message);
+    // Fallback: use all seed exercises without filtering
+    exerciseMenu = seedExercises().map(ex => ({
+      id: ex.id, name: ex.name, pattern: getMovementPattern(ex),
+      equipment: ex.category, difficulty: ex.difficulty || 'intermediate',
+    }));
+    wodMenu = [];
+  }
 
   // Step 3: Race requirements
   const raceReqs = getRaceRequirements(userProfile);
