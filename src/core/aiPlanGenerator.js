@@ -1,25 +1,18 @@
-// AI Plan Generator v3 — Strategy-driven hybrid architecture
-// Claude returns a program STRATEGY (movement patterns, priorities)
-// Code builds workouts deterministically using composable day templates
+// AI Plan Generator v5 — Constrained AI Selection + Feedback Loop
+// Claude picks exercises and WODs from a pre-filtered MENU
+// Builder handles all math (weights, progression, periodization)
 //
-// New modules:
-// - raceRequirements.js — race profiles and must-include movements
-// - wodSelector.js — context-aware WOD filtering
-// - dayTemplates.js — composable block builder
-// - planValidator.js — validation before save
+// Pipeline: detectArchetype → buildMenu → Claude picks → builder constructs
 
 import Constants from 'expo-constants';
-import { calculatePhases, getPhaseForWeek } from './phaseCalculator';
+import { calculatePhases, getPhaseForWeek, isDeloadWeek } from './phaseCalculator';
 import { calculateWeight, calculateSetsReps, calculateRunParams, getBodyCompParams, getMesocyclePhase, STIMULUS_TYPES } from './progressionRules';
-import { isDeloadWeek } from './phaseCalculator';
 import { savePlanDay, savePlanBlock, savePlanExercise, getExercisesByFilter, getWodsFromDb, updateBlockRunType } from '../data/database';
 import { getRaceRequirements, getRaceExerciseRequirements, getRaceDistance } from './raceRequirements';
-import { selectWOD } from './wodSelector';
-import { buildDayBlocks, getDefaultDayConfigs } from './dayTemplates';
-import { logValidation } from './planValidator';
 import { detectArchetype, adjustArchetypeForEquipment } from './archetypes';
-import { getAbilityScore, canDoBodyweightPull } from './abilityFilter';
-import { isBeginnerAllowed } from './beginnerPool';
+import { buildExerciseMenu, buildWodMenu, formatExerciseMenu, formatWodMenu } from './menuBuilder';
+import { seedExercises, getMovementPattern } from '../data/exerciseSeed';
+import { buildDayBlocks, getDefaultDayConfigs } from './dayTemplates';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-haiku-4-5-20251001';
@@ -29,62 +22,50 @@ function getApiKey() {
     || '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';
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Safe warmup and cooldown exercise IDs (all exist in exerciseSeed)
-// ═══════════════════════════════════════════════════════════════
-
+// Warmup exercises — always safe
 const WARMUP_IDS = [
-  'easy_jog', 'dynamic_stretching', 'push_up_to_t', 'air_squats',
-  'lunge_matrix', 'a_skips', 'pvc_pass_throughs', 'samson_stretch',
-  'bear_crawl', 'cossack_squats', 'high_knees', 'strides',
+  'dynamic_stretching', 'push_up_to_t', 'air_squats',
+  'lunge_matrix', 'pvc_pass_throughs', 'samson_stretch',
+  'bear_crawl', 'cossack_squats', 'high_knees',
   'arm_circles', 'inchworm',
 ];
+const WARMUP_IDS_WITH_JOG = ['easy_jog', ...WARMUP_IDS, 'a_skips', 'strides'];
 
 // ═══════════════════════════════════════════════════════════════
-// Claude strategy prompt — asks for movement patterns, not exercises
+// v5 Claude Prompt — sends filtered menu, gets exercise IDs back
 // ═══════════════════════════════════════════════════════════════
 
-const STRATEGY_PROMPT = `You are an elite S&C coach. Design a training STRATEGY for this athlete.
+const V5_SYSTEM = `You are an elite S&C coach. You receive a filtered exercise menu and WOD menu. Pick specific exercises BY ID for each training day.
 
-Return valid JSON. Do NOT pick individual exercises — pick movement PATTERNS and priorities.
-The app builds specific workouts from your strategy.
-
-Valid movement patterns: squat, hinge, horizontal_push, horizontal_pull, vertical_push, vertical_pull, pull_up, carry, core, olympic, elbow_flexion, elbow_extension, plyometric
-
-Valid day types: lower_power, upper_push, upper_pull, upper_push_pull, sprint_conditioning, olympic_power, endurance_metabolic, obstacle, full_body, wod_focus
-
-Return this exact JSON structure:
+Return valid JSON:
 {
   "planName": "descriptive name",
-  "dayConfigs": [
+  "days": [
     {
-      "type": "day_type",
-      "primary_patterns": ["squat", "hinge"],
-      "secondary_patterns": ["carry"],
-      "arm_finisher": true,
-      "core_block": false,
-      "run": null,
-      "wod": { "type": "AMRAP" }
+      "dayIndex": 0,
+      "title": "FULL BODY A",
+      "compounds": ["bench_press", "barbell_row", "goblet_squat"],
+      "accessories": ["lat_pulldown", "cable_fly"],
+      "arms": ["db_curl", "skull_crushers"],
+      "core": ["plank", "dead_bug"],
+      "wod": "wod_id_here",
+      "rationale": "Why these exercises for this day"
     }
   ],
-  "patternPriorities": {
-    "horizontal_push": 9,
-    "pull_up": 9,
-    "squat": 7
-  },
-  "compoundEquipmentPreference": ["barbell", "dumbbell"],
-  "programNotes": "coaching notes",
-  "restDayAdvice": "recovery guidance"
+  "wodPool": ["wod_id1", "wod_id2", "wod_id3", "wod_id4", "wod_id5"],
+  "excludedRationale": "What was excluded and why",
+  "progressionNotes": "Weight/progression guidance"
 }
 
 RULES:
-- dayConfigs must have exactly N entries matching training days per week
-- For endurance/race goals: include run blocks on 2-3 days
-- run.type options: "easy", "tempo", "intervals", "fartlek", "long_run", "race_pace"
-- For strength goals: prioritize squat, hinge, horizontal_push patterns
-- Arm emphasis: set arm_finisher:true on desired days
-- Obstacle race: include pull_up, carry patterns and wod blocks
-- Balance push/pull patterns across the week
+- ONLY use exercise IDs from the EXERCISE MENU provided
+- ONLY use WOD IDs from the WOD MENU provided
+- Pick 2-3 compounds per day covering the day's movement patterns
+- Pick 1-2 accessories that complement the compounds
+- Pick arm exercises if the profile requests arm emphasis
+- Pick WODs appropriate for the user's experience level
+- Each compound should be a different movement pattern (don't double up squats)
+- Consider the user's notes for constraints (injuries, can't run, etc.)
 - JSON only, no other text`;
 
 // ═══════════════════════════════════════════════════════════════
@@ -93,56 +74,87 @@ RULES:
 
 export async function generateAIPlan(userProfile, onStatus) {
   const apiKey = getApiKey();
-  if (onStatus) onStatus('Analyzing your goals and equipment...');
+  if (onStatus) onStatus('Analyzing your goals...');
 
-  // Load data
-  const exercisePool = await loadExercisePool(userProfile);
-  const wodList = await loadWodList();
-
-  // Detect user archetype
+  // Step 1: Detect archetype (deterministic)
   let archetype = detectArchetype(userProfile);
   archetype = adjustArchetypeForEquipment(archetype, userProfile.equipment);
   console.log(`[AI Plan] Archetype: ${archetype.archetype} (${archetype.label})`);
 
-  // Get race requirements
+  // Step 2: Build filtered menus (deterministic)
+  const exerciseMenu = buildExerciseMenu(userProfile, archetype);
+  const wodMenu = buildWodMenu(userProfile, archetype);
+  console.log(`[AI Plan] Exercise menu: ${exerciseMenu.length} exercises, WOD menu: ${wodMenu.length} WODs`);
+
+  // Step 3: Race requirements
   const raceReqs = getRaceRequirements(userProfile);
-  const raceExerciseReqs = getRaceExerciseRequirements(raceReqs, userProfile.equipment);
   const targetDistance = getRaceDistance(userProfile);
 
-  if (onStatus) onStatus('Designing your program strategy...');
+  // Step 4: Get day structure
+  const goals = (userProfile.goals || [userProfile.goal || '']).map(g => g.toLowerCase());
+  const equip = (userProfile.equipment || []).map(e => e.toLowerCase());
+  const hasBarbell = equip.some(e => /barbell|squat.?rack/i.test(e));
+  const hasSpartanGoal = !!raceReqs || goals.some(g => /spartan|obstacle|athletic/i.test(g));
+  const daysPerWeek = userProfile.trainingDaysPerWeek || 5;
+  const dayConfigs = getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanGoal, archetype);
 
-  // Get strategy from Claude (or fallback)
-  let strategy;
+  // Step 5: Determine run eligibility
+  const notes = (userProfile.additionalNotes || '').toLowerCase();
+  const cantRun = /can'?t run|no running|don'?t run|unable to run|hate running|avoid running/i.test(notes);
+  const excludesRunning = (userProfile.exclusions || []).includes('running');
+  const hasExplicitRunGoal = /endurance|athletic|spartan|race|marathon|10k|5k/i.test(goals.join(' ') + ' ' + notes);
+  const shouldHaveRuns = hasExplicitRunGoal && !cantRun && !excludesRunning;
+
+  // Apply run constraints to day configs
+  for (const day of dayConfigs) {
+    if (!shouldHaveRuns && day.run) {
+      day.run = null;
+      if (!day.wod) day.wod = { type: 'CIRCUIT' };
+    }
+  }
+  // Ensure long run for racers
+  if (shouldHaveRuns) {
+    if (!dayConfigs.some(d => d.run?.type === 'long_run')) {
+      dayConfigs[dayConfigs.length - 1].run = { type: 'long_run', label: 'LONG RUN' };
+    }
+    if (dayConfigs.filter(d => d.run).length < 2) {
+      const midIdx = Math.floor(daysPerWeek / 2);
+      if (!dayConfigs[midIdx].run) dayConfigs[midIdx].run = { type: 'intervals', label: 'INTERVALS' };
+    }
+  }
+
+  if (onStatus) onStatus('Designing your program...');
+
+  // Step 6: Claude picks exercises from menu
+  let claudeSelections;
   try {
-    const prompt = buildStrategyPrompt(userProfile, raceReqs);
-    const raw = await callClaude(apiKey, prompt);
-    console.log('[AI Plan] Claude raw dayConfigs:', JSON.stringify((raw.dayConfigs || []).map(d => ({ type: d.type, run: !!d.run, wod: !!d.wod }))));
-    strategy = validateStrategy(raw, userProfile);
-    console.log('[AI Plan] After validation dayConfigs:', JSON.stringify(strategy.dayConfigs.map(d => ({ type: d.type, run: !!d.run, wod: !!d.wod }))));
+    claudeSelections = await callClaudeV5(apiKey, userProfile, archetype, exerciseMenu, wodMenu, dayConfigs, raceReqs);
   } catch (err) {
-    console.warn('[AI Plan] Strategy call failed, using defaults:', err.message);
-    strategy = buildDefaultStrategy(userProfile, raceReqs, archetype);
+    console.warn('[AI Plan] Claude call failed, using defaults:', err.message);
+    claudeSelections = buildDefaultSelections(dayConfigs, exerciseMenu, wodMenu, archetype);
   }
 
   if (onStatus) onStatus('Building your workouts...');
 
-  // Build the full plan
-  const result = await buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs, raceExerciseReqs, targetDistance, onStatus, archetype);
+  // Step 7: Build the plan deterministically using Claude's picks
+  const result = await buildPlanV5(claudeSelections, dayConfigs, userProfile, exerciseMenu, wodMenu, targetDistance, shouldHaveRuns, archetype, onStatus);
   return result;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Claude API
+// Claude API — sends menu, gets exercise IDs back
 // ═══════════════════════════════════════════════════════════════
 
-async function callClaude(apiKey, userPrompt) {
+async function callClaudeV5(apiKey, userProfile, archetype, exerciseMenu, wodMenu, dayConfigs, raceReqs) {
+  const prompt = buildV5Prompt(userProfile, archetype, exerciseMenu, wodMenu, dayConfigs, raceReqs);
+
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 120000);
   try {
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: MODEL, max_tokens: 1500, system: STRATEGY_PROMPT, messages: [{ role: 'user', content: userPrompt }] }),
+      body: JSON.stringify({ model: MODEL, max_tokens: 2000, system: V5_SYSTEM, messages: [{ role: 'user', content: prompt }] }),
       signal: ctrl.signal,
     });
     clearTimeout(timer);
@@ -153,168 +165,126 @@ async function callClaude(apiKey, userPrompt) {
     let text = (data.content?.[0]?.text || '').trim();
     const s = text.indexOf('{'), e = text.lastIndexOf('}');
     if (s >= 0 && e > s) text = text.substring(s, e + 1);
-    return JSON.parse(text);
+    const parsed = JSON.parse(text);
+
+    // Validate all IDs exist in the menu
+    const validExIds = new Set(exerciseMenu.map(e => e.id));
+    const validWodIds = new Set(wodMenu.map(w => w.id));
+    for (const day of (parsed.days || [])) {
+      day.compounds = (day.compounds || []).filter(id => validExIds.has(id));
+      day.accessories = (day.accessories || []).filter(id => validExIds.has(id));
+      day.arms = (day.arms || []).filter(id => validExIds.has(id));
+      day.core = (day.core || []).filter(id => validExIds.has(id));
+      if (day.wod && !validWodIds.has(day.wod)) day.wod = null;
+    }
+    parsed.wodPool = (parsed.wodPool || []).filter(id => validWodIds.has(id));
+
+    console.log('[AI Plan] Claude selections:', JSON.stringify((parsed.days || []).map(d => ({ title: d.title, compounds: d.compounds?.length, wod: d.wod }))));
+    return parsed;
   } catch (err) { clearTimeout(timer); throw err; }
 }
 
-function buildStrategyPrompt(userProfile, raceReqs) {
+function buildV5Prompt(userProfile, archetype, exerciseMenu, wodMenu, dayConfigs, raceReqs) {
   const p = [];
-  p.push(`ATHLETE: ${userProfile.experience || 'intermediate'} level`);
-  p.push(`GOALS: ${(userProfile.goals || [userProfile.goal]).join(', ')}`);
-  p.push(`DAYS/WEEK: ${userProfile.trainingDaysPerWeek || 5}`);
-  p.push(`TIME: ${userProfile.sessionDuration || 60} min`);
-  if (userProfile.equipment?.length) p.push(`EQUIPMENT: ${userProfile.equipment.join(', ')}`);
-  if (userProfile.workingWeights) {
-    const ww = userProfile.workingWeights;
-    p.push(`WORKING WEIGHTS (8-10RM): Squat ${ww.squat || '?'}, Bench ${ww.bench || '?'}, DL ${ww.deadlift || '?'}, OHP ${ww.overhead_press || '?'}, Row ${ww.row || '?'}`);
-  }
+  p.push(`ATHLETE: ${userProfile.experience || 'intermediate'} | ${userProfile.sex || '?'} | ${userProfile.weight || '?'} lb | BMI ${userProfile.bmi || '?'}`);
+  p.push(`GOALS: ${(userProfile.goals || []).join(', ')}`);
+  p.push(`DAYS: ${userProfile.trainingDaysPerWeek || 5}/week, ${userProfile.sessionDuration || 60} min`);
+  p.push(`ARCHETYPE: ${archetype.archetype} (${archetype.label})`);
+  p.push(`SPLIT: ${archetype.splitModel}`);
+  p.push(`EQUIPMENT PREF: ${(archetype.equipmentPreference || []).slice(0, 3).join(' > ')}`);
   if (userProfile.bodyCompGoals?.length) p.push(`BODY COMP: ${userProfile.bodyCompGoals.join(', ')}`);
-  if (userProfile.exclusions?.length) p.push(`EXCLUSIONS: ${userProfile.exclusions.join(', ')}`);
-  if (raceReqs) p.push(`RACE: ${raceReqs.label} (${raceReqs.distance_miles} mi, ${raceReqs.obstacles} obstacles)`);
   if (userProfile.additionalNotes) p.push(`NOTES: ${userProfile.additionalNotes}`);
+  if (raceReqs) p.push(`RACE: ${raceReqs.label} (${raceReqs.distance_miles} mi)`);
+
+  // Day structure
+  p.push(`\nDAY STRUCTURE (${dayConfigs.length} training days):`);
+  for (let i = 0; i < dayConfigs.length; i++) {
+    const d = dayConfigs[i];
+    const parts = [`Day ${i + 1}: ${d.type}`];
+    if (d.primary_patterns?.length) parts.push(`patterns: ${d.primary_patterns.join(',')}`);
+    if (d.arm_finisher) parts.push('arms:yes');
+    if (d.core_block) parts.push('core:yes');
+    if (d.run) parts.push(`run:${d.run.type}`);
+    if (d.wod) parts.push(`wod:${d.wod.type}`);
+    p.push(`  ${parts.join(' | ')}`);
+  }
+
+  // Menus
+  p.push('\n' + formatExerciseMenu(exerciseMenu));
+  p.push('\n' + formatWodMenu(wodMenu));
+
   return p.join('\n');
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Strategy validation and defaults
+// Default selections — when Claude fails
 // ═══════════════════════════════════════════════════════════════
 
-function validateStrategy(raw, userProfile) {
-  const daysPerWeek = userProfile.trainingDaysPerWeek || 5;
-  const s = raw;
-
-  // Validate dayConfigs count
-  if (!s.dayConfigs || !Array.isArray(s.dayConfigs)) s.dayConfigs = [];
-  while (s.dayConfigs.length < daysPerWeek) {
-    s.dayConfigs.push({ type: 'strength', primary_patterns: ['squat', 'horizontal_push'], secondary_patterns: [], arm_finisher: false });
-  }
-  s.dayConfigs = s.dayConfigs.slice(0, daysPerWeek);
-
-  // Ensure valid patterns
-  const VALID_PATTERNS = ['squat', 'hinge', 'horizontal_push', 'horizontal_pull', 'vertical_push', 'vertical_pull', 'pull_up', 'carry', 'core', 'olympic', 'elbow_flexion', 'elbow_extension', 'plyometric'];
-  for (const day of s.dayConfigs) {
-    day.primary_patterns = (day.primary_patterns || []).filter(p => VALID_PATTERNS.includes(p));
-    day.secondary_patterns = (day.secondary_patterns || []).filter(p => VALID_PATTERNS.includes(p));
+function buildDefaultSelections(dayConfigs, exerciseMenu, wodMenu, archetype) {
+  const menuByPattern = {};
+  for (const ex of exerciseMenu) {
+    if (!menuByPattern[ex.pattern]) menuByPattern[ex.pattern] = [];
+    menuByPattern[ex.pattern].push(ex.id);
   }
 
-  // Determine who should and shouldn't have runs
-  const goals = (userProfile.goals || [userProfile.goal || '']).join(' ').toLowerCase();
-  const notes = (userProfile.additionalNotes || '').toLowerCase();
-  const arch = detectArchetype(userProfile);
+  const pickFromPattern = (pattern, count = 2) => {
+    const pool = menuByPattern[pattern] || menuByPattern['squat'] || [];
+    return pool.slice(0, count);
+  };
 
-  const cantRun = /can'?t run|no running|don'?t run|unable to run|hate running|avoid running/i.test(notes);
-  const excludesRunning = (userProfile.exclusions || []).includes('running');
-  const hasExplicitRunGoal = /endurance|athletic|spartan|race|marathon|10k|5k/i.test(goals + ' ' + notes);
-
-  // Determine if this user should have run blocks
-  // YES: has an explicit endurance/race goal AND doesn't explicitly can't run
-  // NO: everyone else — runs are opt-in, not default
-  const shouldHaveRuns = hasExplicitRunGoal && !cantRun && !excludesRunning;
-
-  // Remove ALL run blocks if user shouldn't have them
-  if (!shouldHaveRuns) {
-    for (const day of s.dayConfigs) {
-      if (day.run) {
-        day.run = null;
-        if (!day.wod) day.wod = { type: 'CIRCUIT' };
-      }
+  const days = dayConfigs.map((config, i) => {
+    const compounds = [];
+    for (const p of (config.primary_patterns || [])) {
+      compounds.push(...pickFromPattern(p, 1));
     }
-    console.log('[AI Plan] Runs removed — no explicit run goal or user excluded running');
-  }
-
-  if (shouldHaveRuns) {
-    const runDays = s.dayConfigs.filter(d => d.run);
-    if (runDays.length < 2) {
-      const midIdx = Math.floor(daysPerWeek / 2);
-      const lastIdx = daysPerWeek - 1;
-      if (!s.dayConfigs[midIdx].run) {
-        s.dayConfigs[midIdx].run = { type: 'intervals', label: 'SPRINT INTERVALS' };
-      }
-      if (!s.dayConfigs[lastIdx].run) {
-        s.dayConfigs[lastIdx].run = { type: 'long_run', label: 'LONG RUN' };
-      }
+    const accessories = [];
+    for (const p of (config.secondary_patterns || [])) {
+      accessories.push(...pickFromPattern(p, 1));
     }
+    const arms = config.arm_finisher ? [...pickFromPattern('arm_pull', 1), ...pickFromPattern('arm_push', 1)] : [];
+    const core = config.core_block ? pickFromPattern('core', 2) : [];
+    const wod = config.wod && wodMenu.length > 0 ? wodMenu[i % wodMenu.length].id : null;
 
-    const hasLongRun = s.dayConfigs.some(d => d.run?.type === 'long_run');
-    if (!hasLongRun) {
-      const lastIdx = daysPerWeek - 1;
-      s.dayConfigs[lastIdx].run = { type: 'long_run', label: 'LONG RUN' };
-    }
-  }
-
-  // Ensure WODs exist on at least 2 days
-  const wodDays = s.dayConfigs.filter(d => d.wod);
-  if (wodDays.length < 2) {
-    for (let i = 0; i < s.dayConfigs.length && wodDays.length < 2; i++) {
-      if (!s.dayConfigs[i].wod && !s.dayConfigs[i].run) {
-        s.dayConfigs[i].wod = { type: 'AMRAP' };
-        wodDays.push(s.dayConfigs[i]);
-      }
-    }
-    // If still not enough (all days have runs), add WODs alongside runs
-    for (let i = 0; i < s.dayConfigs.length && wodDays.length < 2; i++) {
-      if (!s.dayConfigs[i].wod) {
-        s.dayConfigs[i].wod = { type: 'FOR TIME' };
-        wodDays.push(s.dayConfigs[i]);
-      }
-    }
-  }
-
-  if (!s.patternPriorities) s.patternPriorities = {};
-  if (!s.compoundEquipmentPreference) {
-    const equip = (userProfile.equipment || []).map(e => e.toLowerCase());
-    s.compoundEquipmentPreference = equip.includes('barbell') ? ['barbell', 'dumbbell', 'kettlebell'] : ['dumbbell', 'kettlebell', 'bodyweight'];
-  }
-
-  return s;
-}
-
-function buildDefaultStrategy(userProfile, raceReqs, archetype) {
-  const goals = userProfile.goals || [userProfile.goal || 'general_fitness'];
-  const equip = (userProfile.equipment || []).map(e => e.toLowerCase());
-  const hasBarbell = equip.some(e => /barbell|squat rack/i.test(e));
-  const hasSpartanGoal = !!raceReqs || goals.some(g => /spartan|obstacle|athletic/i.test(g));
-  const daysPerWeek = userProfile.trainingDaysPerWeek || 5;
-
-  const dayConfigs = getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanGoal, archetype);
+    return { dayIndex: i, title: config.type?.replace(/_/g, ' ').toUpperCase(), compounds, accessories, arms, core, wod, rationale: 'Auto-selected defaults' };
+  });
 
   return {
-    planName: `${userProfile.experience || 'Intermediate'} ${archetype?.label || (hasSpartanGoal ? 'Spartan' : 'Strength')} Program`,
-    dayConfigs,
-    patternPriorities: {
-      squat: 7, hinge: 7, horizontal_push: 8, horizontal_pull: 7,
-      vertical_push: 6, pull_up: hasSpartanGoal ? 9 : 6,
-      carry: hasSpartanGoal ? 8 : 4, core: 5,
-      elbow_flexion: 6, elbow_extension: 6,
-    },
-    compoundEquipmentPreference: archetype?.equipmentPreference || (hasBarbell ? ['barbell', 'dumbbell', 'kettlebell'] : ['dumbbell', 'kettlebell', 'bodyweight']),
-    programNotes: 'Auto-generated program.',
-    restDayAdvice: 'Light walking, foam rolling, mobility.',
+    planName: `${archetype?.label || 'Training'} Program`,
+    days,
+    wodPool: wodMenu.slice(0, 5).map(w => w.id),
+    progressionNotes: '',
   };
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Build the full plan
+// Build the full plan from Claude's selections
 // ═══════════════════════════════════════════════════════════════
 
-async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs, raceExerciseReqs, targetDistance, onStatus, archetype) {
+async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wodMenu, targetDistance, shouldHaveRuns, archetype, onStatus) {
   const planId = generateUUID();
   const startDate = getNextMonday();
   const eventDate = userProfile.eventDate || addWeeks(startDate, 16);
   const { totalWeeks, phases } = calculatePhases(startDate, eventDate);
-
-  // Determine run eligibility (same logic as validateStrategy)
-  const userGoals = (userProfile.goals || []).join(' ').toLowerCase();
-  const userNotes = (userProfile.additionalNotes || '').toLowerCase();
-  const cantRun = /can'?t run|no running|don'?t run|unable to run|hate running|avoid running/i.test(userNotes);
-  const excludesRunning = (userProfile.exclusions || []).includes('running');
-  const hasExplicitRunGoal = /endurance|athletic|spartan|race|marathon|10k|5k/i.test(userGoals + ' ' + userNotes);
-  const shouldHaveRuns = hasExplicitRunGoal && !cantRun && !excludesRunning;
   const trainingDays = userProfile.trainingDays || Array.from({ length: userProfile.trainingDaysPerWeek || 5 }, (_, i) => i);
   const sessionMinutes = parseInt(userProfile.sessionDuration) || 60;
 
+  // Build exercise lookup from seed
+  const allExercises = seedExercises();
+  const exerciseById = {};
+  for (const ex of allExercises) exerciseById[ex.id] = ex;
+
+  // Build WOD lookup
+  const allWods = await getWodsFromDb().catch(() => []);
+  const wodById = {};
+  for (const w of allWods) wodById[w.id] = w;
+
+  // WOD pool from Claude's selections
+  const wodPool = (selections.wodPool || []).filter(id => wodById[id]);
+
+  // Warmup pool — no jog if can't run
+  const warmupPool = shouldHaveRuns ? WARMUP_IDS_WITH_JOG : WARMUP_IDS;
+
   const recentlyUsed = new Set();
-  const weekWodIds = []; // track WODs used this week
 
   for (let week = 1; week <= totalWeeks; week++) {
     const phase = getPhaseForWeek(phases, week);
@@ -322,125 +292,135 @@ async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs,
     const weekStartDate = addDays(startDate, (week - 1) * 7);
     const mesoPhase = getMesocyclePhase(week);
     const stimulus = STIMULUS_TYPES[mesoPhase.defaultStimulus];
-
-    // Determine display phase — only use race_prep if archetype has taper
     const weeksFromEnd = totalWeeks - week;
-    const isRacePrep = archetype?.hasTaper && weeksFromEnd < 3 && totalWeeks > 12;
-    // For non-racers, never show race_prep — cycle back to earlier phases
+
+    // Phase display
     let displayPhase;
-    if (isRacePrep) {
+    if (archetype?.hasTaper && weeksFromEnd < 3 && totalWeeks > 12) {
       displayPhase = 'race_prep';
     } else if (phase.phase === 'race_prep' && !archetype?.hasTaper) {
-      // Non-racer hitting the phase calculator's race_prep → cycle back
-      const cycleWeek = ((week - 1) % 12) + 1;
-      displayPhase = cycleWeek <= 4 ? 'foundation' : cycleWeek <= 8 ? 'build' : 'peak';
+      const cw = ((week - 1) % 12) + 1;
+      displayPhase = cw <= 4 ? 'foundation' : cw <= 8 ? 'build' : 'peak';
     } else {
       displayPhase = phase.phase;
     }
 
-    weekWodIds.length = 0; // reset weekly WOD tracking
+    const weekWodIdx = (week - 1) % Math.max(1, wodPool.length);
 
     for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
       const date = addDays(weekStartDate, dayOfWeek);
-      const trainingDayIndex = trainingDays.indexOf(dayOfWeek);
+      const tdi = trainingDays.indexOf(dayOfWeek);
 
-      if (trainingDayIndex === -1) {
-        await savePlanDay({
-          planId, date, dayOfWeek, weekNumber: week,
-          phase: displayPhase, title: 'REST DAY',
-          focus: strategy.restDayAdvice || 'Recovery & mobility',
-          color: '#333', emoji: '', isRestDay: true,
-        });
+      if (tdi === -1) {
+        await savePlanDay({ planId, date, dayOfWeek, weekNumber: week, phase: displayPhase, title: 'REST DAY', focus: 'Recovery & mobility', color: '#333', emoji: '', isRestDay: true });
         continue;
       }
 
-      // Get day config from strategy
-      const dayConfig = strategy.dayConfigs[trainingDayIndex % strategy.dayConfigs.length];
-
-      // Build composable block list from day config
-      const blocks = buildDayBlocks(dayConfig, displayPhase, sessionMinutes);
-
-      // Determine day title and focus
-      const title = dayConfig.type?.replace(/_/g, ' ').toUpperCase() || 'TRAINING';
-      const focusLabel = isRacePrep
+      const dayConfig = dayConfigs[tdi % dayConfigs.length];
+      const daySelection = (selections.days || [])[tdi % (selections.days || []).length] || {};
+      const title = daySelection.title || dayConfig.type?.replace(/_/g, ' ').toUpperCase() || 'TRAINING';
+      const focusLabel = displayPhase === 'race_prep'
         ? `TAPER \u2022 RACE PREP \u2022 Week ${week}`
         : `${mesoPhase.label} \u2022 ${stimulus.label} \u2022 Week ${week}`;
 
-      const dayId = await savePlanDay({
-        planId, date, dayOfWeek, weekNumber: week,
-        phase: displayPhase, title,
-        focus: focusLabel,
-        color: phase.color, emoji: '', isRestDay: false,
-      });
+      const dayId = await savePlanDay({ planId, date, dayOfWeek, weekNumber: week, phase: displayPhase, title, focus: focusLabel, color: phase.color, emoji: '', isRestDay: false });
 
       const usedToday = new Set();
+      let blockOrder = 0;
+      const bodyCompGoal = userProfile.bodyCompGoal || 'maintain';
 
-      if (week <= 2 && trainingDayIndex === 0) {
-        console.log(`[AI Plan] Wk${week} Day1 blocks:`, blocks.map(b => `${b.name}(run:${!!b.isRun},wod:${!!b.isWod})`).join(', '));
+      // ── WARMUP ──
+      const warmupBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'WARM-UP', type: 'MOVEMENT PREP', timeCap: '8 min', isAmrap: false, hasGps: false });
+      const shuffledWarmup = [...warmupPool].sort(() => Math.random() - 0.5).slice(0, 4);
+      for (let i = 0; i < shuffledWarmup.length; i++) {
+        const ex = exerciseById[shuffledWarmup[i]];
+        if (ex) await savePlanExercise({ planBlockId: warmupBlockId, exerciseId: ex.id, sortOrder: i, sets: `1x${ex.default_reps || '10'}`, reps: ex.default_reps || '10', weight: ex.default_weight || 'BW', rest: null, notes: null });
       }
 
-      for (let bi = 0; bi < blocks.length; bi++) {
-        const block = blocks[bi];
-
-        const blockId = await savePlanBlock({
-          planDayId: dayId, sortOrder: bi,
-          name: block.name, type: block.type,
-          timeCap: block.duration,
-          isAmrap: block.isWod || false,
-          hasGps: block.hasGps || false,
-        });
-
-        let exercises;
-
-        if (block.isRun) {
-          // ── Run block ──
-          const runType = block.runType?.toUpperCase() || pickRunType(displayPhase, week);
-          await updateBlockRunType(blockId, runType);
-          exercises = generateRunExercises(week, displayPhase, totalWeeks, exercisePool, runType, userProfile.experience, targetDistance);
-          if (week <= 2) console.log(`[AI Plan] RUN block: wk${week} ${runType} → ${exercises.length} exercises, dist=${exercises[1]?.reps || '?'}`);
-        } else if (block.isWarmup) {
-          // ── Warmup — filter out jog for "can't run" users ──
-          let warmupPool = block.warmupPool || [...WARMUP_IDS];
-          if (!shouldHaveRuns) {
-            warmupPool = warmupPool.filter(id => id !== 'easy_jog' && id !== 'strides' && id !== 'a_skips');
-          }
-          exercises = selectWarmupExercises(warmupPool, block.exerciseCount, exercisePool);
-        } else if (block.isCooldown) {
-          // ── Cooldown ──
-          exercises = selectCooldownExercises(block.cooldownPool || [], exercisePool);
-        } else if (block.isWod) {
-          // ── WOD from seed data ──
-          const dayPatterns = dayConfig.primary_patterns || [];
-          const spartanBias = raceReqs ? 0.7 : 0.2;
-          const userNotes = (userProfile.additionalNotes || '').toLowerCase();
-          const userExclusions = userProfile.exclusions || [];
-          const canRun = !(/can'?t run|no running|don'?t run|unable to run|avoid running/i.test(userNotes)) && !userExclusions.includes('running');
-          const wod = selectWOD(wodList, {
-            phase: displayPhase, dayPatterns,
-            userEquipment: userProfile.equipment || [],
-            spartanBias, excludeWodIds: weekWodIds,
-            targetMinutes: parseInt(block.duration) || 12,
-            maxDifficultyOverride: archetype?.maxWodDifficulty,
-            canDoPullUps: canDoBodyweightPull(userProfile),
-            canDoRunning: canRun,
-          });
-          exercises = buildWodExercises(wod, userProfile.equipmentDetails);
-          if (wod) weekWodIds.push(wod.id);
-          if (week <= 2) console.log(`[AI Plan] WOD block: wk${week} ${wod?.name || 'fallback'} → ${exercises.length} exercises`);
-        } else {
-          // ── Lifts / accessories ──
-          exercises = selectExercises(block, exercisePool, recentlyUsed, usedToday, week, displayPhase, userProfile, strategy, raceExerciseReqs);
+      // ── COMPOUNDS ──
+      const compoundIds = rotateExercises(daySelection.compounds || [], week, recentlyUsed, usedToday);
+      if (compoundIds.length > 0) {
+        const compBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'MAIN LIFTS', type: 'COMPOUND', timeCap: '25 min', isAmrap: false, hasGps: false });
+        for (let i = 0; i < compoundIds.length; i++) {
+          const ex = exerciseById[compoundIds[i]];
+          if (!ex) continue;
+          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes);
+          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
+          await savePlanExercise({ planBlockId: compBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: getBodyCompParams(bodyCompGoal).restSeconds, notes: null });
+          usedToday.add(ex.id); recentlyUsed.add(ex.id);
         }
+      }
 
-        for (let ei = 0; ei < exercises.length; ei++) {
-          const ex = exercises[ei];
-          await savePlanExercise({
-            planBlockId: blockId, exerciseId: ex.id, sortOrder: ei,
-            sets: ex.sets, reps: ex.reps, weight: ex.weight,
-            rest: ex.rest || null, notes: ex.notes || null,
-          });
-          usedToday.add(ex.id);
-          recentlyUsed.add(ex.id);
+      // ── RUN (if applicable) ──
+      if (dayConfig.run && shouldHaveRuns) {
+        const runType = dayConfig.run.type?.toUpperCase() || pickRunType(displayPhase, week);
+        const runBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: dayConfig.run.label || 'RUN', type: runType, timeCap: runType === 'LONG_RUN' ? '30 min' : '20 min', isAmrap: false, hasGps: true });
+        await updateBlockRunType(runBlockId, runType);
+        const runExercises = generateRunExercises(week, displayPhase, totalWeeks, runType, userProfile.experience, targetDistance);
+        for (let i = 0; i < runExercises.length; i++) {
+          await savePlanExercise({ planBlockId: runBlockId, exerciseId: runExercises[i].id, sortOrder: i, sets: runExercises[i].sets, reps: runExercises[i].reps, weight: runExercises[i].weight, rest: null, notes: runExercises[i].notes });
+        }
+      }
+
+      // ── WOD ──
+      if (dayConfig.wod) {
+        const wodId = daySelection.wod || wodPool[weekWodIdx] || wodPool[0];
+        const wod = wodById[wodId];
+        const wodBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'WOD', type: dayConfig.wod.type || 'CIRCUIT', timeCap: '10 min', isAmrap: true, hasGps: false });
+        const wodExercises = buildWodExercises(wod, userProfile.equipmentDetails);
+        for (let i = 0; i < wodExercises.length; i++) {
+          await savePlanExercise({ planBlockId: wodBlockId, exerciseId: wodExercises[i].id, sortOrder: i, sets: wodExercises[i].sets, reps: wodExercises[i].reps, weight: wodExercises[i].weight, rest: null, notes: wodExercises[i].notes });
+        }
+      }
+
+      // ── ACCESSORIES ──
+      const accIds = rotateExercises(daySelection.accessories || [], week, recentlyUsed, usedToday);
+      if (accIds.length > 0) {
+        const accBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'ACCESSORIES', type: 'ISOLATION', timeCap: '10 min', isAmrap: false, hasGps: false });
+        for (let i = 0; i < accIds.length; i++) {
+          const ex = exerciseById[accIds[i]];
+          if (!ex) continue;
+          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes);
+          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
+          await savePlanExercise({ planBlockId: accBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: '45-60s', notes: null });
+          usedToday.add(ex.id); recentlyUsed.add(ex.id);
+        }
+      }
+
+      // ── ARM FINISHER ──
+      const armIds = daySelection.arms || [];
+      if (armIds.length > 0) {
+        const armBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'ARM BLASTER', type: 'SUPERSETS', timeCap: '8 min', isAmrap: false, hasGps: false });
+        for (let i = 0; i < armIds.length; i++) {
+          const ex = exerciseById[armIds[i]];
+          if (!ex) continue;
+          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes);
+          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
+          await savePlanExercise({ planBlockId: armBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: '30-45s', notes: null });
+        }
+      }
+
+      // ── CORE ──
+      const coreIds = daySelection.core || [];
+      if (coreIds.length > 0) {
+        const coreBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'CORE', type: 'CIRCUIT', timeCap: '8 min', isAmrap: false, hasGps: false });
+        for (let i = 0; i < coreIds.length; i++) {
+          const ex = exerciseById[coreIds[i]];
+          if (!ex) continue;
+          await savePlanExercise({ planBlockId: coreBlockId, exerciseId: ex.id, sortOrder: i, sets: '3x15', reps: ex.default_reps || '15', weight: 'BW', rest: null, notes: null });
+        }
+      }
+
+      // ── COOLDOWN ──
+      if (sessionMinutes >= 45) {
+        const focus = (dayConfig.primary_patterns || []).some(p => ['squat', 'hinge'].includes(p)) ? 'lower' : 'upper';
+        const cooldownExs = focus === 'lower'
+          ? ['hip_flexor_stretch', 'pigeon_pose', 'hamstring_stretch']
+          : ['shoulder_stretch', 'thoracic_rotation', 'pvc_pass_throughs'];
+        const cdBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'COOLDOWN', type: 'MOBILITY', timeCap: '5 min', isAmrap: false, hasGps: false });
+        for (let i = 0; i < cooldownExs.length; i++) {
+          const ex = exerciseById[cooldownExs[i]];
+          if (ex) await savePlanExercise({ planBlockId: cdBlockId, exerciseId: ex.id, sortOrder: i, sets: `1x${ex.default_reps || '30s'}`, reps: ex.default_reps || '30s', weight: 'BW', rest: null, notes: null });
         }
       }
     }
@@ -449,398 +429,49 @@ async function buildPlan(strategy, userProfile, exercisePool, wodList, raceReqs,
     if (onStatus && week % 4 === 0) onStatus(`Week ${week}/${totalWeeks}...`);
   }
 
-  // Log validation summary
-  const equip = (userProfile.equipment || []).map(e => e.toLowerCase());
-  const hasBarbell = equip.some(e => /barbell|squat.?rack/i.test(e));
-  const validation = { violations: [] };
-  if (hasBarbell) {
-    // We can't easily scan saved exercises, but log the constraint was active
-    console.log('[AI Plan] Barbell constraint: ACTIVE');
-  }
-  if (raceReqs) {
-    console.log(`[AI Plan] Race requirements: ${raceReqs.label}, must_include: ${raceReqs.must_include.join(', ')}`);
-  }
-  console.log(`[AI Plan] Target run distance: ${targetDistance || 'none'} mi`);
   console.log('[AI Plan] Plan generated successfully');
+  return { planId, totalWeeks, phases, startDate, eventDate, planName: selections.planName || 'Training Program', programNotes: selections.progressionNotes || '' };
+}
 
-  return {
-    planId, totalWeeks, phases, startDate, eventDate,
-    planName: strategy.planName || 'AI Training Program',
-    programNotes: strategy.programNotes || '',
-  };
+// Rotate through Claude's exercise picks across weeks for variety
+function rotateExercises(exerciseIds, week, recentlyUsed, usedToday) {
+  if (exerciseIds.length === 0) return [];
+  // Use all exercises on week 1, then rotate starting position
+  const offset = (week - 1) % exerciseIds.length;
+  const rotated = [...exerciseIds.slice(offset), ...exerciseIds.slice(0, offset)];
+  // Filter out already-used-today
+  return rotated.filter(id => !usedToday.has(id));
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Exercise selection — strategy-driven scoring
-// ═══════════════════════════════════════════════════════════════
-
-async function loadExercisePool(userProfile) {
-  // Load ALL exercises — don't filter by style (was excluding barbell exercises)
-  // Equipment and exclusion filters still apply
-  const exerciseMap = new Map();
-  const exercises = await getExercisesByFilter({
-    style: null, // No style filter — include all exercises
-    exclusions: userProfile.exclusions || [],
-    equipment: userProfile.equipment || [],
-    difficulty: null,
-  });
-  for (const ex of exercises) exerciseMap.set(ex.id, ex);
-  const allExercises = Array.from(exerciseMap.values());
-  const byMuscle = {};
-  for (const ex of allExercises) {
-    if (!byMuscle[ex.muscle_group]) byMuscle[ex.muscle_group] = [];
-    byMuscle[ex.muscle_group].push(ex);
-  }
-  // Debug: verify key exercises are in the pool
-  const barbellCount = allExercises.filter(e => e.category === 'barbell').length;
-  const pullUps = allExercises.find(e => e.id === 'pull_ups');
-  const backSquat = allExercises.find(e => e.id === 'back_squat');
-  const benchPress = allExercises.find(e => e.id === 'bench_press');
-  console.log(`[AI Plan] Pool: ${allExercises.length} total, ${barbellCount} barbell, pullups:${!!pullUps}, squat:${!!backSquat}, bench:${!!benchPress}`);
-  if (!backSquat) console.warn('[AI Plan] WARNING: back_squat not in exercise pool!');
-  if (!pullUps) console.warn('[AI Plan] WARNING: pull_ups not in exercise pool!');
-
-  return { all: allExercises, byMuscle };
-}
-
-async function loadWodList() {
-  try {
-    return await getWodsFromDb();
-  } catch { return []; }
-}
-
-function selectExercises(block, pool, recentlyUsed, usedToday, weekNumber, phase, userProfile, strategy, raceExerciseReqs) {
-  const { muscleGroups, exerciseCount, compoundsOnly, olympicOnly, patterns } = block;
-  const bodyCompGoal = userProfile.bodyCompGoal || 'maintain';
-  const bodyCompParams = getBodyCompParams(bodyCompGoal);
-
-  // Gather candidates from relevant muscle groups
-  const candidates = [];
-  const seen = new Set();
-  for (const mg of (muscleGroups || [])) {
-    for (const ex of (pool.byMuscle[mg] || [])) {
-      if (!seen.has(ex.id)) { seen.add(ex.id); candidates.push(ex); }
-    }
-  }
-
-  // Equipment preference order from strategy
-  const equipPref = strategy.compoundEquipmentPreference || ['barbell', 'dumbbell', 'kettlebell'];
-
-  // Race required exercise IDs
-  const raceRequiredIds = new Set();
-  for (const req of (raceExerciseReqs || [])) {
-    req.exercises.forEach(id => raceRequiredIds.add(id));
-  }
-
-  // Score candidates
-  const scored = candidates.map(ex => {
-    let score = Math.random() * 3;
-
-    // Exclusion enforcement — check exercise name against user's exclusion tags
-    const userExclusions = userProfile.exclusions || [];
-    if (userExclusions.includes('olympic_lift') && /clean|snatch|jerk/i.test(ex.name) && !/push press/i.test(ex.name)) {
-      score -= 100;
-    }
-    if (userExclusions.includes('overhead') && /overhead|jerk|snatch|push press/i.test(ex.name)) {
-      score -= 100;
-    }
-
-    // Compound filtering
-    if (compoundsOnly && ex.is_compound) score += 15;
-    if (compoundsOnly && !ex.is_compound) score -= 25;
-    if (olympicOnly && /clean|snatch|jerk/i.test(ex.name)) score += 20;
-    if (olympicOnly && !/clean|snatch|jerk|push.*press/i.test(ex.name)) score -= 20;
-
-    // Equipment preference from strategy (and archetype)
-    const equipRank = equipPref.indexOf(ex.category);
-    if (equipRank === 0) score += 15;
-    else if (equipRank === 1) score += 8;
-    else if (equipRank === 2) score += 3;
-    else if (equipRank === -1) score -= 5; // equipment type not in preference list
-
-    // Pattern priority from strategy
-    if (patterns && strategy.patternPriorities) {
-      for (const pattern of patterns) {
-        const pri = strategy.patternPriorities[pattern] || 5;
-        // Check if this exercise matches the pattern
-        if (exerciseMatchesPattern(ex, pattern)) score += pri * 2;
-      }
-    }
-
-    // Race requirement boost
-    if (raceRequiredIds.has(ex.id)) score += 15;
-
-    // Dedup
-    if (usedToday.has(ex.id)) score -= 100;
-    if (recentlyUsed.has(ex.id)) score -= 8;
-
-    // Ability check — penalize exercises user can't realistically do
-    score += getAbilityScore(ex, userProfile);
-
-    // BEGINNER ALLOWLIST — for beginners, ONLY allow approved exercises
-    if (userProfile.experience === 'beginner' && !isBeginnerAllowed(ex.id)) {
-      score -= 200; // hard exclude anything not on the allowlist
-    }
-
-    // Seed exercise preference (for non-beginners)
-    if (ex.source === 'seed' || !ex.source) score += 20;
-
-    // Filter obscure ExerciseDB exercises for everyone
-    if (ex.source === 'api') {
-      const eName = ex.name || '';
-      if (/\(female\)|\(male\)|v\.\s*\d|sitted|lying floor/i.test(eName) || eName.length > 40) {
-        score -= 100;
-      } else if (/reverse grip|guillotine|cambered|lever |floor fly|kneeling jump|squat jump step|step rear lunge|bent v\.|side bent|wide reverse|close grip to skull|behind neck|behind the neck|decline close grip|rollerout from|press sit.?up|standing twist|standing ab roll|alternate leg raise|jefferson|zercher|overhead squat|speed squat|on knees|frankenstein|lateral lunge|side split/i.test(eName)) {
-        score -= 100;
-      } else if (eName.split(' ').length > 4 || eName.length > 32) {
-        score -= 50;
-      }
-    }
-
-    return { exercise: ex, score };
-  });
-
-  // Deduplicate by normalized name (ExerciseDB creates case-variant duplicates)
-  const nameMap = new Map();
-  for (const item of scored) {
-    const normName = item.exercise.name.toLowerCase().trim();
-    const existing = nameMap.get(normName);
-    if (!existing || item.score > existing.score) {
-      nameMap.set(normName, item);
-    }
-  }
-  scored.length = 0;
-  scored.push(...nameMap.values());
-
-  scored.sort((a, b) => b.score - a.score);
-
-  // Debug: log top 5 candidates for first block of first day
-  if (block.name === 'MAIN LIFTS' || block.name === 'OLYMPIC LIFTS') {
-    console.log(`[AI Plan] Top 5 for ${block.name} (patterns: ${(patterns || []).join(',')}):`,
-      scored.slice(0, 5).map(s => `${s.exercise.name}(${s.exercise.category}):${s.score.toFixed(1)}`).join(', '));
-  }
-
-  // Pick top N
-  const selected = [];
-  const usedIds = new Set();
-  for (const item of scored) {
-    if (usedIds.has(item.exercise.id)) continue;
-    if (selected.length >= (exerciseCount || 3)) break;
-    usedIds.add(item.exercise.id);
-
-    const ex = item.exercise;
-    const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal, userProfile.sessionDuration);
-    const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
-
-    selected.push({
-      id: ex.id,
-      sets: `${sets}x${reps}`,
-      reps: `${reps}`,
-      weight,
-      rest: bodyCompParams.restSeconds,
-      notes: null,
-      category: ex.category, // needed for hard constraints below
-    });
-  }
-
-  // ── Hard constraints — enforce critical exercise types ──
-  const userEquip = (userProfile.equipment || []).map(e => e.toLowerCase());
-  const hasBarbell = userEquip.some(e => /barbell|squat.?rack/i.test(e));
-  const compoundPatterns = ['squat', 'hinge', 'horizontal_push', 'horizontal_pull'];
-  const isCompoundBlock = compoundsOnly && patterns?.some(p => compoundPatterns.includes(p));
-
-  // Barbell constraint: compound blocks for primary patterns MUST have at least 1 barbell exercise
-  if (hasBarbell && isCompoundBlock && !selected.some(e => e.category === 'barbell')) {
-    const barbellOption = scored.find(s => s.exercise.category === 'barbell' && !usedToday.has(s.exercise.id));
-    if (barbellOption && selected.length > 0) {
-      const ex = barbellOption.exercise;
-      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal, userProfile.sessionDuration);
-      const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
-      selected[selected.length - 1] = { id: ex.id, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bodyCompParams.restSeconds, notes: null, category: ex.category };
-    }
-  }
-
-  // Pull-up constraint: ONLY enforce for users who can actually do them
-  const canPull = canDoBodyweightPull(userProfile);
-  if (canPull && patterns?.some(p => p === 'pull_up' || p === 'vertical_pull') && !selected.some(e => /pull.?up|chin.?up/i.test(e.id))) {
-    const pullUpOption = scored.find(s => /pull_ups|chin_ups/i.test(s.exercise.id) && !usedToday.has(s.exercise.id));
-    if (pullUpOption && selected.length > 0) {
-      const ex = pullUpOption.exercise;
-      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal, userProfile.sessionDuration);
-      const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
-      selected[selected.length - 1] = { id: ex.id, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bodyCompParams.restSeconds, notes: null, category: ex.category };
-    }
-  }
-
-  // Carry constraint: carry pattern MUST include a carry exercise
-  if (patterns?.includes('carry') && !selected.some(e => /carry|farmer|suitcase/i.test(e.id))) {
-    const carryOption = scored.find(s => /farmer_walk|kb_carry|overhead_carry|bucket_carry|sandbag_carry/i.test(s.exercise.id) && !usedToday.has(s.exercise.id));
-    if (carryOption && selected.length > 0) {
-      const ex = carryOption.exercise;
-      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal, userProfile.sessionDuration);
-      const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
-      selected[selected.length - 1] = { id: ex.id, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bodyCompParams.restSeconds, notes: null, category: ex.category };
-    }
-  }
-
-  // Squat constraint: if patterns include squat, at least one exercise must be a squat pattern
-  if (patterns?.includes('squat') && !selected.some(e => /squat|leg.?press|lunge|step.?up|split/i.test(e.id))) {
-    const squatOption = scored.find(s => /squat|leg_press|lunge|step_ups|split/i.test(s.exercise.id) && !usedToday.has(s.exercise.id));
-    if (squatOption && selected.length > 0) {
-      const ex = squatOption.exercise;
-      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal, userProfile.sessionDuration);
-      const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
-      selected[selected.length - 1] = { id: ex.id, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bodyCompParams.restSeconds, notes: null, category: ex.category };
-    }
-  }
-
-  // Vertical pull constraint: if patterns include vertical_pull and no pull-ups allowed, ensure lat pulldown
-  if (!canPull && patterns?.some(p => p === 'vertical_pull' || p === 'pull_up') && !selected.some(e => /lat_pulldown|pulldown|band_assisted/i.test(e.id))) {
-    const latOption = scored.find(s => /lat_pulldown|band_assisted/i.test(s.exercise.id) && !usedToday.has(s.exercise.id));
-    if (latOption && selected.length > 0) {
-      const ex = latOption.exercise;
-      const { sets, reps } = calculateSetsReps(ex, weekNumber, phase, bodyCompGoal, userProfile.sessionDuration);
-      const weight = calculateWeight(ex, weekNumber, phase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
-      selected[selected.length - 1] = { id: ex.id, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bodyCompParams.restSeconds, notes: null, category: ex.category };
-    }
-  }
-
-  return selected;
-}
-
-// Check if an exercise matches a movement pattern
-function exerciseMatchesPattern(exercise, pattern) {
-  const name = (exercise.name || '').toLowerCase();
-  const mg = exercise.muscle_group;
-  const MATCHES = {
-    squat: () => /squat|goblet|lunge|split|step.?up|pistol/i.test(name),
-    hinge: () => /deadlift|rdl|romanian|swing|hip thrust|good morning/i.test(name),
-    horizontal_push: () => /bench|push.?up|dip|fly|press/i.test(name) && !/overhead|shoulder/i.test(name) && mg === 'chest',
-    horizontal_pull: () => /row|inverted/i.test(name) && mg === 'back',
-    vertical_push: () => /overhead|shoulder|press|push.?press|jerk/i.test(name) && mg === 'shoulders',
-    vertical_pull: () => /pull.?up|chin.?up|lat.*pull|pulldown/i.test(name),
-    pull_up: () => /pull.?up|chin.?up|muscle.?up/i.test(name),
-    carry: () => /carry|farmer|walk.*kb|walk.*db|suitcase/i.test(name),
-    core: () => mg === 'core' || /plank|hollow|dead.?bug|pallof|bird.?dog|sit.?up|crunch/i.test(name),
-    olympic: () => /clean|snatch|jerk/i.test(name),
-    elbow_flexion: () => /curl|chin/i.test(name),
-    elbow_extension: () => /tricep|skull|pushdown|extension|dip/i.test(name),
-    plyometric: () => /jump|box|bound|skip/i.test(name),
-  };
-  return MATCHES[pattern]?.() || false;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Warmup and cooldown — safe, pattern-matched
-// ═══════════════════════════════════════════════════════════════
-
-function selectWarmupExercises(warmupPool, count, pool) {
-  const available = warmupPool
-    .map(id => pool.all.find(e => e.id === id))
-    .filter(Boolean);
-
-  const shuffled = available.sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count || 4).map(ex => ({
-    id: ex.id,
-    sets: `1x${ex.default_reps || '10'}`,
-    reps: ex.default_reps || '10',
-    weight: ex.default_weight || 'BW',
-    rest: null, notes: null,
-  }));
-}
-
-function selectCooldownExercises(cooldownPool, pool) {
-  return cooldownPool.map(id => {
-    const ex = pool.all.find(e => e.id === id);
-    if (!ex) return null;
-    return {
-      id: ex.id,
-      sets: `1x${ex.default_reps || '30s'}`,
-      reps: ex.default_reps || '30s',
-      weight: 'BW',
-      rest: null, notes: null,
-    };
-  }).filter(Boolean);
-}
-
-// ═══════════════════════════════════════════════════════════════
-// WOD exercises from seed data — never freeform
+// WOD exercise builder — from seed data
 // ═══════════════════════════════════════════════════════════════
 
 function buildWodExercises(wod, equipmentDetails) {
   if (!wod) {
     return [
-      { id: 'air_squats', sets: '1x15', reps: '15', weight: 'BW', rest: null, notes: 'Bodyweight circuit' },
-      { id: 'push_ups', sets: '1x10', reps: '10', weight: 'BW', rest: null, notes: null },
-      { id: 'burpees', sets: '1x5', reps: '5', weight: 'BW', rest: null, notes: null },
+      { id: 'air_squats', sets: '1x15', reps: '15', weight: 'BW', notes: 'Bodyweight circuit' },
+      { id: 'push_ups', sets: '1x10', reps: '10', weight: 'BW', notes: null },
+      { id: 'burpees', sets: '1x5', reps: '5', weight: 'BW', notes: null },
     ];
   }
-
   const exercises = [];
   for (let i = 0; i < wod.movements.length; i++) {
     const movement = wod.movements[i];
     const parsed = parseWodMovement(movement, wod.scheme, i);
     const exerciseId = fuzzyMatchWodMovement(parsed.name);
-
-    // Scale WOD weight to user's equipment limits
     let weight = parsed.weight || wod.rxWeight || 'BW';
     weight = scaleWodWeight(weight, exerciseId, equipmentDetails);
-
-    // Fix distance-based reps on non-cardio exercises (e.g., "Burpees 200m" from row substitution)
     let reps = parsed.reps;
     if (/^\d+\s*m$/i.test(reps) && !/run|row|bike|ski|sprint/i.test(exerciseId)) {
-      // Convert meters to equivalent rep count (roughly 1 rep per 10m)
-      const meters = parseInt(reps);
-      reps = `${Math.max(5, Math.round(meters / 10))}`;
+      reps = `${Math.max(5, Math.round(parseInt(reps) / 10))}`;
     }
-
     exercises.push({
-      id: exerciseId,
-      sets: `1x${reps}`,
-      reps,
-      weight,
-      rest: null,
+      id: exerciseId, sets: `1x${reps}`, reps, weight,
       notes: i === 0 ? `${wod.name} \u2014 ${wod.type}${wod.timeCap ? ` (${wod.timeCap})` : ''}: ${wod.description}` : null,
     });
   }
   return exercises;
-}
-
-// Scale WOD prescribed weights to user's equipment limits
-function scaleWodWeight(weight, exerciseId, equipmentDetails) {
-  if (!weight || weight === 'BW' || !equipmentDetails) return weight;
-
-  // Parse the weight — handle "225/155 lb", "95/65 lb", "53/35 lb KB" formats
-  const match = weight.match(/(\d+)(?:\/(\d+))?\s*(?:lb|lbs)?/i);
-  if (!match) return weight;
-
-  let rxWeight = parseInt(match[1]); // Use the heavier (male) RX weight
-  if (!rxWeight) return weight;
-
-  // Always simplify "225/155 lb" → just the male weight "225 lb"
-  const simplified = match[2] ? `${rxWeight} lb` : weight;
-
-  // Determine equipment type from exercise
-  const isBarbell = /deadlift|squat|clean|snatch|jerk|press|thruster/i.test(exerciseId);
-  const isKB = /kb|swing|kettlebell/i.test(exerciseId) || /kb/i.test(weight.toLowerCase());
-
-  if (isBarbell && equipmentDetails.barbell?.maxWeight) {
-    const max = parseFloat(equipmentDetails.barbell.maxWeight);
-    if (rxWeight > max) return `${Math.round(max / 5) * 5} lb (scaled)`;
-    return `${rxWeight} lb`;
-  }
-
-  if (isKB && equipmentDetails.kettlebell?.weights) {
-    const kbWeights = equipmentDetails.kettlebell.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0).sort((a, b) => b - a);
-    if (kbWeights.length > 0) {
-      const available = kbWeights.filter(w => w <= rxWeight);
-      const bestKB = available.length > 0 ? available[0] : kbWeights[kbWeights.length - 1];
-      if (bestKB !== rxWeight) return `${bestKB} lb KB (scaled)`;
-      return `${bestKB} lb KB`;
-    }
-  }
-
-  return simplified;
 }
 
 function parseWodMovement(movement, scheme, index) {
@@ -855,46 +486,57 @@ function parseWodMovement(movement, scheme, index) {
   const nameOnly = movement.replace(/\s*\([^)]+\)/, '').trim();
   const weightMatch = movement.match(/\(([^)]+)\)/);
   const schemeNums = (scheme || '').match(/\d+/g);
-  const reps = schemeNums ? schemeNums.join('-') : '10';
-  return { name: nameOnly, reps, weight: weightMatch ? weightMatch[1] : null };
+  return { name: nameOnly, reps: schemeNums ? schemeNums.join('-') : '10', weight: weightMatch ? weightMatch[1] : null };
 }
 
 function fuzzyMatchWodMovement(name) {
   const n = name.toLowerCase().replace(/[^a-z\s]/g, '').trim();
-  // Order matters — specific matches before generic ones
   const MAP = [
-    ['pull ups', 'pull_ups'], ['pullups', 'pull_ups'], ['push ups', 'push_ups'], ['pushups', 'push_ups'],
-    ['handstand push ups', 'handstand_push_ups'], ['hspu', 'handstand_push_ups'],
-    ['muscle ups', 'muscle_ups'], ['muscleups', 'muscle_ups'],
+    ['handstand push ups', 'handstand_push_ups'], ['muscle ups', 'muscle_ups'],
     ['front squats', 'front_squat'], ['front squat', 'front_squat'],
-    ['overhead squats', 'front_squat'], ['overhead squat', 'front_squat'],
-    ['squat snatches', 'snatch'], ['squat cleans', 'power_clean'],
-    ['pistol squats', 'pistol_squats'], ['pistol', 'pistol_squats'],
+    ['overhead squats', 'front_squat'], ['pistol squats', 'pistol_squats'],
     ['air squats', 'air_squats'], ['squats', 'air_squats'],
-    ['burpees', 'burpees'], ['burpee', 'burpees'],
-    ['sit ups', 'sit_ups'], ['situps', 'sit_ups'], ['toes to bar', 'sit_ups'],
-    ['thrusters', 'barbell_thrusters'], ['thruster', 'barbell_thrusters'],
+    ['pull ups', 'pull_ups'], ['pullups', 'pull_ups'],
+    ['push ups', 'push_ups'], ['pushups', 'push_ups'],
+    ['burpees', 'burpees'], ['sit ups', 'sit_ups'],
+    ['toes to bar', 'sit_ups'], ['thrusters', 'barbell_thrusters'],
     ['deadlifts', 'deadlift'], ['deadlift', 'deadlift'],
     ['hang power cleans', 'hang_clean'], ['power cleans', 'power_clean'],
-    ['cleans', 'power_clean'], ['clean jerk', 'clean_and_jerk'],
-    ['clean and jerk', 'clean_and_jerk'],
-    ['push jerk', 'push_jerk'], ['push jerks', 'push_jerk'], ['jerk', 'push_jerk'],
-    ['push press', 'push_press'],
+    ['cleans', 'power_clean'], ['clean and jerk', 'clean_and_jerk'],
+    ['push jerk', 'push_jerk'], ['push press', 'push_press'],
     ['snatches', 'snatch'], ['snatch', 'snatch'],
-    ['box jumps', 'box_jumps'], ['box jump', 'box_jumps'],
-    ['kb swings', 'kb_swings'], ['kettlebell swings', 'kb_swings'],
-    ['wall balls', 'wall_balls'], ['wall ball', 'wall_balls'],
-    ['double unders', 'jump_rope'], ['doubleunders', 'jump_rope'],
-    ['ring dips', 'dips'], ['dips', 'dips'],
-    ['step ups', 'step_ups'], ['farmer walk', 'farmer_walk'], ['farmer carry', 'farmer_walk'],
-    ['mile run', 'easy_run'], ['run', 'easy_run'], ['running', 'easy_run'],
-    ['row', 'easy_run'], ['rowing', 'easy_run'],
-    ['back extensions', 'back_extension'],
+    ['box jumps', 'box_jumps'], ['kb swings', 'kb_swings'],
+    ['kettlebell swings', 'kb_swings'], ['wall balls', 'wall_balls'],
+    ['double unders', 'jump_rope'], ['dips', 'dips'],
+    ['step ups', 'step_ups'], ['farmer walk', 'farmer_walk'],
+    ['mile run', 'easy_run'], ['run', 'easy_run'], ['row', 'easy_run'],
   ];
-  for (const [key, id] of MAP) {
-    if (n.includes(key)) return id;
-  }
+  for (const [key, id] of MAP) { if (n.includes(key)) return id; }
   return 'burpees';
+}
+
+function scaleWodWeight(weight, exerciseId, equipmentDetails) {
+  if (!weight || weight === 'BW' || !equipmentDetails) return weight;
+  const match = weight.match(/(\d+)(?:\/(\d+))?\s*(?:lb|lbs)?/i);
+  if (!match) return weight;
+  const rxWeight = parseInt(match[1]);
+  if (!rxWeight) return weight;
+  const isBarbell = /deadlift|squat|clean|snatch|jerk|press|thruster/i.test(exerciseId);
+  const isKB = /kb|swing|kettlebell/i.test(exerciseId) || /kb/i.test(weight.toLowerCase());
+  if (isBarbell && equipmentDetails.barbell?.maxWeight) {
+    const max = parseFloat(equipmentDetails.barbell.maxWeight);
+    if (rxWeight > max) return `${Math.round(max / 5) * 5} lb (scaled)`;
+    return `${rxWeight} lb`;
+  }
+  if (isKB && equipmentDetails.kettlebell?.weights) {
+    const kbWeights = equipmentDetails.kettlebell.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0).sort((a, b) => b - a);
+    if (kbWeights.length > 0) {
+      const available = kbWeights.filter(w => w <= rxWeight);
+      const bestKB = available.length > 0 ? available[0] : kbWeights[kbWeights.length - 1];
+      return bestKB !== rxWeight ? `${bestKB} lb KB (scaled)` : `${bestKB} lb KB`;
+    }
+  }
+  return match[2] ? `${rxWeight} lb` : weight;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -908,51 +550,38 @@ function pickRunType(phase, weekNumber) {
     peak: ['INTERVALS', 'RACE_PACE', 'TEMPO', 'INTERVALS'],
     race_prep: ['EASY', 'TEMPO', 'EASY', 'EASY'],
   };
-  const rotation = RUN_ROTATION[phase] || RUN_ROTATION.foundation;
-  return rotation[(weekNumber - 1) % rotation.length];
+  return (RUN_ROTATION[phase] || RUN_ROTATION.foundation)[(weekNumber - 1) % 4];
 }
 
-function generateRunExercises(weekNumber, phase, totalWeeks, pool, runType, experience, targetDistance) {
+function generateRunExercises(weekNumber, phase, totalWeeks, runType, experience, targetDistance) {
   const runParams = calculateRunParams(weekNumber, phase, totalWeeks, targetDistance);
-
-  // Experience affects interval count and pace, NOT distance for race-specific training
-  // If training for a race, you MUST run the race distance — can't scale it down
-  const expMult = experience === 'beginner' ? 0.7 : experience === 'intermediate' ? 0.85 : experience === 'advanced' ? 1.0 : 1.1;
-  const rawDist = parseFloat(runParams.distance);
-  // Only scale distance for non-long-run types. Long runs must reach target distance.
-  const distScale = (runType === 'LONG_RUN' || runType === 'RACE_PACE') ? 1.0 : expMult;
-  const scaledDist = Math.round(rawDist * distScale * 2) / 2; // round to 0.5
+  const distScale = (runType === 'LONG_RUN' || runType === 'RACE_PACE') ? 1.0 : (experience === 'beginner' ? 0.7 : experience === 'intermediate' ? 0.85 : 1.0);
+  const scaledDist = Math.round(parseFloat(runParams.distance) * distScale * 2) / 2;
   const distance = `${scaledDist} mi`;
-  const longRunMin = `${Math.round(scaledDist * 9)}-${Math.round(scaledDist * 11)} min`;
-  const scaledIntervals = Math.max(2, Math.round(runParams.intervals * expMult));
 
-  const exercises = [
-    { id: 'easy_jog', sets: '5 min', reps: '5 min', weight: 'Build pace', rest: null, notes: 'Warm into it' },
-  ];
-
+  const exercises = [{ id: 'easy_jog', sets: '5 min', reps: '5 min', weight: 'Build pace', rest: null, notes: 'Warm into it' }];
   switch (runType) {
-    case 'INTERVALS':
-      exercises.push({ id: 'interval_run', sets: `${scaledIntervals} rounds`, reps: phase === 'peak' ? '90s hard / 60s easy' : '2 min hard / 1 min easy', weight: phase === 'peak' ? 'Race pace' : '80-85% effort', rest: null, notes: `Target: ${distance}` });
-      break;
-    case 'TEMPO':
-      exercises.push({ id: 'tempo_run', sets: distance, reps: distance, weight: runParams.paceType + ' pace', rest: null, notes: `Target: ${distance}` });
-      break;
-    case 'FARTLEK':
-      exercises.push({ id: 'tempo_run', sets: '25 min variable', reps: '25 min variable', weight: 'Alternate fast/easy every 2-3 min', rest: null, notes: `Target: ${distance}` });
-      break;
-    case 'LONG_RUN':
-      exercises.push({ id: 'easy_run', sets: distance, reps: distance, weight: 'Conversational pace', rest: null, notes: `Target: ${distance} (${longRunMin})` });
-      break;
-    case 'RACE_PACE':
-      exercises.push({ id: 'interval_run', sets: distance, reps: distance, weight: 'Goal race pace', rest: null, notes: `Target: ${distance} at race effort` });
-      break;
-    case 'EASY': default:
-      exercises.push({ id: 'easy_run', sets: distance, reps: distance, weight: 'Easy conversational pace', rest: null, notes: `Target: ${distance}` });
-      break;
+    case 'INTERVALS': exercises.push({ id: 'interval_run', sets: `${runParams.intervals} rounds`, reps: '2 min hard / 1 min easy', weight: '80-85% effort', rest: null, notes: `Target: ${distance}` }); break;
+    case 'TEMPO': exercises.push({ id: 'tempo_run', sets: distance, reps: distance, weight: runParams.paceType + ' pace', rest: null, notes: `Target: ${distance}` }); break;
+    case 'LONG_RUN': exercises.push({ id: 'easy_run', sets: distance, reps: distance, weight: 'Conversational pace', rest: null, notes: `Target: ${distance}` }); break;
+    case 'RACE_PACE': exercises.push({ id: 'interval_run', sets: distance, reps: distance, weight: 'Goal race pace', rest: null, notes: `Target: ${distance} at race effort` }); break;
+    default: exercises.push({ id: 'easy_run', sets: distance, reps: distance, weight: 'Easy conversational pace', rest: null, notes: `Target: ${distance}` }); break;
   }
-
-  exercises.push({ id: 'easy_jog', sets: '5 min', reps: '5 min', weight: 'Cool down', rest: null, notes: 'Easy jog to finish' });
+  exercises.push({ id: 'easy_jog', sets: '5 min', reps: '5 min', weight: 'Cool down', rest: null, notes: null });
   return exercises;
+}
+
+// Parse target race distance
+function getTargetRaceDistance(profile) {
+  if (!profile) return null;
+  const all = `${(profile.additionalNotes || '')} ${(profile.goals || []).join(' ')}`.toLowerCase();
+  if (all.includes('marathon') && !all.includes('half')) return 26.2;
+  if (all.includes('half marathon')) return 13.1;
+  if (all.includes('spartan beast')) return 13.1;
+  if (all.includes('10k') || all.includes('spartan super')) return 6.2;
+  if (all.includes('spartan sprint') || all.includes('5k')) return 3.1;
+  if (/endurance|athletic|spartan/i.test(all)) return 6.2;
+  return null;
 }
 
 // ═══════════════════════════════════════════════════════════════

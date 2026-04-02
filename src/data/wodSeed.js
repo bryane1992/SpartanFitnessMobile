@@ -12,6 +12,56 @@ export const WOD_CATEGORIES = {
   open: 'CF OPEN',
 };
 
+// Derive WOD metadata for v5 menu filtering — computed at runtime from existing fields
+export function getWodMetadata(wod) {
+  const movements = (wod.movements || []).join(' ').toLowerCase();
+  const scheme = (wod.scheme || '').toLowerCase();
+  const diff = (wod.difficulty || 'intermediate').toLowerCase();
+  const estTime = parseInt(wod.estimatedTime) || 15;
+
+  // Flags
+  const containsRunning = /\brun\b|\bmile\b|800m|400m|200m/i.test(movements);
+  const containsPullUps = /pull.?up|chin.?up|muscle.?up/i.test(movements);
+  const containsOlympic = /clean|snatch|jerk/i.test(movements);
+  const containsBarbell = /\blb\b|\bbarbell\b/i.test(movements) && /deadlift|clean|snatch|press|thruster|squat/i.test(movements);
+
+  // Estimate total reps
+  let totalReps = 0;
+  for (const m of (wod.movements || [])) {
+    const repMatch = m.match(/^(\d+)\s/);
+    totalReps += repMatch ? parseInt(repMatch[1]) : 10;
+  }
+  // Multiply by scheme rounds
+  let schemeMult = 1;
+  const roundMatch = scheme.match(/(\d+)\s*round/);
+  if (roundMatch) schemeMult = parseInt(roundMatch[1]);
+  else if (/^\d+-/.test(scheme)) schemeMult = scheme.split('-').length;
+  const totalEstimatedReps = totalReps * schemeMult;
+
+  // Tier: beginner (1), intermediate (2), advanced (3)
+  let tier = 'intermediate';
+  const diffScore = { beginner: 1, intermediate: 2, advanced: 3, elite: 4 }[diff] || 2;
+
+  if (diffScore <= 1 && totalEstimatedReps <= 100 && !containsOlympic && !containsBarbell && estTime <= 10) {
+    tier = 'beginner';
+  } else if (diffScore >= 3 || totalEstimatedReps > 200 || containsOlympic || estTime > 20) {
+    tier = 'advanced';
+  }
+  // Bodyweight-only WODs under 100 reps are beginner-safe
+  if (!containsBarbell && !containsOlympic && !containsRunning && totalEstimatedReps <= 80) {
+    tier = 'beginner';
+  }
+
+  return {
+    tier,
+    totalEstimatedReps,
+    containsRunning,
+    containsPullUps,
+    containsOlympic,
+    containsBarbell,
+  };
+}
+
 export function getWods() {
   return [
     // ═══════════════════════════════════════════════════════════

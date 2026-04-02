@@ -1,5 +1,94 @@
 //  Spartan Fitness Exercise Catalog
-// ~120 exercises with muscle groups, style tags, exclusion tags, and alternatives
+// ~136 exercises with muscle groups, style tags, exclusion tags, and alternatives
+
+// Derive movement pattern from exercise properties — used by v5 menu builder
+// Patterns: horizontal_push, horizontal_pull, vertical_push, vertical_pull,
+//           squat, hinge, carry, core, arm_push, arm_pull, plyometric, cardio, warmup
+export function getMovementPattern(exercise) {
+  const id = (exercise.id || '').toLowerCase();
+  const name = (exercise.name || '').toLowerCase();
+  const mg = (exercise.muscle_group || '').toLowerCase();
+
+  // Explicit overrides for ambiguous exercises
+  const PATTERN_MAP = {
+    // Horizontal push
+    bench_press: 'horizontal_push', incline_bench: 'horizontal_push', db_bench_press: 'horizontal_push',
+    db_incline_press: 'horizontal_push', push_ups: 'horizontal_push', db_fly: 'horizontal_push',
+    cable_fly: 'horizontal_push', machine_chest_press: 'horizontal_push', machine_dip: 'horizontal_push',
+    floor_press: 'horizontal_push', dips: 'horizontal_push',
+    // Horizontal pull
+    barbell_row: 'horizontal_pull', db_row: 'horizontal_pull', cable_row: 'horizontal_pull',
+    machine_row: 'horizontal_pull', inverted_row: 'horizontal_pull', monkey_bars: 'horizontal_pull',
+    // Vertical push
+    overhead_press: 'vertical_push', db_shoulder_press: 'vertical_push', push_press: 'vertical_push',
+    db_push_press: 'vertical_push', machine_shoulder_press: 'vertical_push',
+    pike_push_ups: 'vertical_push', handstand_push_ups: 'vertical_push',
+    push_jerk: 'vertical_push',
+    // Vertical pull
+    pull_ups: 'vertical_pull', chin_ups: 'vertical_pull', lat_pulldown: 'vertical_pull',
+    band_assisted_pull_ups: 'vertical_pull', muscle_ups: 'vertical_pull',
+    rope_climb: 'vertical_pull', dead_hang: 'vertical_pull', towel_pull_ups: 'vertical_pull',
+    // Squat
+    back_squat: 'squat', front_squat: 'squat', air_squats: 'squat', goblet_squat: 'squat',
+    db_goblet_squat: 'squat', kb_goblet_squat: 'squat', pistol_squats: 'squat',
+    leg_press: 'squat', split_squat: 'squat', db_walking_lunges: 'squat',
+    db_lunges: 'squat', step_ups: 'squat', cossack_squats: 'squat', lunge_matrix: 'squat',
+    wall_balls: 'squat', leg_extension: 'squat', barbell_thrusters: 'squat',
+    db_thrusters: 'squat', kb_thrusters: 'squat',
+    // Hinge
+    deadlift: 'hinge', trap_bar_deadlift: 'hinge', romanian_deadlift: 'hinge',
+    sumo_deadlift: 'hinge', hip_thrust: 'hinge', kb_swings: 'hinge',
+    cable_pull_through: 'hinge', leg_curl: 'hinge',
+    // Carry
+    farmer_walk: 'carry', kb_carry: 'carry', overhead_carry: 'carry',
+    sandbag_carry: 'carry', bucket_carry: 'carry',
+    // Core
+    plank: 'core', plank_to_pushup: 'core', v_ups: 'core', russian_twists: 'core',
+    sit_ups: 'core', hanging_knee_raise: 'core', pallof_press: 'core',
+    ab_wheel: 'core', dead_bug: 'core', mountain_climbers: 'core',
+    toes_to_bar: 'core', bird_dog: 'core', hollow_hold: 'core',
+    // Arm push (tricep)
+    skull_crushers: 'arm_push', cable_tricep_pushdown: 'arm_push', bench_dips: 'arm_push',
+    tricep_kickback: 'arm_push',
+    // Arm pull (bicep)
+    db_curl: 'arm_pull', hammer_curl: 'arm_pull', cable_bicep_curl: 'arm_pull',
+    bicep_curl: 'arm_pull',
+    // Shoulder isolation
+    lateral_raise: 'vertical_push', reverse_fly: 'horizontal_pull', face_pulls: 'horizontal_pull',
+    cable_lateral_raise: 'vertical_push',
+    // Plyometric
+    box_jumps: 'plyometric', jump_squats: 'plyometric', burpees: 'plyometric',
+    broad_jump: 'plyometric', burpee_box_jumps: 'plyometric',
+    ball_slams: 'plyometric', battle_ropes: 'plyometric',
+    // Cardio
+    easy_jog: 'cardio', easy_run: 'cardio', tempo_run: 'cardio', interval_run: 'cardio',
+    strides: 'cardio', high_knees: 'cardio', a_skips: 'cardio',
+    rowing_machine: 'cardio', assault_bike: 'cardio', jump_rope: 'cardio', double_unders: 'cardio',
+    // Warmup / Mobility
+    dynamic_stretching: 'warmup', pvc_pass_throughs: 'warmup', samson_stretch: 'warmup',
+    push_up_to_t: 'warmup', bear_crawl: 'warmup', inchworm: 'warmup', arm_circles: 'warmup',
+    hip_flexor_stretch: 'warmup', pigeon_pose: 'warmup', shoulder_stretch: 'warmup',
+    hamstring_stretch: 'warmup', thoracic_rotation: 'warmup',
+    // Olympic
+    power_clean: 'olympic', hang_clean: 'olympic', snatch: 'olympic',
+    clean_and_jerk: 'olympic', kb_snatch: 'olympic', db_hang_clean: 'olympic',
+    kb_clean_press: 'olympic', db_clean_press: 'olympic',
+  };
+
+  if (PATTERN_MAP[id]) return PATTERN_MAP[id];
+
+  // Fallback heuristics
+  if (mg === 'chest') return 'horizontal_push';
+  if (mg === 'back') return /pull.?up|pulldown|chin|hang/i.test(name) ? 'vertical_pull' : 'horizontal_pull';
+  if (mg === 'shoulders') return 'vertical_push';
+  if (mg === 'legs' || mg === 'glutes') return /squat|lunge|press|step|split|pistol/i.test(name) ? 'squat' : 'hinge';
+  if (mg === 'core') return 'core';
+  if (mg === 'arms') return /curl|bicep/i.test(name) ? 'arm_pull' : 'arm_push';
+  if (mg === 'full_body') return /carry|farmer|suitcase/i.test(name) ? 'carry' : /clean|snatch|jerk/i.test(name) ? 'olympic' : 'plyometric';
+  if (mg === 'cardio') return 'cardio';
+
+  return 'core'; // safe fallback
+}
 
 export function seedExercises() {
   return [
