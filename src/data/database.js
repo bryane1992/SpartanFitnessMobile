@@ -193,6 +193,19 @@ export async function initDatabase() {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS plan_rationales (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_id TEXT NOT NULL,
+      generation_number INTEGER DEFAULT 1,
+      archetype TEXT,
+      exercise_selections TEXT,
+      wod_selections TEXT,
+      rationales TEXT,
+      excluded_rationale TEXT,
+      user_feedback TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_session_rpe_exercise ON session_rpe(plan_exercise_id);
     CREATE INDEX IF NOT EXISTS idx_coach_messages_session ON coach_messages(session_id);
     CREATE INDEX IF NOT EXISTS idx_injuries_active ON injuries(is_active);
@@ -1244,6 +1257,33 @@ export async function getCoachMessageCountThisWeek() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Plan Rationales — stores Claude's reasoning for exercise selection
+// ═══════════════════════════════════════════════════════════════
+
+export async function savePlanRationales(planId, archetype, selections) {
+  const database = await getDatabase();
+  await database.runAsync(
+    `INSERT INTO plan_rationales (plan_id, archetype, exercise_selections, wod_selections, rationales, excluded_rationale)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      planId,
+      archetype || '',
+      JSON.stringify((selections.days || []).map(d => ({ title: d.title, compounds: d.compounds, accessories: d.accessories }))),
+      JSON.stringify(selections.wodPool || []),
+      JSON.stringify((selections.days || []).map(d => d.rationale || '')),
+      selections.excludedRationale || '',
+    ]
+  );
+}
+
+export async function getPlanRationales(planId) {
+  const database = await getDatabase();
+  return database.getFirstAsync(
+    'SELECT * FROM plan_rationales WHERE plan_id = ? ORDER BY created_at DESC LIMIT 1',
+    [planId]
+  );
+}
+
 // User Equipment
 // ═══════════════════════════════════════════════════════════════
 

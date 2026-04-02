@@ -7,7 +7,7 @@
 import Constants from 'expo-constants';
 import { calculatePhases, getPhaseForWeek, isDeloadWeek } from './phaseCalculator';
 import { calculateWeight, calculateSetsReps, calculateRunParams, getBodyCompParams, getMesocyclePhase, STIMULUS_TYPES } from './progressionRules';
-import { savePlanDay, savePlanBlock, savePlanExercise, getExercisesByFilter, getWodsFromDb, updateBlockRunType } from '../data/database';
+import { savePlanDay, savePlanBlock, savePlanExercise, getExercisesByFilter, getWodsFromDb, updateBlockRunType, savePlanRationales } from '../data/database';
 import { getRaceRequirements, getRaceExerciseRequirements, getRaceDistance } from './raceRequirements';
 import { detectArchetype, adjustArchetypeForEquipment } from './archetypes';
 import { buildExerciseMenu, buildWodMenu, formatExerciseMenu, formatWodMenu, buildFullExercisePool } from './menuBuilder';
@@ -422,8 +422,15 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
       }
 
-      // ── ARM FINISHER ──
-      const armIds = daySelection.arms || [];
+      // ── ARM FINISHER — guaranteed when day config requests it ──
+      let armIds = daySelection.arms || [];
+      // If day config wants arms but Claude didn't provide them, add defaults
+      if (armIds.length === 0 && dayConfig.arm_finisher) {
+        const armPullOptions = exerciseMenu.filter(e => e.pattern === 'arm_pull').map(e => e.id);
+        const armPushOptions = exerciseMenu.filter(e => e.pattern === 'arm_push').map(e => e.id);
+        if (armPullOptions.length > 0) armIds.push(armPullOptions[week % armPullOptions.length]);
+        if (armPushOptions.length > 0) armIds.push(armPushOptions[week % armPushOptions.length]);
+      }
       if (armIds.length > 0) {
         const armBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'ARM BLASTER', type: 'SUPERSETS', timeCap: '8 min', isAmrap: false, hasGps: false });
         for (let i = 0; i < armIds.length; i++) {
@@ -462,6 +469,13 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
     if (week % 2 === 0) recentlyUsed.clear();
     if (onStatus && week % 4 === 0) onStatus(`Week ${week}/${totalWeeks}...`);
+  }
+
+  // Save rationales for coach awareness and future regeneration
+  try {
+    await savePlanRationales(planId, archetype?.archetype, selections);
+  } catch (e) {
+    console.warn('[AI Plan] Failed to save rationales:', e.message);
   }
 
   console.log('[AI Plan] Plan generated successfully');

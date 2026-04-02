@@ -231,7 +231,19 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
     weight = Math.round(weight / 5) * 5;
   }
 
-  return `${Math.max(5, weight)} lb`;
+  // Equipment practical minimums — machines/cables can't go below their starting weight
+  const EQUIP_MINIMUMS = {
+    machine: 10,   // most machine stacks start at 10-20 lb
+    cable: 5,      // cable stacks start at 5-10 lb
+    barbell: 45,   // empty bar
+    dumbbell: 5,   // lightest DB
+    kettlebell: 15, // lightest common KB
+    bodyweight: 0,
+  };
+  const equipMin = EQUIP_MINIMUMS[exercise.category] || 5;
+  weight = Math.max(equipMin, weight);
+
+  return `${weight} lb`;
 }
 
 // Experience-aware minimum weights — prevents goblet squat at 15 lb for intermediate lifters

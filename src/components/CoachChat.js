@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendCoachMessage } from '../data/coachApi';
-import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog } from '../data/database';
+import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, getPlanRationales } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 
 const QUICK_ACTIONS = [
@@ -103,11 +103,22 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         }
       }
 
+      // Load plan rationales for coach awareness
+      let rationales = null;
+      try {
+        const planMeta = await AsyncStorage.getItem('planMeta');
+        if (planMeta) {
+          const { planId } = JSON.parse(planMeta);
+          if (planId) rationales = await getPlanRationales(planId);
+        }
+      } catch {}
+
       const context = {
         profile: parsedProfile,
         workout: workout,
         injuries: injuries,
         alternatives: alternatives,
+        rationales: rationales,
       };
 
       // Send to Claude (last 6 messages for context)

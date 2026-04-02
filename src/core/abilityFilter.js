@@ -106,8 +106,23 @@ export function getAbilityScore(exercise, userProfile) {
   // Hanging exercises require grip strength — exclude for heavy beginners
   if (/toes.?to.?bar|hanging|knee.?raise/i.test(name) && experience === 'beginner' && bodyWeight > 180) return -50;
 
-  // Inverted row is partial bodyweight — penalize for heavy beginners, prefer cable/machine row
+  // Inverted row is partial bodyweight — penalize for heavy beginners
   if (/inverted.?row/i.test(name) && experience === 'beginner' && bodyWeight > 200) return -30;
+
+  // Ab wheel / rollout — requires significant core strength, not for heavy beginners
+  if (/ab.?wheel|rollout/i.test(name) && experience === 'beginner') return -50;
+
+  // Pike push-ups — requires shoulder strength and mobility, not for beginners
+  if (/pike.?push/i.test(name) && experience === 'beginner') return -30;
+
+  // Wall balls — requires wall ball equipment and is conditioning, not compound
+  if (/wall.?ball/i.test(name) && experience === 'beginner' && bodyWeight > 200) return -30;
+
+  // Jump squats — high impact, dangerous for heavy beginners
+  if (/jump.?squat/i.test(name) && experience === 'beginner' && bodyWeight > 200) return -50;
+
+  // Thrusters — complex movement combining squat + press
+  if (/thruster/i.test(name) && experience === 'beginner') return -20;
 
   // Barbell compounds for beginners — penalize but don't hard exclude (goblet squat etc should win via scoring)
   if (/^bench_press$|^back_squat$|^front_squat$|^deadlift$|^overhead_press$/i.test(id) && !canBB) return -30;

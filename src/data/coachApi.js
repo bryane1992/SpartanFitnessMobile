@@ -190,5 +190,18 @@ function buildContext(context) {
     parts.push(`\nRECENT PRs: ${context.recentPrs.slice(0, 5).map(pr => `${pr.exercise_name}: ${pr.best_weight} lb`).join(', ')}`);
   }
 
+  // Plan rationales — why exercises were chosen
+  if (context.rationales) {
+    const r = context.rationales;
+    if (r.archetype) parts.push(`\nPLAN ARCHETYPE: ${r.archetype}`);
+    if (r.excluded_rationale) parts.push(`EXCLUDED: ${sanitizeInput(r.excluded_rationale, 200)}`);
+    try {
+      const dayRationales = JSON.parse(r.rationales || '[]');
+      if (dayRationales.length > 0) {
+        parts.push(`EXERCISE RATIONALES: ${dayRationales.filter(Boolean).slice(0, 3).join(' | ')}`);
+      }
+    } catch {}
+  }
+
   return parts.join('\n');
 }
