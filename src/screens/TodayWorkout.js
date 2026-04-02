@@ -298,8 +298,12 @@ export default function TodayWorkout({ navigation }) {
                     <WodTimer
                       type={block.type}
                       timeCap={block.time_cap}
-                      onComplete={(elapsed) => {
-                        console.log(`[WOD] Completed in ${elapsed}s`);
+                      onRoundsChange={(roundCount) => {
+                        saveAmrapRounds(block.id, `${roundCount}`);
+                      }}
+                      onComplete={({ elapsed, rounds: roundCount }) => {
+                        saveAmrapRounds(block.id, `${roundCount}`);
+                        console.log(`[WOD] Completed: ${roundCount} rounds in ${elapsed}s`);
                       }}
                     />
                   ) : null}
