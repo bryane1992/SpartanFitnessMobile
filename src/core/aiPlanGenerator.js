@@ -149,12 +149,9 @@ export async function generateAIPlan(userProfile, onStatus) {
 
   if (onStatus) onStatus('Building your workouts...');
 
-  // Step 7: Load full exercise pool for rotation variety (seed + ExerciseDB)
-  const fullPool = await buildFullExercisePool(userProfile, archetype);
-  console.log(`[AI Plan] Full rotation pool: ${fullPool.length} exercises`);
-
-  // Step 8: Build the plan deterministically using Claude's picks
-  const result = await buildPlanV5(claudeSelections, dayConfigs, userProfile, fullPool.length > 0 ? fullPool : exerciseMenu, wodMenu, targetDistance, shouldHaveRuns, archetype, onStatus);
+  // Step 7: Build the plan using Claude's picks + curated seed for rotation
+  // Seed only — no ExerciseDB at generation time (ExerciseDB is for GIF display)
+  const result = await buildPlanV5(claudeSelections, dayConfigs, userProfile, exerciseMenu, wodMenu, targetDistance, shouldHaveRuns, archetype, onStatus);
   return result;
 }
 

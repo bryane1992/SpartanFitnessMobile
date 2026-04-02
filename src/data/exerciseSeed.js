@@ -73,6 +73,15 @@ export function getMovementPattern(exercise) {
     power_clean: 'olympic', hang_clean: 'olympic', snatch: 'olympic',
     clean_and_jerk: 'olympic', kb_snatch: 'olympic', db_hang_clean: 'olympic',
     kb_clean_press: 'olympic', db_clean_press: 'olympic',
+    // Gap-fill exercises
+    glute_bridge: 'hinge', back_extension: 'hinge', good_morning: 'hinge',
+    straight_arm_pulldown: 'vertical_pull', close_grip_lat_pulldown: 'vertical_pull',
+    chest_supported_row: 'horizontal_pull', single_arm_cable_row: 'horizontal_pull',
+    db_farmer_walk: 'carry', plate_carry: 'carry',
+    preacher_curl: 'arm_pull', concentration_curl: 'arm_pull',
+    overhead_tricep_ext: 'arm_push', close_grip_bench: 'arm_push',
+    incline_machine_press: 'horizontal_push',
+    cable_woodchop: 'core', bird_dog: 'core',
   };
 
   if (PATTERN_MAP[id]) return PATTERN_MAP[id];
@@ -285,6 +294,42 @@ export function seedExercises() {
     { id: 'split_squat', name: 'Bulgarian Split Squat', emoji: '', muscle_group: 'legs', secondary_muscles: ['glutes', 'core'], category: 'dumbbell', style_tags: ['traditional', 'hybrid', 'crossfit'], exclusion_tags: [], equipment_required: ['dumbbell'], default_sets: 3, default_reps: '10 ea', default_weight: '30 lb', is_compound: true, difficulty: 'intermediate' },
     { id: 'step_ups', name: 'Step-Ups', emoji: '', muscle_group: 'legs', secondary_muscles: ['glutes'], category: 'bodyweight', style_tags: ['crossfit', 'bodyweight', 'hybrid', 'traditional'], exclusion_tags: [], equipment_required: [], default_sets: 3, default_reps: '10 ea', default_weight: 'BW', is_compound: true, difficulty: 'beginner' },
     { id: 'db_hang_clean', name: 'DB Hang Clean', emoji: '', muscle_group: 'full_body', secondary_muscles: ['back', 'shoulders'], category: 'dumbbell', style_tags: ['crossfit', 'hybrid'], exclusion_tags: [], equipment_required: ['dumbbell'], default_sets: 3, default_reps: '8', default_weight: '35 lb', is_compound: true, difficulty: 'intermediate' },
+
+    // ═══════════════════════════════════════════════════════════
+    // GAP-FILLING: added to ensure 5+ per pattern per difficulty
+    // ═══════════════════════════════════════════════════════════
+
+    // Hinge (beginner gap)
+    { id: 'glute_bridge', name: 'Glute Bridge', emoji: '', muscle_group: 'glutes', secondary_muscles: ['legs'], category: 'bodyweight', style_tags: ['bodyweight', 'hybrid', 'traditional'], exclusion_tags: [], equipment_required: [], default_sets: 3, default_reps: '15', default_weight: 'BW', is_compound: true, difficulty: 'beginner' },
+    { id: 'back_extension', name: 'Back Extension', emoji: '', muscle_group: 'back', secondary_muscles: ['glutes'], category: 'bodyweight', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: [], default_sets: 3, default_reps: '12', default_weight: 'BW', is_compound: false, difficulty: 'beginner' },
+    { id: 'good_morning', name: 'Good Morning', emoji: '', muscle_group: 'back', secondary_muscles: ['legs', 'glutes'], category: 'barbell', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: ['barbell'], default_sets: 3, default_reps: '10', default_weight: '45 lb', is_compound: true, difficulty: 'intermediate' },
+
+    // Vertical pull (beginner + intermediate gap)
+    { id: 'straight_arm_pulldown', name: 'Straight-Arm Pulldown', emoji: '', muscle_group: 'back', secondary_muscles: ['core'], category: 'cable', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: ['cable'], default_sets: 3, default_reps: '12', default_weight: '30 lb', is_compound: false, difficulty: 'beginner' },
+    { id: 'close_grip_lat_pulldown', name: 'Close-Grip Lat Pulldown', emoji: '', muscle_group: 'back', secondary_muscles: ['biceps'], category: 'machine', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: ['machine'], default_sets: 3, default_reps: '10', default_weight: '80 lb', is_compound: true, difficulty: 'beginner' },
+
+    // Horizontal pull (more machine variety)
+    { id: 'chest_supported_row', name: 'Chest-Supported Row', emoji: '', muscle_group: 'back', secondary_muscles: ['biceps'], category: 'dumbbell', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: ['dumbbell', 'bench'], default_sets: 3, default_reps: '10', default_weight: '30 lb', is_compound: true, difficulty: 'beginner' },
+    { id: 'single_arm_cable_row', name: 'Single-Arm Cable Row', emoji: '', muscle_group: 'back', secondary_muscles: ['biceps', 'core'], category: 'cable', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: ['cable'], default_sets: 3, default_reps: '10 ea', default_weight: '30 lb', is_compound: true, difficulty: 'beginner' },
+
+    // Carry (beginner gap)
+    { id: 'db_farmer_walk', name: 'DB Farmer Walk', emoji: '', muscle_group: 'full_body', secondary_muscles: ['core', 'grip'], category: 'dumbbell', style_tags: ['traditional', 'hybrid', 'crossfit'], exclusion_tags: [], equipment_required: ['dumbbell'], default_sets: 3, default_reps: '40 yd', default_weight: '30 lb ea', is_compound: true, difficulty: 'beginner' },
+    { id: 'plate_carry', name: 'Plate Carry', emoji: '', muscle_group: 'full_body', secondary_muscles: ['core', 'shoulders'], category: 'bodyweight', style_tags: ['crossfit', 'hybrid'], exclusion_tags: [], equipment_required: [], default_sets: 3, default_reps: '50 yd', default_weight: '25 lb', is_compound: true, difficulty: 'beginner' },
+
+    // Arm pull (intermediate gap)
+    { id: 'preacher_curl', name: 'Preacher Curl', emoji: '', muscle_group: 'arms', secondary_muscles: [], category: 'dumbbell', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: ['dumbbell', 'bench'], default_sets: 3, default_reps: '10', default_weight: '20 lb', is_compound: false, difficulty: 'intermediate' },
+    { id: 'concentration_curl', name: 'Concentration Curl', emoji: '', muscle_group: 'arms', secondary_muscles: [], category: 'dumbbell', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: ['dumbbell'], default_sets: 3, default_reps: '10 ea', default_weight: '15 lb', is_compound: false, difficulty: 'intermediate' },
+
+    // Arm push (intermediate gap)
+    { id: 'overhead_tricep_ext', name: 'Overhead Tricep Extension', emoji: '', muscle_group: 'arms', secondary_muscles: [], category: 'dumbbell', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: ['dumbbell'], default_sets: 3, default_reps: '10', default_weight: '20 lb', is_compound: false, difficulty: 'intermediate' },
+    { id: 'close_grip_bench', name: 'Close-Grip Bench Press', emoji: '', muscle_group: 'arms', secondary_muscles: ['chest'], category: 'barbell', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: ['barbell', 'bench'], default_sets: 3, default_reps: '8', default_weight: '75 lb', is_compound: true, difficulty: 'intermediate' },
+
+    // Horizontal push (more machine variety for beginners)
+    { id: 'incline_machine_press', name: 'Incline Machine Press', emoji: '', muscle_group: 'chest', secondary_muscles: ['shoulders', 'triceps'], category: 'machine', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: ['machine'], default_sets: 3, default_reps: '10', default_weight: '60 lb', is_compound: true, difficulty: 'beginner' },
+
+    // Core (intermediate gap)
+    { id: 'cable_woodchop', name: 'Cable Woodchop', emoji: '', muscle_group: 'core', secondary_muscles: ['shoulders'], category: 'cable', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: ['cable'], default_sets: 3, default_reps: '10 ea', default_weight: '25 lb', is_compound: false, difficulty: 'intermediate' },
+    { id: 'bird_dog', name: 'Bird Dog', emoji: '', muscle_group: 'core', secondary_muscles: ['back', 'glutes'], category: 'bodyweight', style_tags: ['bodyweight', 'hybrid', 'traditional'], exclusion_tags: [], equipment_required: [], default_sets: 3, default_reps: '10 ea', default_weight: 'BW', is_compound: false, difficulty: 'beginner' },
   ];
 }
 
