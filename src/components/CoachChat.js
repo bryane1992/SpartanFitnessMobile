@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendCoachMessage } from '../data/coachApi';
-import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, getPlanRationales } from '../data/database';
+import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, getPlanRationales, getWodsFromDb, swapWodBlock } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 import { buildExerciseMenu } from '../core/menuBuilder';
 import { detectArchetype, adjustArchetypeForEquipment } from '../core/archetypes';
@@ -127,12 +127,22 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         }
       } catch {}
 
+      // Load available WODs for swap suggestions
+      let availableWods = [];
+      try {
+        const { buildWodMenu } = require('../core/menuBuilder');
+        let arch = detectArchetype(parsedProfile || {});
+        arch = adjustArchetypeForEquipment(arch, parsedProfile?.equipment);
+        availableWods = buildWodMenu(parsedProfile || {}, arch);
+      } catch {}
+
       const context = {
         profile: parsedProfile,
         workout: workout,
         injuries: injuries,
         alternatives: alternatives,
         rationales: rationales,
+        availableWods: availableWods,
       };
 
       // Send to Claude (last 6 messages for context)
@@ -176,7 +186,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
     for (let action of actions) {
       // Normalize action format — Claude sometimes nests as { "swap": {...} } instead of { "type": "swap", ... }
       if (!action.type) {
-        const key = Object.keys(action).find(k => ['swap', 'adjustWeight', 'adjustReps', 'flagInjury', 'removeExercise', 'addNote'].includes(k));
+        const key = Object.keys(action).find(k => ['swap', 'swapWod', 'adjustWeight', 'adjustReps', 'flagInjury', 'removeExercise', 'addNote'].includes(k));
         if (key) {
           action = { type: key, ...action[key] };
         }
@@ -220,6 +230,16 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
             if (action.planExerciseId && action.note) {
               await updateExerciseLog(action.planExerciseId, null, null, action.note);
               await store.loadTodayWorkout();
+            }
+            break;
+          case 'swapWod':
+            if (action.planBlockId && action.newWodId) {
+              const blockId = parseInt(action.planBlockId) || action.planBlockId;
+              console.log(`[AI Coach] Swapping WOD block ${blockId} → ${action.newWodId}`);
+              await swapWodBlock(blockId, action.newWodId);
+              await store.loadTodayWorkout();
+            } else {
+              console.warn('[AI Coach] WOD swap missing IDs:', action);
             }
             break;
           case 'flagInjury':

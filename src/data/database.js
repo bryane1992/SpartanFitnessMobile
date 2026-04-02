@@ -839,6 +839,65 @@ export async function upgradeExercisesForNewEquipment(addedEquipment, exerciseSw
   return totalSwaps;
 }
 
+// Replace a WOD block's exercises with a different WOD
+export async function swapWodBlock(planBlockId, newWodId) {
+  const database = await getDatabase();
+
+  // Get the new WOD data
+  const wod = await database.getFirstAsync('SELECT * FROM wods WHERE id = ?', [newWodId]);
+  if (!wod) return false;
+
+  // Delete existing exercises in this block
+  await database.runAsync('DELETE FROM plan_exercises WHERE plan_block_id = ?', [planBlockId]);
+
+  // Parse movements and insert new exercises
+  const movements = JSON.parse(wod.movements || '[]');
+  for (let i = 0; i < movements.length; i++) {
+    const movement = movements[i];
+    // Simple parse: "15 Pull-Ups" → reps=15, name=Pull-Ups
+    const repMatch = movement.match(/^(\d+)\s+(.+)$/);
+    const name = repMatch ? repMatch[2].replace(/\s*\([^)]+\)/, '').trim() : movement;
+    const reps = repMatch ? repMatch[1] : '10';
+
+    // Map movement name to exercise ID (basic mapping)
+    const exerciseId = mapWodMovementToId(name);
+
+    await database.runAsync(
+      `INSERT INTO plan_exercises (plan_block_id, exercise_id, sort_order, sets, reps, weight, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [planBlockId, exerciseId, i, `1x${reps}`, reps, wod.rx_weight || 'BW',
+       i === 0 ? `${wod.name} — ${wod.type}${wod.time_cap ? ` (${wod.time_cap})` : ''}: ${wod.description || ''}` : null]
+    );
+  }
+
+  // Update block name
+  await database.runAsync('UPDATE plan_blocks SET name = ? WHERE id = ?', [`WOD: ${wod.name}`, planBlockId]);
+
+  console.log(`[WOD Swap] Block ${planBlockId} → ${wod.name} (${movements.length} movements)`);
+  return true;
+}
+
+function mapWodMovementToId(name) {
+  const n = name.toLowerCase();
+  if (n.includes('pull up') || n.includes('pullup')) return 'pull_ups';
+  if (n.includes('push up') || n.includes('pushup')) return 'push_ups';
+  if (n.includes('air squat') || n.includes('squat')) return 'air_squats';
+  if (n.includes('burpee')) return 'burpees';
+  if (n.includes('sit up') || n.includes('situp')) return 'sit_ups';
+  if (n.includes('kb swing') || n.includes('kettlebell')) return 'kb_swings';
+  if (n.includes('goblet')) return 'db_goblet_squat';
+  if (n.includes('mountain')) return 'mountain_climbers';
+  if (n.includes('step')) return 'step_ups';
+  if (n.includes('lunge')) return 'db_walking_lunges';
+  if (n.includes('deadlift')) return 'deadlift';
+  if (n.includes('thruster')) return 'barbell_thrusters';
+  if (n.includes('clean')) return 'power_clean';
+  if (n.includes('press')) return 'push_ups';
+  if (n.includes('row')) return 'easy_run';
+  if (n.includes('run')) return 'easy_run';
+  return 'burpees';
+}
+
 export async function saveAmrapRounds(planBlockId, rounds) {
   const database = await getDatabase();
   await database.runAsync(

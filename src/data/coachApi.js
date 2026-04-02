@@ -21,8 +21,9 @@ INJURY ORDER: 1)reduce reps 2)lighten load 40-60% 3)limit ROM 4)slow tempo 5)cha
 
 RESPONSE: Plain text for questions/advice. JSON ONLY when performing actions:
 {"message":"text","actions":[...],"options":[...]}
-Actions: swap(planExerciseId,newExerciseId,reason), adjustWeight(planExerciseId,newWeight,reason), adjustReps(planExerciseId,newSets,newReps,reason), flagInjury(bodyPart,severity), removeExercise(planExerciseId,reason), addNote(planExerciseId,note)
-Options: ALWAYS present 2-3 options for swaps, removals, and injuries so the user can choose. Format: {"label":"Exercise Name","description":"why this is a good swap","recommended":bool,"action":{"type":"swap","planExerciseId":"id","newExerciseId":"id","reason":"why"}}. Use SWAP OPTIONS from context for valid IDs.`;
+Actions: swap(planExerciseId,newExerciseId,reason), adjustWeight(planExerciseId,newWeight,reason), adjustReps(planExerciseId,newSets,newReps,reason), flagInjury(bodyPart,severity), removeExercise(planExerciseId,reason), addNote(planExerciseId,note), swapWod(planBlockId,newWodId,reason)
+Options: ALWAYS present 2-3 options for swaps, removals, injuries, AND WOD changes so the user can choose. Format: {"label":"WOD Name","description":"why this WOD is better","recommended":bool,"action":{"type":"swapWod","planBlockId":"id","newWodId":"wod_id","reason":"why"}}
+When user wants a different WOD, suggest 2-3 alternatives from the AVAILABLE WODS list.`;
 
 // Sanitize user input — cap length, strip weird chars
 function sanitizeInput(text, maxLen = 500) {
@@ -166,10 +167,12 @@ function buildContext(context) {
       for (const block of w.blocks) {
         // Skip warmup blocks to save tokens
         if (block.name?.toUpperCase().includes('WARM')) continue;
+        const isWodBlock = block.is_amrap || /wod|circuit|amrap|emom/i.test(block.name || '');
         const exercises = block.exercises || [];
         const todoExercises = exercises.filter(ex => !ex.is_completed);
         const doneCount = exercises.length - todoExercises.length;
         if (doneCount > 0) parts.push(`${block.name}: ${doneCount} done`);
+        if (isWodBlock) parts.push(`  [WOD BLOCK id:${block.id}] ${block.name} ${block.time_cap || ''} — can be swapped with swapWod action`);
         for (const ex of todoExercises) {
           let line = `  ${ex.name} ${ex.sets} @ ${ex.weight || 'BW'} (id:${ex.id})`;
           if (context.alternatives && context.alternatives[ex.id]) {
@@ -188,6 +191,14 @@ function buildContext(context) {
 
   if (context.recentPrs && context.recentPrs.length > 0) {
     parts.push(`\nRECENT PRs: ${context.recentPrs.slice(0, 5).map(pr => `${pr.exercise_name}: ${pr.best_weight} lb`).join(', ')}`);
+  }
+
+  // Available WODs for swapping
+  if (context.availableWods && context.availableWods.length > 0) {
+    parts.push(`\nAVAILABLE WODS (for WOD swaps):`);
+    for (const w of context.availableWods.slice(0, 10)) {
+      parts.push(`  ${w.id}: ${w.name} (${w.type}, ${w.movements?.join(', ') || ''})`);
+    }
   }
 
   // Plan rationales — why exercises were chosen
