@@ -221,11 +221,8 @@ export async function initDatabase() {
   // without duplicating existing ones
   await seedExerciseData(database);
 
-  // Seed WODs if empty
-  const wodCount = await database.getFirstAsync('SELECT COUNT(*) as count FROM wods');
-  if (wodCount.count === 0) {
-    await seedWodData(database);
-  }
+  // Seed WODs — INSERT OR IGNORE ensures new WODs are added without duplicating
+  await seedWodData(database);
 
   // Schema migration: add ExerciseDB columns (idempotent)
   const newColumns = [
