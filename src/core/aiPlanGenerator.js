@@ -442,8 +442,16 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
       }
 
-      // ── CORE ──
-      const coreIds = daySelection.core || [];
+      // ── CORE — guaranteed when day config requests it ──
+      let coreIds = daySelection.core || [];
+      if (coreIds.length === 0 && dayConfig.core_block) {
+        const coreOptions = exerciseMenu.filter(e => e.pattern === 'core').map(e => e.id);
+        // Pick 2 core exercises, rotating by week
+        if (coreOptions.length > 0) {
+          coreIds.push(coreOptions[week % coreOptions.length]);
+          if (coreOptions.length > 1) coreIds.push(coreOptions[(week + 1) % coreOptions.length]);
+        }
+      }
       if (coreIds.length > 0) {
         const coreBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'CORE', type: 'CIRCUIT', timeCap: '8 min', isAmrap: false, hasGps: false });
         for (let i = 0; i < coreIds.length; i++) {

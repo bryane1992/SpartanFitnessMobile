@@ -236,8 +236,8 @@ export function buildDayBlocks(dayConfig, phase, sessionMinutes = 60) {
 // ═══════════════════════════════════════════════════════════════
 
 export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanGoal, archetype) {
-  const wantChest = goals.some(g => /chest|muscle|size/i.test(g));
-  const wantArms = goals.some(g => /arm|muscle|size/i.test(g));
+  const wantChest = goals.some(g => /chest|muscle|size|build_muscle/i.test(g));
+  const wantArms = goals.some(g => /arm|muscle|size|build_muscle|get_stronger/i.test(g));
   const splitModel = archetype?.splitModel || 'full_body_3x';
 
   // Full Body 3-4x — for beginners, general fitness, fat loss
