@@ -222,7 +222,7 @@ export default function TodayWorkout({ navigation }) {
               <TouchableOpacity style={styles.blockHeader} onPress={() => toggleBlock(blockIndex)}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.blockName}>{String(block.name || '')}</Text>
-                  <Text style={styles.blockType}>{isAmrap && block.time_cap ? `${block.time_cap}` : block.type || ''}</Text>
+                  <Text style={styles.blockType}>{isAmrap ? `AMRAP${block.time_cap ? ` ${block.time_cap}` : ''}` : block.type || ''}</Text>
                 </View>
                 <View style={styles.blockRight}>
                   {hasGps ? (
@@ -296,7 +296,7 @@ export default function TodayWorkout({ navigation }) {
                   {/* WOD Timer */}
                   {isAmrap ? (
                     <WodTimer
-                      type={/amrap/i.test(block.name || '') ? 'AMRAP' : /emom/i.test(block.name || '') ? 'EMOM' : (block.type || 'FOR TIME')}
+                      type={/emom/i.test(block.name || '') || /emom/i.test(block.type || '') ? 'EMOM' : isAmrap ? 'AMRAP' : (block.type || 'FOR TIME')}
                       timeCap={block.time_cap}
                       onRoundsChange={(roundCount) => {
                         saveAmrapRounds(block.id, `${roundCount}`);
