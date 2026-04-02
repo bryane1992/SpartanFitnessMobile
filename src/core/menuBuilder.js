@@ -11,7 +11,14 @@ import { canDoBodyweightPull, canDoBarbell } from './abilityFilter';
 // ═══════════════════════════════════════════════════════════════
 
 export function buildExerciseMenu(userProfile, archetype) {
-  const exercises = seedExercises(); // seed only — no ExerciseDB
+  // Use seed only — no ExerciseDB. Wrap in try to handle any property access issues.
+  let exercises;
+  try {
+    exercises = seedExercises();
+  } catch (e) {
+    console.error('[MenuBuilder] Failed to load seed exercises:', e.message);
+    return [];
+  }
   const userEquip = new Set((userProfile.equipment || []).map(e => e.toLowerCase()));
   const notes = (userProfile.additionalNotes || '').toLowerCase();
   const cantRun = /can'?t run|no running|don'?t run|unable to run/i.test(notes);
@@ -36,6 +43,7 @@ export function buildExerciseMenu(userProfile, archetype) {
   availableEquip.add('bodyweight');
 
   const filtered = exercises.filter(ex => {
+    try {
     // Equipment check
     const required = ex.equipment_required || [];
     if (required.length > 0 && !required.every(r => availableEquip.has(r))) return false;
@@ -72,6 +80,10 @@ export function buildExerciseMenu(userProfile, archetype) {
     if (pattern === 'warmup') return false;
 
     return true;
+    } catch (filterErr) {
+      console.error(`[MenuBuilder] Error filtering exercise ${ex.id}:`, filterErr.message);
+      return false;
+    }
   });
 
   // Format for Claude prompt — compact, one line per exercise
@@ -98,7 +110,13 @@ export function formatExerciseMenu(menu) {
 // ═══════════════════════════════════════════════════════════════
 
 export function buildWodMenu(userProfile, archetype) {
-  const wods = getWods();
+  let wods;
+  try {
+    wods = getWods();
+  } catch (e) {
+    console.error('[MenuBuilder] Failed to load WODs:', e.message);
+    return [];
+  }
   const notes = (userProfile.additionalNotes || '').toLowerCase();
   const cantRun = /can'?t run|no running|don'?t run|unable to run/i.test(notes);
   const canPull = canDoBodyweightPull(userProfile);
