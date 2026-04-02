@@ -138,9 +138,8 @@ export default function Settings({ navigation }) {
   const saveEquipmentChanges = async () => {
     if (!profile) return;
     const oldEquip = new Set(profile.equipment || []);
-    const newEquip = new Set(editEquipment);
     const added = editEquipment.filter(e => !oldEquip.has(e));
-    const removed = [...oldEquip].filter(e => !newEquip.has(e));
+    const removed = [...oldEquip].filter(e => !new Set(editEquipment).has(e));
 
     // Save updated profile
     const updated = { ...profile, equipment: editEquipment };
@@ -154,91 +153,89 @@ export default function Settings({ navigation }) {
     if (added.length > 0) changes.push(`Added: ${added.join(', ')}`);
     if (removed.length > 0) changes.push(`Removed: ${removed.join(', ')}`);
 
-    // Ask Claude to figure out the best swaps for the new equipment
-    // Claude sees: current exercises in future weeks + new equipment + user profile
-    // This is smarter than hardcoded swap maps — handles rowers, specialty equipment, etc.
+    // Build swap map from newly available exercises using movement pattern matching
+    // For each exercise in the current plan, check if a better version is now available
+    const { seedExercises, getMovementPattern } = require('../data/exerciseSeed');
+    const allExercises = seedExercises();
+
+    // Equipment mapping for filter
+    const equipMap = {
+      dumbbells: ['dumbbell'], barbell: ['barbell', 'bench'], squat_rack: ['rack', 'barbell'],
+      bench: ['bench'], pull_up_bar: ['pull_up_bar'], kettlebell: ['kettlebell'],
+      cables: ['cable'], machines: ['machine'], bands: ['band'],
+    };
+    const newAvailEquip = new Set();
+    editEquipment.forEach(eq => (equipMap[eq] || []).forEach(m => newAvailEquip.add(m)));
+    newAvailEquip.add('bodyweight');
+
+    const oldAvailEquip = new Set();
+    [...oldEquip].forEach(eq => (equipMap[eq] || []).forEach(m => oldAvailEquip.add(m)));
+    oldAvailEquip.add('bodyweight');
+
+    // Find exercises that are newly available (require equipment the user just added)
+    const newlyAvailable = allExercises.filter(ex => {
+      const req = ex.equipment_required || [];
+      if (req.length === 0) return false; // bodyweight — already available
+      const availableNow = req.every(r => newAvailEquip.has(r));
+      const availableBefore = req.every(r => oldAvailEquip.has(r));
+      return availableNow && !availableBefore; // newly unlocked
+    });
+
+    if (newlyAvailable.length === 0) {
+      Alert.alert('Equipment Updated', `${changes.join('\n')}\n\nNo new exercises unlocked. Equipment saved for future plans.`);
+      return;
+    }
+
+    // Build swap map: for each newly available exercise, find what it could replace
+    // Match by movement pattern — pull-ups replace lat pulldowns, barbell squat replaces goblet squat
+    const UPGRADE_PRIORITY = { barbell: 4, kettlebell: 3, dumbbell: 2, machine: 2, cable: 2, bodyweight: 1 };
+    const swapMap = {};
+    const swapDescriptions = [];
+
+    for (const newEx of newlyAvailable) {
+      const pattern = getMovementPattern(newEx);
+      if (!pattern || pattern === 'warmup' || pattern === 'cardio') continue;
+
+      // Find current plan exercises with the same pattern but lower equipment priority
+      const candidates = allExercises.filter(old => {
+        if (old.id === newEx.id) return false;
+        if (getMovementPattern(old) !== pattern) return false;
+        const oldPri = UPGRADE_PRIORITY[old.category] || 1;
+        const newPri = UPGRADE_PRIORITY[newEx.category] || 1;
+        return newPri > oldPri; // new exercise uses better equipment
+      });
+
+      for (const old of candidates) {
+        if (!swapMap[old.id]) {
+          swapMap[old.id] = newEx.id;
+          swapDescriptions.push(`${old.name} → ${newEx.name}`);
+          if (swapDescriptions.length >= 8) break;
+        }
+      }
+      if (swapDescriptions.length >= 8) break;
+    }
+
+    if (Object.keys(swapMap).length === 0) {
+      Alert.alert('Equipment Updated', `${changes.join('\n')}\n\n${newlyAvailable.length} new exercises unlocked! They'll appear in your next plan.`);
+      return;
+    }
+
     Alert.alert(
-      'Equipment Updated',
-      `${changes.join('\n')}\n\nWould you like to update future workouts to use your ${added.length > 0 ? 'new' : 'updated'} equipment? Your completed workouts stay as-is.`,
+      'Upgrade Exercises?',
+      `${changes.join('\n')}\n\n${newlyAvailable.length} new exercises unlocked. Suggested swaps:\n\n${swapDescriptions.join('\n')}\n\nApply to future workouts?`,
       [
         { text: 'Save for Next Plan', style: 'cancel' },
         {
-          text: 'Update Future Workouts',
+          text: 'Apply Swaps',
           onPress: async () => {
-            setIsRegenerating(true);
             try {
-              // Get current plan exercises for future weeks
-              const database = await (await import('../data/database')).getDatabase();
-              const today = new Date().toISOString().split('T')[0];
-              const futureExercises = await database.getAllAsync(
-                `SELECT DISTINCT pe.exercise_id, e.name, e.category
-                 FROM plan_exercises pe
-                 JOIN plan_blocks pb ON pb.id = pe.plan_block_id
-                 JOIN plan_days pd ON pd.id = pb.plan_day_id
-                 JOIN exercises e ON e.id = pe.exercise_id
-                 WHERE pd.date > ? AND pe.is_completed = 0
-                 ORDER BY e.name`,
-                [today]
-              );
-
-              // Build the exercise menu with new equipment included
-              const { buildExerciseMenu } = require('../core/menuBuilder');
-              const { detectArchetype, adjustArchetypeForEquipment } = require('../core/archetypes');
-              let arch = detectArchetype(updated);
-              arch = adjustArchetypeForEquipment(arch, updated.equipment);
-              const newMenu = buildExerciseMenu(updated, arch);
-              const newMenuIds = new Set(newMenu.map(e => e.id));
-
-              // Find exercises now available that weren't before
-              const oldMenu = buildExerciseMenu({ ...updated, equipment: [...oldEquip] }, arch);
-              const oldMenuIds = new Set(oldMenu.map(e => e.id));
-              const newlyAvailable = newMenu.filter(e => !oldMenuIds.has(e.id));
-
-              if (newlyAvailable.length === 0 && removed.length === 0) {
-                Alert.alert('No Changes Needed', 'Your current exercises are already optimal for this equipment.');
-                setIsRegenerating(false);
-                return;
-              }
-
-              // Use Claude to decide swaps
-              const { sendCoachMessage } = require('../data/coachApi');
-              const currentExList = futureExercises.map(e => `${e.exercise_id}: ${e.name} (${e.category})`).join('\n');
-              const newExList = newlyAvailable.map(e => `${e.id}: ${e.name} (${e.equipment})`).join('\n');
-
-              const swapPrompt = `The user just added new equipment: ${added.join(', ')}. Here are their current future exercises and the new exercises now available. Suggest specific swaps as JSON.
-
-CURRENT EXERCISES IN PLAN:
-${currentExList}
-
-NEW EXERCISES NOW AVAILABLE:
-${newExList}
-
-Return JSON: {"swaps": [{"old": "exercise_id", "new": "exercise_id", "reason": "why"}]}
-Only suggest swaps where the new exercise is a clear upgrade for the same movement pattern. Max 5 swaps.`;
-
-              const response = await sendCoachMessage(null, [{ role: 'user', content: swapPrompt }], { profile: updated });
-              let swaps = [];
-              try {
-                const parsed = JSON.parse(response.message.match(/\{[\s\S]*\}/)?.[0] || '{}');
-                swaps = parsed.swaps || [];
-              } catch {}
-
-              if (swaps.length > 0) {
-                const swapMap = {};
-                for (const s of swaps) {
-                  if (s.old && s.new && newMenuIds.has(s.new)) swapMap[s.old] = s.new;
-                }
-                const total = await upgradeExercisesForNewEquipment(added, swapMap);
-                Alert.alert('Upgraded', `${total} exercises swapped in future workouts:\n${swaps.map(s => `${s.reason}`).join('\n')}`);
-                await useWorkoutStore.getState().loadTodayWorkout();
-              } else {
-                Alert.alert('Equipment Saved', 'No direct swaps found. New exercises will appear when you regenerate your plan.');
-              }
+              const total = await upgradeExercisesForNewEquipment(added, swapMap);
+              Alert.alert('Done', `${total} exercises upgraded across future workouts.`);
+              await useWorkoutStore.getState().loadTodayWorkout();
             } catch (e) {
-              console.error('Equipment upgrade error:', e);
-              Alert.alert('Equipment Saved', 'Saved for your next plan generation.');
+              console.error('Upgrade error:', e);
+              Alert.alert('Error', 'Swap failed. New exercises saved for next plan.');
             }
-            setIsRegenerating(false);
           },
         },
       ]
