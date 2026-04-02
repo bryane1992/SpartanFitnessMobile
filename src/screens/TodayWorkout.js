@@ -13,6 +13,7 @@ import useWorkoutStore from '../store/useWorkoutStore';
 import ExerciseSwapModal from './ExerciseSwapModal';
 import ExerciseDetailModal from '../components/ExerciseDetailModal';
 import CoachChat from '../components/CoachChat';
+import WodTimer from '../components/WodTimer';
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -291,6 +292,17 @@ export default function TodayWorkout({ navigation }) {
                       }}
                     />
                   ))}
+
+                  {/* WOD Timer */}
+                  {isAmrap ? (
+                    <WodTimer
+                      type={block.type}
+                      timeCap={block.time_cap}
+                      onComplete={(elapsed) => {
+                        console.log(`[WOD] Completed in ${elapsed}s`);
+                      }}
+                    />
+                  ) : null}
 
                   {/* AMRAP rounds input */}
                   {isAmrap ? (

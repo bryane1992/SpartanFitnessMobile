@@ -868,8 +868,13 @@ export async function swapWodBlock(planBlockId, newWodId) {
     );
   }
 
-  // Update block name
-  await database.runAsync('UPDATE plan_blocks SET name = ? WHERE id = ?', [`WOD: ${wod.name}`, planBlockId]);
+  // Update block name, type, and time cap to match new WOD
+  const wodType = wod.type || 'CIRCUIT';
+  const isAmrap = /amrap|emom|for time|for reps/i.test(wodType) ? 1 : 0;
+  await database.runAsync(
+    'UPDATE plan_blocks SET name = ?, type = ?, is_amrap = ?, time_cap = ? WHERE id = ?',
+    [`WOD: ${wod.name}`, wodType, isAmrap, wod.time_cap || wod.estimated_time || '10 min', planBlockId]
+  );
 
   console.log(`[WOD Swap] Block ${planBlockId} → ${wod.name} (${movements.length} movements)`);
   return true;
