@@ -36,24 +36,19 @@ export function getWodMetadata(wod) {
   const roundMatch = scheme.match(/(\d+)\s*round/);
   if (roundMatch) schemeMult = parseInt(roundMatch[1]);
   else if (/^\d+-/.test(scheme)) schemeMult = scheme.split('-').length;
-  const totalEstimatedReps = totalReps * schemeMult;
+  let totalEstimatedReps = totalReps * schemeMult;
 
   // Tier: beginner (1), intermediate (2), advanced (3)
   let tier = 'intermediate';
-  const diffScore = { beginner: 1, intermediate: 2, advanced: 3, elite: 4 }[diff] || 2;
+  let diffScore = { beginner: 1, intermediate: 2, advanced: 3, elite: 4 }[diff] || 2;
 
-  if (diffScore <= 1 && totalEstimatedReps <= 100 && !containsOlympic && !containsBarbell && estTime <= 10) {
-    tier = 'beginner';
-  } else if (diffScore >= 3 || totalEstimatedReps > 200 || containsOlympic || estTime > 20) {
-    tier = 'advanced';
-  }
-  // Ascending EMOM / "death by" — these are deceptively hard (1+2+3+...+15 = 120+ reps)
+  // Ascending EMOM / "death by" — deceptively hard (1+2+3+...+15 = 120+ reps)
   if (/ascending|death by|until failure/i.test(scheme + ' ' + (wod.description || ''))) {
-    difficulty = Math.max(difficulty, 3); // at least intermediate
-    totalEstimatedReps = Math.max(totalEstimatedReps, 120); // ascending to ~15 rounds
+    diffScore = Math.max(diffScore, 3);
+    totalEstimatedReps = Math.max(totalEstimatedReps, 120);
   }
 
-  // Recalculate tier after all adjustments
+  // Assign tier based on final difficulty score and volume
   if (diffScore <= 1 && totalEstimatedReps <= 100 && !containsOlympic && !containsBarbell && estTime <= 10) {
     tier = 'beginner';
   } else if (diffScore >= 3 || totalEstimatedReps > 200 || containsOlympic || estTime > 20) {
