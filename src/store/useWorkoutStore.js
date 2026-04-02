@@ -240,11 +240,13 @@ const useWorkoutStore = create((set, get) => ({
         // Try AI-powered generation first
         if (onStatus) onStatus('Connecting to AI coach...');
         result = await generateAIPlan(userProfile, onStatus);
+        console.log('[Plan] AI generation succeeded:', result.planName);
       } catch (aiError) {
         // Fall back to algorithmic generation
-        console.warn('[Plan] AI generation failed, falling back to algorithmic:', aiError.message);
+        console.error('[Plan] AI generation FAILED:', aiError.message, aiError.stack?.slice(0, 200));
         if (onStatus) onStatus('Building plan with training engine...');
         result = await generatePlan(userProfile);
+        console.warn('[Plan] Used FALLBACK algorithmic generator — this does NOT have v5 improvements');
       }
 
       // Save plan metadata
