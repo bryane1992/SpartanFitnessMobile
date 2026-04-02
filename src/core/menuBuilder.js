@@ -1,10 +1,12 @@
 // v5 Menu Builder
 // Filters exercise and WOD pools BEFORE sending to Claude
 // Claude picks from the menu — can't hallucinate or pick inappropriate exercises
+// Uses seed exercises for Claude's prompt (compact) + ExerciseDB for pool expansion
 
 import { seedExercises, getMovementPattern } from '../data/exerciseSeed';
 import { getWods, getWodMetadata } from '../data/wodSeed';
 import { canDoBodyweightPull, canDoBarbell } from './abilityFilter';
+import { getExercisesByFilter } from '../data/database';
 
 // ═══════════════════════════════════════════════════════════════
 // Exercise Menu — filtered by equipment, ability, difficulty
@@ -176,4 +178,49 @@ export function formatWodMenu(menu) {
     lines.push(`${wod.id}|${wod.name}|${wod.type}|${wod.tier}|~${wod.totalReps} reps|${wod.movements}`);
   }
   return lines.join('\n');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Full exercise pool for rotation — seed + quality ExerciseDB
+// Used by expandPool() to add variety beyond Claude's picks
+// ═══════════════════════════════════════════════════════════════
+
+export async function buildFullExercisePool(userProfile, archetype) {
+  try {
+    // Get ALL exercises from DB (seed + ExerciseDB) filtered by equipment
+    const allExercises = await getExercisesByFilter({
+      style: null,
+      exclusions: userProfile.exclusions || [],
+      equipment: userProfile.equipment || [],
+      difficulty: null,
+    });
+
+    // Filter out junk ExerciseDB exercises
+    const quality = allExercises.filter(ex => {
+      const name = ex.name || '';
+      // Hard exclude obscure exercises
+      if (/\(female\)|\(male\)|v\.\s*\d|sitted/i.test(name)) return false;
+      if (name.length > 40 || name.split(' ').length > 5) return false;
+      if (/reverse grip|guillotine|cambered|lever |jefferson|zercher|frankenstein/i.test(name)) return false;
+
+      // For beginners, only allow beginner/intermediate difficulty
+      if (userProfile.experience === 'beginner') {
+        if (ex.difficulty === 'advanced' || ex.difficulty === 'elite') return false;
+      }
+
+      return true;
+    });
+
+    // Add movement pattern to each
+    return quality.map(ex => ({
+      id: ex.id,
+      name: ex.name,
+      pattern: getMovementPattern(ex),
+      equipment: ex.category,
+      source: ex.source || 'seed',
+    }));
+  } catch (e) {
+    console.error('[MenuBuilder] Failed to build full pool:', e.message);
+    return [];
+  }
 }

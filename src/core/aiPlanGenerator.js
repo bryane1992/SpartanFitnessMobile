@@ -10,7 +10,7 @@ import { calculateWeight, calculateSetsReps, calculateRunParams, getBodyCompPara
 import { savePlanDay, savePlanBlock, savePlanExercise, getExercisesByFilter, getWodsFromDb, updateBlockRunType } from '../data/database';
 import { getRaceRequirements, getRaceExerciseRequirements, getRaceDistance } from './raceRequirements';
 import { detectArchetype, adjustArchetypeForEquipment } from './archetypes';
-import { buildExerciseMenu, buildWodMenu, formatExerciseMenu, formatWodMenu } from './menuBuilder';
+import { buildExerciseMenu, buildWodMenu, formatExerciseMenu, formatWodMenu, buildFullExercisePool } from './menuBuilder';
 import { seedExercises, getMovementPattern } from '../data/exerciseSeed';
 import { buildDayBlocks, getDefaultDayConfigs } from './dayTemplates';
 
@@ -149,8 +149,12 @@ export async function generateAIPlan(userProfile, onStatus) {
 
   if (onStatus) onStatus('Building your workouts...');
 
-  // Step 7: Build the plan deterministically using Claude's picks
-  const result = await buildPlanV5(claudeSelections, dayConfigs, userProfile, exerciseMenu, wodMenu, targetDistance, shouldHaveRuns, archetype, onStatus);
+  // Step 7: Load full exercise pool for rotation variety (seed + ExerciseDB)
+  const fullPool = await buildFullExercisePool(userProfile, archetype);
+  console.log(`[AI Plan] Full rotation pool: ${fullPool.length} exercises`);
+
+  // Step 8: Build the plan deterministically using Claude's picks
+  const result = await buildPlanV5(claudeSelections, dayConfigs, userProfile, fullPool.length > 0 ? fullPool : exerciseMenu, wodMenu, targetDistance, shouldHaveRuns, archetype, onStatus);
   return result;
 }
 
@@ -491,6 +495,7 @@ function rotateExercises(pool, week, recentlyUsed, usedToday, pickCount) {
 
 // Expand Claude's exercise picks by adding similar exercises from the menu
 // If Claude picked 2 compounds but we need 5+ for rotation, fill from same patterns
+// Uses the full exercise menu (which includes ExerciseDB exercises that passed filtering)
 function expandPool(claudePicks, exerciseMenu, dayConfig) {
   const pool = [...claudePicks];
   const poolSet = new Set(pool);
@@ -498,14 +503,14 @@ function expandPool(claudePicks, exerciseMenu, dayConfig) {
   // Get the patterns for this day
   const patterns = [...(dayConfig.primary_patterns || []), ...(dayConfig.secondary_patterns || [])];
 
-  // Add exercises from the menu that match this day's patterns
+  // First: add seed exercises that match (highest quality)
   for (const menuEx of exerciseMenu) {
     if (poolSet.has(menuEx.id)) continue;
     if (patterns.includes(menuEx.pattern)) {
       pool.push(menuEx.id);
       poolSet.add(menuEx.id);
     }
-    if (pool.length >= 8) break; // cap pool size
+    if (pool.length >= 10) break;
   }
 
   return pool;
