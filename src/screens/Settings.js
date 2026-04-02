@@ -215,6 +215,10 @@ export default function Settings({ navigation }) {
       if (swapDescriptions.length >= 8) break;
     }
 
+    console.log(`[Equipment] Newly available: ${newlyAvailable.map(e => e.id).join(', ')}`);
+    console.log(`[Equipment] Swap map: ${JSON.stringify(swapMap)}`);
+    console.log(`[Equipment] Descriptions: ${swapDescriptions.join(', ')}`);
+
     if (Object.keys(swapMap).length === 0) {
       Alert.alert('Equipment Updated', `${changes.join('\n')}\n\n${newlyAvailable.length} new exercises unlocked! They'll appear in your next plan.`);
       return;
@@ -229,7 +233,9 @@ export default function Settings({ navigation }) {
           text: 'Apply Swaps',
           onPress: async () => {
             try {
+              console.log('[Equipment] Applying swaps:', JSON.stringify(swapMap));
               const total = await upgradeExercisesForNewEquipment(added, swapMap);
+              console.log(`[Equipment] Total swapped: ${total}`);
               Alert.alert('Done', `${total} exercises upgraded across future workouts.`);
               await useWorkoutStore.getState().loadTodayWorkout();
             } catch (e) {
