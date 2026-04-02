@@ -608,24 +608,23 @@ export async function exportPlanAsText(planId) {
     lines.push('(Could not load profile)\n');
   }
 
+  const PHASE_LABELS = { foundation: 'FOUNDATION', build: 'BUILD', peak: 'PEAK', race_prep: 'RACE PREP' };
   let currentWeek = 0;
   for (const day of days) {
     if (day.week_number !== currentWeek) {
       currentWeek = day.week_number;
-      lines.push(`\n━━━ WEEK ${currentWeek} ━━━━━━━━━━━━━━━━━━`);
-      if (day.phase) lines.push(`Phase: ${day.phase}`);
+      const phaseLabel = PHASE_LABELS[day.phase] || (day.phase || '').toUpperCase();
+      lines.push(`\n━━━ WEEK ${currentWeek} — ${phaseLabel} ━━━━━━━━━━━━`);
     }
 
-    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const dayName = dayNames[day.day_of_week] || '';
-    lines.push(`\n${dayName} ${day.date} — ${day.title}`);
+    lines.push(`\n${dayName} — ${day.title}`);
 
     if (day.is_rest_day) {
-      lines.push('  Rest day');
+      lines.push('  Rest & Recovery');
       continue;
     }
-
-    if (day.focus) lines.push(`  ${day.focus}`);
 
     const blocks = await database.getAllAsync(
       'SELECT * FROM plan_blocks WHERE plan_day_id = ? ORDER BY sort_order',
@@ -633,7 +632,9 @@ export async function exportPlanAsText(planId) {
     );
 
     for (const block of blocks) {
-      lines.push(`\n  [${block.name}] ${block.type || ''} ${block.time_cap || ''}`);
+      const isAmrap = block.is_amrap ? ' AMRAP' : '';
+      const timeCap = block.time_cap ? ` ${block.time_cap}` : '';
+      lines.push(`\n  ${block.name}${isAmrap}${timeCap}`);
 
       const exercises = await database.getAllAsync(
         `SELECT pe.*, e.name FROM plan_exercises pe
@@ -643,9 +644,17 @@ export async function exportPlanAsText(planId) {
       );
 
       for (const ex of exercises) {
-        let line = `    ${ex.name} — ${ex.sets} @ ${ex.weight || 'BW'}`;
-        if (ex.rest) line += ` rest ${ex.rest}`;
-        if (ex.notes) line += ` (${ex.notes})`;
+        const weight = ex.weight && ex.weight !== 'BW' ? ` @ ${ex.weight}` : ex.weight === 'BW' ? ' (BW)' : '';
+        const rest = ex.rest ? ` | rest ${ex.rest}` : '';
+        let line = `    ${ex.name} — ${ex.sets}${weight}${rest}`;
+        // Show actual logged data if completed
+        if (ex.is_completed && (ex.actual_weight || ex.actual_reps)) {
+          const actual = [];
+          if (ex.actual_reps) actual.push(`reps: ${ex.actual_reps}`);
+          if (ex.actual_weight) actual.push(`weight: ${ex.actual_weight}`);
+          line += ` [LOGGED: ${actual.join(', ')}]`;
+        }
+        if (ex.notes && !/^RPE/i.test(ex.notes)) line += ` (${ex.notes})`;
         lines.push(line);
       }
     }
