@@ -368,8 +368,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         if (ex) await savePlanExercise({ planBlockId: warmupBlockId, exerciseId: ex.id, sortOrder: i, sets: `1x${ex.default_reps || '10'}`, reps: ex.default_reps || '10', weight: ex.default_weight || 'BW', rest: null, notes: null });
       }
 
-      // ── COMPOUNDS — expand pool if Claude returned too few for rotation ──
-      const compoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig);
+      // ── COMPOUNDS — expand pool respecting archetype equipment preference ──
+      const compoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig, archetype);
       const compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, 3);
       if (compoundIds.length > 0) {
         const compBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'MAIN LIFTS', type: 'COMPOUND', timeCap: '25 min', isAmrap: false, hasGps: false });
@@ -407,8 +407,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
       }
 
-      // ── ACCESSORIES — expand pool if needed ──
-      const accPool = expandPool(daySelection.accessories || [], exerciseMenu, dayConfig);
+      // ── ACCESSORIES — expand pool respecting archetype equipment preference ──
+      const accPool = expandPool(daySelection.accessories || [], exerciseMenu, dayConfig, archetype);
       const accIds = rotateExercises(accPool, week, recentlyUsed, usedToday, 2);
       if (accIds.length > 0) {
         const accBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'ACCESSORIES', type: 'ISOLATION', timeCap: '10 min', isAmrap: false, hasGps: false });
@@ -494,22 +494,30 @@ function rotateExercises(pool, week, recentlyUsed, usedToday, pickCount) {
 }
 
 // Expand Claude's exercise picks by adding similar exercises from the menu
-// If Claude picked 2 compounds but we need 5+ for rotation, fill from same patterns
-// Uses the full exercise menu (which includes ExerciseDB exercises that passed filtering)
-function expandPool(claudePicks, exerciseMenu, dayConfig) {
+// Respects archetype equipment preference — machines first for beginners, barbell first for athletes
+function expandPool(claudePicks, exerciseMenu, dayConfig, archetype) {
   const pool = [...claudePicks];
   const poolSet = new Set(pool);
-
-  // Get the patterns for this day
   const patterns = [...(dayConfig.primary_patterns || []), ...(dayConfig.secondary_patterns || [])];
+  const equipPref = archetype?.equipmentPreference || ['barbell', 'dumbbell', 'kettlebell', 'machine', 'cable', 'bodyweight'];
 
-  // First: add seed exercises that match (highest quality)
-  for (const menuEx of exerciseMenu) {
-    if (poolSet.has(menuEx.id)) continue;
-    if (patterns.includes(menuEx.pattern)) {
-      pool.push(menuEx.id);
-      poolSet.add(menuEx.id);
-    }
+  // Sort menu exercises by equipment preference (preferred equipment first)
+  const sorted = exerciseMenu
+    .filter(ex => patterns.includes(ex.pattern) && !poolSet.has(ex.id))
+    .sort((a, b) => {
+      const aRank = equipPref.indexOf(a.equipment);
+      const bRank = equipPref.indexOf(b.equipment);
+      const aScore = aRank >= 0 ? aRank : 99;
+      const bScore = bRank >= 0 ? bRank : 99;
+      // Prefer seed exercises over ExerciseDB
+      const aSource = a.source === 'seed' || !a.source ? 0 : 1;
+      const bSource = b.source === 'seed' || !b.source ? 0 : 1;
+      return (aScore + aSource * 10) - (bScore + bSource * 10);
+    });
+
+  for (const ex of sorted) {
+    pool.push(ex.id);
+    poolSet.add(ex.id);
     if (pool.length >= 10) break;
   }
 
