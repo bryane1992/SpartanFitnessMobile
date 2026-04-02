@@ -313,6 +313,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
   const warmupPool = shouldHaveRuns ? WARMUP_IDS_WITH_JOG : WARMUP_IDS;
 
   const recentlyUsed = new Set();
+  const weeklyExerciseCount = {}; // track how many times each exercise appears per week
 
   for (let week = 1; week <= totalWeeks; week++) {
     const phase = getPhaseForWeek(phases, week);
@@ -334,6 +335,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
     }
 
     const weekWodIdx = (week - 1) % Math.max(1, wodPool.length);
+    // Reset weekly exercise frequency counter
+    for (const key of Object.keys(weeklyExerciseCount)) weeklyExerciseCount[key] = 0;
 
     for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
       const date = addDays(weekStartDate, dayOfWeek);
@@ -367,7 +370,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
       // ── COMPOUNDS — expand pool respecting archetype + phase progression ──
       const compoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig, archetype, week);
-      const compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, 3);
+      const compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, 3, weeklyExerciseCount);
       if (compoundIds.length > 0) {
         const compBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'MAIN LIFTS', type: 'COMPOUND', timeCap: '25 min', isAmrap: false, hasGps: false });
         for (let i = 0; i < compoundIds.length; i++) {
@@ -406,7 +409,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
       // ── ACCESSORIES — expand pool respecting archetype + phase progression ──
       const accPool = expandPool(daySelection.accessories || [], exerciseMenu, dayConfig, archetype, week);
-      const accIds = rotateExercises(accPool, week, recentlyUsed, usedToday, 2);
+      const accIds = rotateExercises(accPool, week, recentlyUsed, usedToday, 2, weeklyExerciseCount);
       if (accIds.length > 0) {
         const accBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'ACCESSORIES', type: 'ISOLATION', timeCap: '10 min', isAmrap: false, hasGps: false });
         for (let i = 0; i < accIds.length; i++) {
@@ -467,25 +470,28 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
 // Pick a SUBSET from Claude's exercise pool, rotating across weeks
 // Pool of 6 exercises → pick 2-3 per week, different each week
-function rotateExercises(pool, week, recentlyUsed, usedToday, pickCount) {
+// weeklyCount tracks frequency to prevent any exercise appearing 3+ times in a week
+function rotateExercises(pool, week, recentlyUsed, usedToday, pickCount, weeklyCount) {
   if (pool.length === 0) return [];
   const count = pickCount || Math.min(3, pool.length);
 
   if (pool.length <= count) {
-    // Pool is too small to rotate — use all of them every week
     return pool.filter(id => !usedToday.has(id));
   }
 
-  // Rotate starting position based on week number
   const offset = (week - 1) * count;
   const result = [];
-  for (let i = 0; i < count; i++) {
+  let attempts = 0;
+  for (let i = 0; result.length < count && attempts < pool.length * 2; i++) {
     const idx = (offset + i) % pool.length;
     const id = pool[idx];
-    if (!usedToday.has(id)) {
-      result.push(id);
-      usedToday.add(id);
-    }
+    attempts++;
+    if (usedToday.has(id)) continue;
+    // Cap weekly frequency at 2 appearances per exercise
+    if (weeklyCount && (weeklyCount[id] || 0) >= 2) continue;
+    result.push(id);
+    usedToday.add(id);
+    if (weeklyCount) weeklyCount[id] = (weeklyCount[id] || 0) + 1;
   }
   return result;
 }
