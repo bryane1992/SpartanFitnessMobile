@@ -364,8 +364,9 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         if (ex) await savePlanExercise({ planBlockId: warmupBlockId, exerciseId: ex.id, sortOrder: i, sets: `1x${ex.default_reps || '10'}`, reps: ex.default_reps || '10', weight: ex.default_weight || 'BW', rest: null, notes: null });
       }
 
-      // ── COMPOUNDS ──
-      const compoundIds = rotateExercises(daySelection.compounds || [], week, recentlyUsed, usedToday, 3);
+      // ── COMPOUNDS — expand pool if Claude returned too few for rotation ──
+      const compoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig);
+      const compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, 3);
       if (compoundIds.length > 0) {
         const compBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'MAIN LIFTS', type: 'COMPOUND', timeCap: '25 min', isAmrap: false, hasGps: false });
         for (let i = 0; i < compoundIds.length; i++) {
@@ -402,8 +403,9 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
       }
 
-      // ── ACCESSORIES ──
-      const accIds = rotateExercises(daySelection.accessories || [], week, recentlyUsed, usedToday, 2);
+      // ── ACCESSORIES — expand pool if needed ──
+      const accPool = expandPool(daySelection.accessories || [], exerciseMenu, dayConfig);
+      const accIds = rotateExercises(accPool, week, recentlyUsed, usedToday, 2);
       if (accIds.length > 0) {
         const accBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'ACCESSORIES', type: 'ISOLATION', timeCap: '10 min', isAmrap: false, hasGps: false });
         for (let i = 0; i < accIds.length; i++) {
@@ -468,6 +470,11 @@ function rotateExercises(pool, week, recentlyUsed, usedToday, pickCount) {
   if (pool.length === 0) return [];
   const count = pickCount || Math.min(3, pool.length);
 
+  if (pool.length <= count) {
+    // Pool is too small to rotate — use all of them every week
+    return pool.filter(id => !usedToday.has(id));
+  }
+
   // Rotate starting position based on week number
   const offset = (week - 1) * count;
   const result = [];
@@ -480,6 +487,28 @@ function rotateExercises(pool, week, recentlyUsed, usedToday, pickCount) {
     }
   }
   return result;
+}
+
+// Expand Claude's exercise picks by adding similar exercises from the menu
+// If Claude picked 2 compounds but we need 5+ for rotation, fill from same patterns
+function expandPool(claudePicks, exerciseMenu, dayConfig) {
+  const pool = [...claudePicks];
+  const poolSet = new Set(pool);
+
+  // Get the patterns for this day
+  const patterns = [...(dayConfig.primary_patterns || []), ...(dayConfig.secondary_patterns || [])];
+
+  // Add exercises from the menu that match this day's patterns
+  for (const menuEx of exerciseMenu) {
+    if (poolSet.has(menuEx.id)) continue;
+    if (patterns.includes(menuEx.pattern)) {
+      pool.push(menuEx.id);
+      poolSet.add(menuEx.id);
+    }
+    if (pool.length >= 8) break; // cap pool size
+  }
+
+  return pool;
 }
 
 // ═══════════════════════════════════════════════════════════════
