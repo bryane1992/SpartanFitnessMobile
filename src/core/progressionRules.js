@@ -288,7 +288,7 @@ function capToEquipment(weight, exercise, equipmentDetails) {
 // Sets, Reps & Tempo
 // ═══════════════════════════════════════════════════════════════
 
-export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal, sessionMinutes) {
+export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal, sessionMinutes, targetSets) {
   const bodyComp = getBodyCompParams(bodyCompGoal);
   const isCompound = exercise.is_compound;
   const session = sessionMinutes || 60;
@@ -316,9 +316,9 @@ export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal, ses
   const phaseReps = PHASE_REPS[phase] || PHASE_REPS.foundation;
   let reps = isCompound ? phaseReps.compound : phaseReps.isolation;
 
-  // Sets: 3 for most sessions, capped by session duration
+  // Sets: from time budget calculator, or range minimum
   const weekInPhase = weekNumber % 4 || 4;
-  let sets = setRange[0];
+  let sets = targetSets || setRange[0];
 
   // Session duration cap: 60-min or less sessions max 3 sets per exercise
   if (session <= 60 && sets > 3) sets = 3;

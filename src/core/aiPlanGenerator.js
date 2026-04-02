@@ -377,6 +377,9 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       const bodyCompGoal = userProfile.bodyCompGoal || 'maintain';
       const dayPatterns = [...(dayConfig.primary_patterns || []), ...(dayConfig.secondary_patterns || [])];
 
+      // Calculate time-scaled block parameters
+      const bt = calculateBlockTimes(sessionMinutes, dayConfig, archetype?.archetype);
+
       // ── WARMUP — matched to day's movement patterns ──
       const WARMUP_BY_FOCUS = {
         lower: ['air_squats', 'cossack_squats', 'lunge_matrix', 'samson_stretch', 'high_knees', 'dynamic_stretching'],
@@ -388,8 +391,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       let dayWarmupPool = WARMUP_BY_FOCUS[warmupFocus];
       if (!shouldHaveRuns) dayWarmupPool = dayWarmupPool.filter(id => id !== 'easy_jog' && id !== 'strides');
 
-      const warmupBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'WARM-UP', type: 'MOVEMENT PREP', timeCap: '6 min', isAmrap: false, hasGps: false });
-      const shuffledWarmup = [...dayWarmupPool].sort(() => Math.random() - 0.5).slice(0, 3);
+      const warmupBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'WARM-UP', type: 'MOVEMENT PREP', timeCap: `${bt.warmup} min`, isAmrap: false, hasGps: false });
+      const shuffledWarmup = [...dayWarmupPool].sort(() => Math.random() - 0.5).slice(0, bt.warmupCount);
       for (let i = 0; i < shuffledWarmup.length; i++) {
         const ex = exerciseById[shuffledWarmup[i]];
         if (ex) await savePlanExercise({ planBlockId: warmupBlockId, exerciseId: ex.id, sortOrder: i, sets: `1x${ex.default_reps || '10'}`, reps: ex.default_reps || '10', weight: ex.default_weight || 'BW', rest: null, notes: null });
@@ -397,15 +400,15 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
       // ── COMPOUNDS — expand pool respecting archetype + phase progression ──
       const compoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig, archetype, week);
-      const compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, 3, weeklyExerciseCount);
+      const compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, bt.mainLiftCount, weeklyExerciseCount);
       if (compoundIds.length > 0) {
-        const compBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'MAIN LIFTS', type: 'COMPOUND', timeCap: '25 min', isAmrap: false, hasGps: false });
+        const compBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'MAIN LIFTS', type: 'COMPOUND', timeCap: `${bt.mainLifts} min`, isAmrap: false, hasGps: false });
         for (let i = 0; i < compoundIds.length; i++) {
           const ex = exerciseById[compoundIds[i]];
           if (!ex) continue;
-          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes);
+          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets);
           const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
-          await savePlanExercise({ planBlockId: compBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: getBodyCompParams(bodyCompGoal).restSeconds, notes: null });
+          await savePlanExercise({ planBlockId: compBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bt.rest, notes: null });
           usedToday.add(ex.id); recentlyUsed.add(ex.id);
         }
       }
@@ -421,8 +424,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
       }
 
-      // ── WOD — rotate through pool so each week has a different WOD ──
-      if (dayConfig.wod && wodPool.length > 0) {
+      // ── WOD — only if time budget allows ──
+      if (dayConfig.wod && wodPool.length > 0 && bt.wod > 0) {
         // Combine week + day index for rotation so different days get different WODs
         const wodRotationIdx = ((week - 1) * dayConfigs.length + tdi) % Math.max(1, wodPool.length);
         const wodId = wodPool[wodRotationIdx] || wodPool[0];
@@ -435,35 +438,35 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       }
 
       // ── ACCESSORIES — expand pool respecting archetype + phase progression ──
-      const accPool = expandPool(daySelection.accessories || [], exerciseMenu, dayConfig, archetype, week);
-      const accIds = rotateExercises(accPool, week, recentlyUsed, usedToday, 2, weeklyExerciseCount);
+      // ── ACCESSORIES — only if time budget allows ──
+      const accPool = bt.accessoryCount > 0 ? expandPool(daySelection.accessories || [], exerciseMenu, dayConfig, archetype, week) : [];
+      const accIds = rotateExercises(accPool, week, recentlyUsed, usedToday, bt.accessoryCount, weeklyExerciseCount);
       if (accIds.length > 0) {
-        const accBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'ACCESSORIES', type: 'ISOLATION', timeCap: '10 min', isAmrap: false, hasGps: false });
+        const accBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'ACCESSORIES', type: 'ISOLATION', timeCap: `${bt.accessories} min`, isAmrap: false, hasGps: false });
         for (let i = 0; i < accIds.length; i++) {
           const ex = exerciseById[accIds[i]];
           if (!ex) continue;
-          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes);
+          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets);
           const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
           await savePlanExercise({ planBlockId: accBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: '45-60s', notes: null });
           usedToday.add(ex.id); recentlyUsed.add(ex.id);
         }
       }
 
-      // ── ARM FINISHER — guaranteed when day config requests it ──
+      // ── ARM FINISHER — only if time budget allows ──
       let armIds = daySelection.arms || [];
-      // If day config wants arms but Claude didn't provide them, add defaults
-      if (armIds.length === 0 && dayConfig.arm_finisher) {
+      if (armIds.length === 0 && dayConfig.arm_finisher && bt.armBlaster > 0) {
         const armPullOptions = exerciseMenu.filter(e => e.pattern === 'arm_pull').map(e => e.id);
         const armPushOptions = exerciseMenu.filter(e => e.pattern === 'arm_push').map(e => e.id);
         if (armPullOptions.length > 0) armIds.push(armPullOptions[week % armPullOptions.length]);
         if (armPushOptions.length > 0) armIds.push(armPushOptions[week % armPushOptions.length]);
       }
-      if (armIds.length > 0) {
-        const armBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'ARM BLASTER', type: 'SUPERSETS', timeCap: '8 min', isAmrap: false, hasGps: false });
+      if (armIds.length > 0 && bt.armBlaster > 0) {
+        const armBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'ARM BLASTER', type: 'SUPERSETS', timeCap: `${bt.armBlaster} min`, isAmrap: false, hasGps: false });
         for (let i = 0; i < armIds.length; i++) {
           const ex = exerciseById[armIds[i]];
           if (!ex) continue;
-          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes);
+          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets);
           const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
           await savePlanExercise({ planBlockId: armBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: '30-45s', notes: null });
         }
@@ -504,7 +507,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
       }
       if (coreIds.length > 0) {
-        const coreBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'CORE', type: 'CIRCUIT', timeCap: '6 min', isAmrap: false, hasGps: false });
+        const coreBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'CORE', type: 'CIRCUIT', timeCap: `${bt.core} min`, isAmrap: false, hasGps: false });
         for (let i = 0; i < coreIds.length; i++) {
           const ex = exerciseById[coreIds[i]];
           if (!ex) continue;
@@ -539,6 +542,52 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
   console.log('[AI Plan] Plan generated successfully');
   return { planId, totalWeeks, phases, startDate, eventDate, planName: selections.planName || 'Training Program', programNotes: selections.progressionNotes || '' };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Session duration scaling — adapts blocks to 30/45/60/90+ min
+// ═══════════════════════════════════════════════════════════════
+
+function calculateBlockTimes(sessionMinutes, dayConfig, archetypeKey) {
+  const hasWod = !!dayConfig.wod;
+  const hasArms = !!dayConfig.arm_finisher;
+
+  // 20-30 min: Tier 1 only (warmup + 2 compounds + core + cooldown)
+  if (sessionMinutes <= 30) {
+    return { warmup: 3, mainLifts: 15, wod: 0, accessories: 0, armBlaster: 0, core: 3, cooldown: 3,
+      sets: 3, mainLiftCount: 2, accessoryCount: 0, coreCount: 2, warmupCount: 2, rest: '30-45s' };
+  }
+
+  // 31-44 min: Tier 1 + partial Tier 2
+  if (sessionMinutes <= 44) {
+    const keepWod = hasWod && ['obstacle_racer', 'fat_loss'].includes(archetypeKey);
+    return { warmup: 5, mainLifts: 16, wod: keepWod ? 7 : 0, accessories: keepWod ? 0 : 6, armBlaster: 0, core: 5, cooldown: 4,
+      sets: 3, mainLiftCount: 2, accessoryCount: keepWod ? 0 : 1, coreCount: 2, warmupCount: 3, rest: '30-60s' };
+  }
+
+  // 45-59 min: Tier 1 + Tier 2
+  if (sessionMinutes <= 59) {
+    const keepArms = hasArms && ['hypertrophy', 'obstacle_racer'].includes(archetypeKey);
+    return { warmup: 5, mainLifts: hasWod ? 18 : 22, wod: hasWod ? 10 : 0, accessories: keepArms ? 5 : 8, armBlaster: keepArms ? 6 : 0, core: 5, cooldown: 5,
+      sets: 3, mainLiftCount: 3, accessoryCount: keepArms ? 1 : 2, coreCount: 3, warmupCount: 3, rest: '30-60s' };
+  }
+
+  // 60-74 min: Full (default)
+  if (sessionMinutes <= 74) {
+    return { warmup: hasWod && hasArms ? 6 : 8, mainLifts: hasWod && hasArms ? 17 : hasWod ? 20 : 25, wod: hasWod ? 10 : 0,
+      accessories: hasArms ? 8 : 12, armBlaster: hasArms ? 8 : 0, core: hasWod && hasArms ? 5 : 8, cooldown: 5,
+      sets: 3, mainLiftCount: 3, accessoryCount: 2, coreCount: 3, warmupCount: 3, rest: '45-60s' };
+  }
+
+  // 75-89 min: Extended (4 sets, longer rest)
+  if (sessionMinutes <= 89) {
+    return { warmup: 8, mainLifts: 28, wod: hasWod ? 10 : 0, accessories: 15, armBlaster: hasArms ? 8 : 0, core: 8, cooldown: 5,
+      sets: 4, mainLiftCount: 3, accessoryCount: 3, coreCount: 3, warmupCount: 3, rest: '60-90s' };
+  }
+
+  // 90+ min: Long (4 sets, 4 lifts, extended rest)
+  return { warmup: 10, mainLifts: 35, wod: hasWod ? 12 : 0, accessories: 20, armBlaster: hasArms ? 10 : 0, core: 10, cooldown: 5,
+    sets: 4, mainLiftCount: 4, accessoryCount: 4, coreCount: 4, warmupCount: 4, rest: '90-120s' };
 }
 
 // Pick a SUBSET from Claude's exercise pool, rotating across weeks
