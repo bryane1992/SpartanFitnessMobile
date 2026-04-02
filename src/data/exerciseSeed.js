@@ -322,7 +322,7 @@ export function seedExercises() {
     { id: 'plate_carry', name: 'Plate Carry', emoji: '', muscle_group: 'full_body', secondary_muscles: ['core', 'shoulders'], category: 'bodyweight', style_tags: ['crossfit', 'hybrid'], exclusion_tags: [], equipment_required: [], default_sets: 3, default_reps: '50 yd', default_weight: '25 lb', is_compound: true, difficulty: 'beginner' },
 
     // Arm pull (intermediate gap)
-    { id: 'preacher_curl', name: 'Preacher Curl', emoji: '', muscle_group: 'arms', secondary_muscles: [], category: 'dumbbell', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: ['dumbbell', 'bench'], default_sets: 3, default_reps: '10', default_weight: '20 lb', is_compound: false, difficulty: 'intermediate' },
+    { id: 'preacher_curl', name: 'Preacher Curl', emoji: '', muscle_group: 'arms', secondary_muscles: [], category: 'dumbbell', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: ['dumbbell', 'machine'], default_sets: 3, default_reps: '10', default_weight: '20 lb', is_compound: false, difficulty: 'intermediate' },
     { id: 'concentration_curl', name: 'Concentration Curl', emoji: '', muscle_group: 'arms', secondary_muscles: [], category: 'dumbbell', style_tags: ['traditional', 'hybrid'], exclusion_tags: [], equipment_required: ['dumbbell'], default_sets: 3, default_reps: '10 ea', default_weight: '15 lb', is_compound: false, difficulty: 'intermediate' },
 
     // Arm push (intermediate gap)
