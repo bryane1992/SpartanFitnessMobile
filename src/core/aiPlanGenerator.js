@@ -35,7 +35,7 @@ const WARMUP_IDS_WITH_JOG = ['easy_jog', ...WARMUP_IDS, 'a_skips', 'strides'];
 // v5 Claude Prompt — sends filtered menu, gets exercise IDs back
 // ═══════════════════════════════════════════════════════════════
 
-const V5_SYSTEM = `You are an elite S&C coach. You receive a filtered exercise menu and WOD menu. Pick specific exercises BY ID for each training day.
+const V5_SYSTEM = `You are an elite S&C coach. You receive a filtered exercise menu and WOD menu. Pick EXERCISE POOLS for each training day — the app rotates through your picks across weeks for variety.
 
 Return valid JSON:
 {
@@ -43,16 +43,15 @@ Return valid JSON:
   "days": [
     {
       "dayIndex": 0,
-      "title": "FULL BODY A",
-      "compounds": ["bench_press", "barbell_row", "goblet_squat"],
-      "accessories": ["lat_pulldown", "cable_fly"],
-      "arms": ["db_curl", "skull_crushers"],
-      "core": ["plank", "dead_bug"],
-      "wod": "wod_id_here",
+      "title": "IRON CURTAIN",
+      "compounds": ["bench_press", "floor_press", "incline_bench", "db_bench_press", "barbell_row", "cable_row"],
+      "accessories": ["lat_pulldown", "cable_fly", "machine_row", "db_fly"],
+      "arms": ["db_curl", "hammer_curl", "skull_crushers", "cable_tricep_pushdown"],
+      "core": ["plank", "dead_bug", "mountain_climbers", "v_ups"],
       "rationale": "Why these exercises for this day"
     }
   ],
-  "wodPool": ["wod_id1", "wod_id2", "wod_id3", "wod_id4", "wod_id5"],
+  "wodPool": ["wod_id1", "wod_id2", "wod_id3", "wod_id4", "wod_id5", "wod_id6", "wod_id7", "wod_id8"],
   "excludedRationale": "What was excluded and why",
   "progressionNotes": "Weight/progression guidance"
 }
@@ -60,13 +59,14 @@ Return valid JSON:
 RULES:
 - ONLY use exercise IDs from the EXERCISE MENU provided
 - ONLY use WOD IDs from the WOD MENU provided
-- Pick 2-3 compounds per day covering the day's movement patterns
-- Pick 1-2 accessories that complement the compounds
-- Pick arm exercises if the profile requests arm emphasis
-- Pick WODs appropriate for the user's experience level
-- Each compound should be a different movement pattern (don't double up squats)
+- Pick 4-6 compounds per day as a POOL (the app uses 2-3 per session, rotating across weeks for variety)
+- Pick 3-4 accessories as a POOL (app uses 1-2 per session)
+- Pick 3-4 arm exercises as a POOL if arm emphasis is requested
+- Pick 2-4 core exercises as a POOL
+- Pick 6-10 WODs for the wodPool — the app rotates through them across weeks so every week feels different
+- Each day's compound pool should cover the required movement patterns with multiple options per pattern
 - Consider the user's notes for constraints (injuries, can't run, etc.)
-- "title" should be a FUN, CREATIVE workout name that captures the day's vibe (e.g., "IRON CURTAIN" for heavy press day, "GRIP & RIP" for deadlift + carries, "THUNDER THIGHS" for leg day, "GUN SHOW" for arms emphasis, "THE FURNACE" for metabolic conditioning). Make it motivating and memorable — NOT generic like "FULL BODY A"
+- "title" should be a FUN, CREATIVE workout name (e.g., "IRON CURTAIN", "GRIP & RIP", "THUNDER THIGHS", "GUN SHOW", "THE FURNACE")
 - JSON only, no other text`;
 
 // ═══════════════════════════════════════════════════════════════
@@ -242,22 +242,23 @@ function buildDefaultSelections(dayConfigs, exerciseMenu, wodMenu, archetype) {
     menuByPattern[ex.pattern].push(ex.id);
   }
 
-  const pickFromPattern = (pattern, count = 2) => {
+  const pickFromPattern = (pattern, count = 3) => {
     const pool = menuByPattern[pattern] || menuByPattern['squat'] || [];
     return pool.slice(0, count);
   };
 
   const days = dayConfigs.map((config, i) => {
+    // Build exercise POOLS (more than needed per session for weekly rotation)
     const compounds = [];
     for (const p of (config.primary_patterns || [])) {
-      compounds.push(...pickFromPattern(p, 1));
+      compounds.push(...pickFromPattern(p, 3));
     }
     const accessories = [];
     for (const p of (config.secondary_patterns || [])) {
-      accessories.push(...pickFromPattern(p, 1));
+      accessories.push(...pickFromPattern(p, 2));
     }
-    const arms = config.arm_finisher ? [...pickFromPattern('arm_pull', 1), ...pickFromPattern('arm_push', 1)] : [];
-    const core = config.core_block ? pickFromPattern('core', 2) : [];
+    const arms = config.arm_finisher ? [...pickFromPattern('arm_pull', 2), ...pickFromPattern('arm_push', 2)] : [];
+    const core = config.core_block ? pickFromPattern('core', 4) : [];
     const wod = config.wod && wodMenu.length > 0 ? wodMenu[i % wodMenu.length].id : null;
 
     // Fun fallback names based on day type
@@ -364,7 +365,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       }
 
       // ── COMPOUNDS ──
-      const compoundIds = rotateExercises(daySelection.compounds || [], week, recentlyUsed, usedToday);
+      const compoundIds = rotateExercises(daySelection.compounds || [], week, recentlyUsed, usedToday, 3);
       if (compoundIds.length > 0) {
         const compBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'MAIN LIFTS', type: 'COMPOUND', timeCap: '25 min', isAmrap: false, hasGps: false });
         for (let i = 0; i < compoundIds.length; i++) {
@@ -388,9 +389,11 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
       }
 
-      // ── WOD ──
-      if (dayConfig.wod) {
-        const wodId = daySelection.wod || wodPool[weekWodIdx] || wodPool[0];
+      // ── WOD — rotate through pool so each week has a different WOD ──
+      if (dayConfig.wod && wodPool.length > 0) {
+        // Combine week + day index for rotation so different days get different WODs
+        const wodRotationIdx = ((week - 1) * dayConfigs.length + tdi) % Math.max(1, wodPool.length);
+        const wodId = wodPool[wodRotationIdx] || wodPool[0];
         const wod = wodById[wodId];
         const wodBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'WOD', type: dayConfig.wod.type || 'CIRCUIT', timeCap: '10 min', isAmrap: true, hasGps: false });
         const wodExercises = buildWodExercises(wod, userProfile.equipmentDetails);
@@ -400,7 +403,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       }
 
       // ── ACCESSORIES ──
-      const accIds = rotateExercises(daySelection.accessories || [], week, recentlyUsed, usedToday);
+      const accIds = rotateExercises(daySelection.accessories || [], week, recentlyUsed, usedToday, 2);
       if (accIds.length > 0) {
         const accBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'ACCESSORIES', type: 'ISOLATION', timeCap: '10 min', isAmrap: false, hasGps: false });
         for (let i = 0; i < accIds.length; i++) {
@@ -459,14 +462,24 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
   return { planId, totalWeeks, phases, startDate, eventDate, planName: selections.planName || 'Training Program', programNotes: selections.progressionNotes || '' };
 }
 
-// Rotate through Claude's exercise picks across weeks for variety
-function rotateExercises(exerciseIds, week, recentlyUsed, usedToday) {
-  if (exerciseIds.length === 0) return [];
-  // Use all exercises on week 1, then rotate starting position
-  const offset = (week - 1) % exerciseIds.length;
-  const rotated = [...exerciseIds.slice(offset), ...exerciseIds.slice(0, offset)];
-  // Filter out already-used-today
-  return rotated.filter(id => !usedToday.has(id));
+// Pick a SUBSET from Claude's exercise pool, rotating across weeks
+// Pool of 6 exercises → pick 2-3 per week, different each week
+function rotateExercises(pool, week, recentlyUsed, usedToday, pickCount) {
+  if (pool.length === 0) return [];
+  const count = pickCount || Math.min(3, pool.length);
+
+  // Rotate starting position based on week number
+  const offset = (week - 1) * count;
+  const result = [];
+  for (let i = 0; i < count; i++) {
+    const idx = (offset + i) % pool.length;
+    const id = pool[idx];
+    if (!usedToday.has(id)) {
+      result.push(id);
+      usedToday.add(id);
+    }
+  }
+  return result;
 }
 
 // ═══════════════════════════════════════════════════════════════
