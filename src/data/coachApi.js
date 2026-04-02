@@ -197,7 +197,8 @@ function buildContext(context) {
   if (context.availableWods && context.availableWods.length > 0) {
     parts.push(`\nAVAILABLE WODS (for WOD swaps):`);
     for (const w of context.availableWods.slice(0, 10)) {
-      parts.push(`  ${w.id}: ${w.name} (${w.type}, ${w.movements?.join(', ') || ''})`);
+      const mvmts = Array.isArray(w.movements) ? w.movements.join(', ') : (w.movements || '');
+      parts.push(`  ${w.id}: ${w.name} (${w.type}, ${mvmts})`);
     }
   }
 
