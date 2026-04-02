@@ -304,19 +304,21 @@ export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal, ses
   const repRange = isCompound ? bodyComp.compoundReps : bodyComp.accessoryReps;
   const setRange = isCompound ? bodyComp.compoundSets : bodyComp.accessorySets;
 
-  // Progress reps within the 4-week block (resets each cycle)
+  // Reps FIXED per phase — weight is the progression variable, not reps
+  // Foundation: higher reps (10 compound, 12 isolation) for movement learning
+  // Build: moderate reps (8 compound, 10 isolation) for strength building
+  // Peak: lower reps (6 compound, 8 isolation) for peak expression
+  const PHASE_REPS = {
+    foundation: { compound: 10, isolation: 12 },
+    build:      { compound: 8,  isolation: 10 },
+    peak:       { compound: 6,  isolation: 8 },
+  };
+  const phaseReps = PHASE_REPS[phase] || PHASE_REPS.foundation;
+  let reps = isCompound ? phaseReps.compound : phaseReps.isolation;
+
+  // Sets: 3 for most sessions, capped by session duration
   const weekInPhase = weekNumber % 4 || 4;
-  const repProgress = Math.min(1, (weekInPhase - 1) / 3);
-  let reps = Math.round(repRange[0] + (repRange[1] - repRange[0]) * repProgress);
-
-  // Sets: start at range minimum, add 1 set in week 3 of each block
   let sets = setRange[0];
-  if (weekInPhase >= 3) {
-    sets = Math.min(setRange[1], sets + 1);
-  }
-
-  // Apply mesocycle volume modifier (capped at setRange max)
-  sets = Math.min(setRange[1], Math.max(2, Math.round(sets * mesoPhase.volumeMultiplier)));
 
   // Session duration cap: 60-min or less sessions max 3 sets per exercise
   if (session <= 60 && sets > 3) sets = 3;

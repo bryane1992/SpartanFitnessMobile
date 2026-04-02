@@ -306,8 +306,16 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
   const wodById = {};
   for (const w of allWods) wodById[w.id] = w;
 
-  // WOD pool from Claude's selections
-  const wodPool = (selections.wodPool || []).filter(id => wodById[id]);
+  // WOD pool — minimum 3 for rotation variety
+  let wodPool = (selections.wodPool || []).filter(id => wodById[id]);
+  // Pad with beginner defaults if pool is too small
+  if (wodPool.length < 3) {
+    const defaults = ['amrap_bodyweight_10', 'beginner_circuit_1', 'beginner_fortime_1', 'beginner_circuit_2', 'beginner_circuit_4'];
+    for (const d of defaults) {
+      if (!wodPool.includes(d) && wodById[d]) wodPool.push(d);
+      if (wodPool.length >= 5) break;
+    }
+  }
 
   // Warmup pool — no jog if can't run
   const warmupPool = shouldHaveRuns ? WARMUP_IDS_WITH_JOG : WARMUP_IDS;
@@ -349,7 +357,15 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
       const dayConfig = dayConfigs[tdi % dayConfigs.length];
       const daySelection = (selections.days || [])[tdi % (selections.days || []).length] || {};
-      const title = daySelection.title || dayConfig.type?.replace(/_/g, ' ').toUpperCase() || 'TRAINING';
+
+      // Day name — use Claude's creative title but validate it makes sense
+      // If Claude didn't provide one, generate from movement patterns
+      let title = daySelection.title;
+      if (!title) {
+        const PATTERN_NAMES = { squat: 'Squat', hinge: 'Hinge', horizontal_push: 'Push', horizontal_pull: 'Pull', vertical_push: 'Press', vertical_pull: 'Pull', carry: 'Carry', core: 'Core' };
+        const primary = (dayConfig.primary_patterns || []).slice(0, 2).map(p => PATTERN_NAMES[p] || p).join(' & ');
+        title = primary ? primary.toUpperCase() : 'TRAINING';
+      }
       const focusLabel = displayPhase === 'race_prep'
         ? `TAPER \u2022 RACE PREP \u2022 Week ${week}`
         : `${mesoPhase.label} \u2022 ${stimulus.label} \u2022 Week ${week}`;
@@ -359,10 +375,21 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       const usedToday = new Set();
       let blockOrder = 0;
       const bodyCompGoal = userProfile.bodyCompGoal || 'maintain';
+      const dayPatterns = [...(dayConfig.primary_patterns || []), ...(dayConfig.secondary_patterns || [])];
 
-      // ── WARMUP ──
-      const warmupBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'WARM-UP', type: 'MOVEMENT PREP', timeCap: '8 min', isAmrap: false, hasGps: false });
-      const shuffledWarmup = [...warmupPool].sort(() => Math.random() - 0.5).slice(0, 4);
+      // ── WARMUP — matched to day's movement patterns ──
+      const WARMUP_BY_FOCUS = {
+        lower: ['air_squats', 'cossack_squats', 'lunge_matrix', 'samson_stretch', 'high_knees', 'dynamic_stretching'],
+        upper: ['push_up_to_t', 'pvc_pass_throughs', 'dynamic_stretching', 'arm_circles', 'bear_crawl', 'inchworm'],
+        full: ['dynamic_stretching', 'air_squats', 'push_up_to_t', 'bear_crawl', 'high_knees', 'lunge_matrix'],
+      };
+      const warmupFocus = dayPatterns.some(p => ['squat', 'hinge'].includes(p)) ? 'lower'
+        : dayPatterns.some(p => ['horizontal_push', 'horizontal_pull', 'vertical_push', 'vertical_pull'].includes(p)) ? 'upper' : 'full';
+      let dayWarmupPool = WARMUP_BY_FOCUS[warmupFocus];
+      if (!shouldHaveRuns) dayWarmupPool = dayWarmupPool.filter(id => id !== 'easy_jog' && id !== 'strides');
+
+      const warmupBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'WARM-UP', type: 'MOVEMENT PREP', timeCap: '6 min', isAmrap: false, hasGps: false });
+      const shuffledWarmup = [...dayWarmupPool].sort(() => Math.random() - 0.5).slice(0, 3);
       for (let i = 0; i < shuffledWarmup.length; i++) {
         const ex = exerciseById[shuffledWarmup[i]];
         if (ex) await savePlanExercise({ planBlockId: warmupBlockId, exerciseId: ex.id, sortOrder: i, sets: `1x${ex.default_reps || '10'}`, reps: ex.default_reps || '10', weight: ex.default_weight || 'BW', rest: null, notes: null });
@@ -442,18 +469,42 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
       }
 
-      // ── CORE — guaranteed when day config requests it ──
+      // ── CORE — ALWAYS present, category rotation across days ──
+      const CORE_CATEGORIES = {
+        anti_extension: ['plank', 'dead_bug', 'bird_dog', 'plank_to_pushup'],
+        flexion: ['sit_ups', 'v_ups', 'mountain_climbers', 'russian_twists'],
+        anti_rotation: ['bird_dog', 'pallof_press', 'cable_woodchop', 'dead_bug'],
+        rotation: ['russian_twists', 'cable_woodchop'],
+      };
+      const corePairs = [
+        ['anti_extension', 'flexion'],
+        ['anti_rotation', 'rotation'],
+        ['anti_extension', 'anti_rotation'],
+        ['flexion', 'rotation'],
+      ];
+      const corePair = corePairs[tdi % corePairs.length];
       let coreIds = daySelection.core || [];
-      if (coreIds.length === 0 && dayConfig.core_block) {
-        const coreOptions = exerciseMenu.filter(e => e.pattern === 'core').map(e => e.id);
-        // Pick 2 core exercises, rotating by week
-        if (coreOptions.length > 0) {
-          coreIds.push(coreOptions[week % coreOptions.length]);
-          if (coreOptions.length > 1) coreIds.push(coreOptions[(week + 1) % coreOptions.length]);
+      if (coreIds.length === 0) {
+        // Auto-select from category rotation
+        for (const cat of corePair) {
+          const pool = CORE_CATEGORIES[cat].filter(id => exerciseById[id] && !usedToday.has(id));
+          if (pool.length > 0) {
+            const pick = pool[(week + tdi) % pool.length];
+            coreIds.push(pick);
+            usedToday.add(pick);
+          }
+        }
+        // Add a third from remaining categories
+        const usedCats = new Set(corePair);
+        const remaining = Object.keys(CORE_CATEGORIES).filter(c => !usedCats.has(c));
+        if (remaining.length > 0) {
+          const extraCat = remaining[week % remaining.length];
+          const extraPool = CORE_CATEGORIES[extraCat].filter(id => exerciseById[id] && !coreIds.includes(id));
+          if (extraPool.length > 0) coreIds.push(extraPool[week % extraPool.length]);
         }
       }
       if (coreIds.length > 0) {
-        const coreBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'CORE', type: 'CIRCUIT', timeCap: '8 min', isAmrap: false, hasGps: false });
+        const coreBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'CORE', type: 'CIRCUIT', timeCap: '6 min', isAmrap: false, hasGps: false });
         for (let i = 0; i < coreIds.length; i++) {
           const ex = exerciseById[coreIds[i]];
           if (!ex) continue;
