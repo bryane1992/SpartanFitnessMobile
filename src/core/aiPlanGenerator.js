@@ -368,8 +368,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         if (ex) await savePlanExercise({ planBlockId: warmupBlockId, exerciseId: ex.id, sortOrder: i, sets: `1x${ex.default_reps || '10'}`, reps: ex.default_reps || '10', weight: ex.default_weight || 'BW', rest: null, notes: null });
       }
 
-      // ── COMPOUNDS — expand pool respecting archetype equipment preference ──
-      const compoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig, archetype);
+      // ── COMPOUNDS — expand pool respecting archetype + phase progression ──
+      const compoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig, archetype, week);
       const compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, 3);
       if (compoundIds.length > 0) {
         const compBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'MAIN LIFTS', type: 'COMPOUND', timeCap: '25 min', isAmrap: false, hasGps: false });
@@ -407,8 +407,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
       }
 
-      // ── ACCESSORIES — expand pool respecting archetype equipment preference ──
-      const accPool = expandPool(daySelection.accessories || [], exerciseMenu, dayConfig, archetype);
+      // ── ACCESSORIES — expand pool respecting archetype + phase progression ──
+      const accPool = expandPool(daySelection.accessories || [], exerciseMenu, dayConfig, archetype, week);
       const accIds = rotateExercises(accPool, week, recentlyUsed, usedToday, 2);
       if (accIds.length > 0) {
         const accBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'ACCESSORIES', type: 'ISOLATION', timeCap: '10 min', isAmrap: false, hasGps: false });
@@ -494,22 +494,46 @@ function rotateExercises(pool, week, recentlyUsed, usedToday, pickCount) {
 }
 
 // Expand Claude's exercise picks by adding similar exercises from the menu
-// Respects archetype equipment preference — machines first for beginners, barbell first for athletes
-function expandPool(claudePicks, exerciseMenu, dayConfig, archetype) {
+// Respects archetype equipment preference AND phase progression
+// Beginners: machines only in weeks 1-4, add DB in weeks 5-8, barbell in 9+
+function expandPool(claudePicks, exerciseMenu, dayConfig, archetype, week) {
   const pool = [...claudePicks];
   const poolSet = new Set(pool);
   const patterns = [...(dayConfig.primary_patterns || []), ...(dayConfig.secondary_patterns || [])];
   const equipPref = archetype?.equipmentPreference || ['barbell', 'dumbbell', 'kettlebell', 'machine', 'cable', 'bodyweight'];
+  const isBeginner = archetype?.exerciseComplexity === 'simple';
 
-  // Sort menu exercises by equipment preference (preferred equipment first)
+  // For beginners: restrict equipment by phase
+  // Weeks 1-4: machine, cable, bodyweight only
+  // Weeks 5-8: add dumbbell, kettlebell
+  // Weeks 9+: add barbell (if available)
+  let allowedEquipment;
+  if (isBeginner) {
+    if (week <= 4) {
+      allowedEquipment = new Set(['machine', 'cable', 'bodyweight']);
+    } else if (week <= 8) {
+      allowedEquipment = new Set(['machine', 'cable', 'dumbbell', 'kettlebell', 'bodyweight']);
+    } else {
+      allowedEquipment = null; // all allowed
+    }
+  }
+
+  // Filter and sort by equipment preference
   const sorted = exerciseMenu
-    .filter(ex => patterns.includes(ex.pattern) && !poolSet.has(ex.id))
+    .filter(ex => {
+      if (poolSet.has(ex.id)) return false;
+      if (!patterns.includes(ex.pattern)) return false;
+      // Phase-based equipment restriction for beginners
+      if (allowedEquipment && !allowedEquipment.has(ex.equipment)) return false;
+      // Never add advanced exercises for beginners via expansion
+      if (isBeginner && /ab.?wheel|toes.?to.?bar|muscle.?up|pistol|handstand|jump.?squat/i.test(ex.id)) return false;
+      return true;
+    })
     .sort((a, b) => {
       const aRank = equipPref.indexOf(a.equipment);
       const bRank = equipPref.indexOf(b.equipment);
       const aScore = aRank >= 0 ? aRank : 99;
       const bScore = bRank >= 0 ? bRank : 99;
-      // Prefer seed exercises over ExerciseDB
       const aSource = a.source === 'seed' || !a.source ? 0 : 1;
       const bSource = b.source === 'seed' || !b.source ? 0 : 1;
       return (aScore + aSource * 10) - (bScore + bSource * 10);
