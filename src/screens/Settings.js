@@ -135,32 +135,6 @@ export default function Settings({ navigation }) {
     setEditEquipment(prev => prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]);
   };
 
-  // Equipment upgrade swap maps — when new equipment is added, swap exercises
-  const EQUIPMENT_UPGRADES = {
-    pull_up_bar: {
-      lat_pulldown: 'pull_ups',           // machine pull → real pull-ups
-      close_grip_lat_pulldown: 'chin_ups', // close-grip → chin-ups
-      band_assisted_pull_ups: 'pull_ups',  // assisted → real
-    },
-    barbell: {
-      db_bench_press: 'bench_press',       // DB bench → barbell bench
-      db_goblet_squat: 'back_squat',       // goblet → back squat
-      db_romanian_deadlift: 'deadlift',    // DB RDL → barbell deadlift
-      db_shoulder_press: 'overhead_press',  // DB OHP → barbell OHP
-    },
-    squat_rack: {
-      leg_press: 'back_squat',             // leg press → rack squats
-    },
-    kettlebell: {
-      db_swing: 'kb_swings',               // DB swing → KB swing
-      db_goblet_squat: 'kb_goblet_squat',  // DB goblet → KB goblet
-    },
-    cables: {
-      db_fly: 'cable_fly',                 // DB fly → cable fly
-      reverse_fly: 'face_pulls',           // DB reverse fly → cable face pulls
-    },
-  };
-
   const saveEquipmentChanges = async () => {
     if (!profile) return;
     const oldEquip = new Set(profile.equipment || []);
@@ -180,60 +154,95 @@ export default function Settings({ navigation }) {
     if (added.length > 0) changes.push(`Added: ${added.join(', ')}`);
     if (removed.length > 0) changes.push(`Removed: ${removed.join(', ')}`);
 
-    // Build swap map from added equipment
-    const swapMap = {};
-    for (const equip of added) {
-      const upgrades = EQUIPMENT_UPGRADES[equip];
-      if (upgrades) Object.assign(swapMap, upgrades);
-    }
-    const swapCount = Object.keys(swapMap).length;
+    // Ask Claude to figure out the best swaps for the new equipment
+    // Claude sees: current exercises in future weeks + new equipment + user profile
+    // This is smarter than hardcoded swap maps — handles rowers, specialty equipment, etc.
+    Alert.alert(
+      'Equipment Updated',
+      `${changes.join('\n')}\n\nWould you like to update future workouts to use your ${added.length > 0 ? 'new' : 'updated'} equipment? Your completed workouts stay as-is.`,
+      [
+        { text: 'Save for Next Plan', style: 'cancel' },
+        {
+          text: 'Update Future Workouts',
+          onPress: async () => {
+            setIsRegenerating(true);
+            try {
+              // Get current plan exercises for future weeks
+              const database = await (await import('../data/database')).getDatabase();
+              const today = new Date().toISOString().split('T')[0];
+              const futureExercises = await database.getAllAsync(
+                `SELECT DISTINCT pe.exercise_id, e.name, e.category
+                 FROM plan_exercises pe
+                 JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+                 JOIN plan_days pd ON pd.id = pb.plan_day_id
+                 JOIN exercises e ON e.id = pe.exercise_id
+                 WHERE pd.date > ? AND pe.is_completed = 0
+                 ORDER BY e.name`,
+                [today]
+              );
 
-    if (swapCount > 0 && added.length > 0) {
-      Alert.alert(
-        'Equipment Updated',
-        `${changes.join('\n')}\n\nUpgrade future workouts to use your new ${added.join(' & ')}? This keeps your completed workouts and just swaps in better exercises going forward.`,
-        [
-          { text: 'Keep Current Exercises', style: 'cancel' },
-          {
-            text: 'Upgrade Exercises',
-            onPress: async () => {
+              // Build the exercise menu with new equipment included
+              const { buildExerciseMenu } = require('../core/menuBuilder');
+              const { detectArchetype, adjustArchetypeForEquipment } = require('../core/archetypes');
+              let arch = detectArchetype(updated);
+              arch = adjustArchetypeForEquipment(arch, updated.equipment);
+              const newMenu = buildExerciseMenu(updated, arch);
+              const newMenuIds = new Set(newMenu.map(e => e.id));
+
+              // Find exercises now available that weren't before
+              const oldMenu = buildExerciseMenu({ ...updated, equipment: [...oldEquip] }, arch);
+              const oldMenuIds = new Set(oldMenu.map(e => e.id));
+              const newlyAvailable = newMenu.filter(e => !oldMenuIds.has(e.id));
+
+              if (newlyAvailable.length === 0 && removed.length === 0) {
+                Alert.alert('No Changes Needed', 'Your current exercises are already optimal for this equipment.');
+                setIsRegenerating(false);
+                return;
+              }
+
+              // Use Claude to decide swaps
+              const { sendCoachMessage } = require('../data/coachApi');
+              const currentExList = futureExercises.map(e => `${e.exercise_id}: ${e.name} (${e.category})`).join('\n');
+              const newExList = newlyAvailable.map(e => `${e.id}: ${e.name} (${e.equipment})`).join('\n');
+
+              const swapPrompt = `The user just added new equipment: ${added.join(', ')}. Here are their current future exercises and the new exercises now available. Suggest specific swaps as JSON.
+
+CURRENT EXERCISES IN PLAN:
+${currentExList}
+
+NEW EXERCISES NOW AVAILABLE:
+${newExList}
+
+Return JSON: {"swaps": [{"old": "exercise_id", "new": "exercise_id", "reason": "why"}]}
+Only suggest swaps where the new exercise is a clear upgrade for the same movement pattern. Max 5 swaps.`;
+
+              const response = await sendCoachMessage(null, [{ role: 'user', content: swapPrompt }], { profile: updated });
+              let swaps = [];
               try {
+                const parsed = JSON.parse(response.message.match(/\{[\s\S]*\}/)?.[0] || '{}');
+                swaps = parsed.swaps || [];
+              } catch {}
+
+              if (swaps.length > 0) {
+                const swapMap = {};
+                for (const s of swaps) {
+                  if (s.old && s.new && newMenuIds.has(s.new)) swapMap[s.old] = s.new;
+                }
                 const total = await upgradeExercisesForNewEquipment(added, swapMap);
-                Alert.alert('Upgraded', `${total} exercises updated across future workouts to use your new equipment.`);
+                Alert.alert('Upgraded', `${total} exercises swapped in future workouts:\n${swaps.map(s => `${s.reason}`).join('\n')}`);
                 await useWorkoutStore.getState().loadTodayWorkout();
-              } catch (e) {
-                console.error('Equipment upgrade error:', e);
-                Alert.alert('Error', 'Failed to upgrade exercises. Try regenerating the plan.');
+              } else {
+                Alert.alert('Equipment Saved', 'No direct swaps found. New exercises will appear when you regenerate your plan.');
               }
-            },
+            } catch (e) {
+              console.error('Equipment upgrade error:', e);
+              Alert.alert('Equipment Saved', 'Saved for your next plan generation.');
+            }
+            setIsRegenerating(false);
           },
-        ]
-      );
-    } else if (removed.length > 0) {
-      Alert.alert(
-        'Equipment Updated',
-        `${changes.join('\n')}\n\nYou removed equipment. Regenerate your plan to remove exercises that need it?`,
-        [
-          { text: 'Keep Current Plan', style: 'cancel' },
-          {
-            text: 'Regenerate Plan',
-            style: 'destructive',
-            onPress: async () => {
-              setIsRegenerating(true);
-              try {
-                await initDatabase();
-                await generateNewPlan(updated);
-              } catch (e) {
-                console.error('Error regenerating:', e);
-              }
-              setIsRegenerating(false);
-            },
-          },
-        ]
-      );
-    } else {
-      Alert.alert('Equipment Updated', changes.join('\n'));
-    }
+        },
+      ]
+    );
   };
 
   const handleRegenerate = () => {
