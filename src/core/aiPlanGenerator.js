@@ -358,14 +358,14 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       const dayConfig = dayConfigs[tdi % dayConfigs.length];
       const daySelection = (selections.days || [])[tdi % (selections.days || []).length] || {};
 
-      // Day name — use Claude's creative title but validate it makes sense
-      // If Claude didn't provide one, generate from movement patterns
-      let title = daySelection.title;
-      if (!title) {
-        const PATTERN_NAMES = { squat: 'Squat', hinge: 'Hinge', horizontal_push: 'Push', horizontal_pull: 'Pull', vertical_push: 'Press', vertical_pull: 'Pull', carry: 'Carry', core: 'Core' };
-        const primary = (dayConfig.primary_patterns || []).slice(0, 2).map(p => PATTERN_NAMES[p] || p).join(' & ');
-        title = primary ? primary.toUpperCase() : 'TRAINING';
-      }
+      // Day name — generate from actual selected exercises, not Claude's static week 1 title
+      // Claude's title was for week 1 exercises, but rotation changes exercises each week
+      const PATTERN_NAMES = { squat: 'LEGS', hinge: 'POSTERIOR', horizontal_push: 'CHEST', horizontal_pull: 'BACK', vertical_push: 'SHOULDERS', vertical_pull: 'PULL', carry: 'CARRY', core: 'CORE' };
+      const FUN_SUFFIXES = ['FORGE', 'GRIND', 'POWER', 'BLITZ', 'FIRE', 'IRON', 'THUNDER', 'FURY', 'SPARK', 'RUSH', 'WAVE', 'STEEL', 'GRIT', 'RISE', 'BURN'];
+      const primaryPatterns = (dayConfig.primary_patterns || []).slice(0, 2);
+      const patternLabel = primaryPatterns.map(p => PATTERN_NAMES[p] || p.toUpperCase()).join(' & ');
+      const suffix = FUN_SUFFIXES[(week * dayConfigs.length + tdi) % FUN_SUFFIXES.length];
+      const title = patternLabel ? `${patternLabel} ${suffix}` : (daySelection.title || 'TRAINING');
       const focusLabel = displayPhase === 'race_prep'
         ? `TAPER \u2022 RACE PREP \u2022 Week ${week}`
         : `${mesoPhase.label} \u2022 ${stimulus.label} \u2022 Week ${week}`;
@@ -479,12 +479,14 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
       }
 
-      // ── CORE — ALWAYS present, category rotation across days ──
+      // ── CORE — ALWAYS present, category rotation, equipment-filtered ──
+      const userEquipSet = new Set((userProfile.equipment || []).map(e => e.toLowerCase()));
+      const hasCables = userEquipSet.has('cables') || userEquipSet.has('cable');
       const CORE_CATEGORIES = {
         anti_extension: ['plank', 'dead_bug', 'bird_dog', 'plank_to_pushup'],
         flexion: ['sit_ups', 'v_ups', 'mountain_climbers', 'russian_twists'],
-        anti_rotation: ['bird_dog', 'pallof_press', 'cable_woodchop', 'dead_bug'],
-        rotation: ['russian_twists', 'cable_woodchop'],
+        anti_rotation: hasCables ? ['bird_dog', 'pallof_press', 'cable_woodchop', 'dead_bug'] : ['bird_dog', 'dead_bug', 'plank', 'plank_to_pushup'],
+        rotation: hasCables ? ['russian_twists', 'cable_woodchop'] : ['russian_twists', 'mountain_climbers'],
       };
       const corePairs = [
         ['anti_extension', 'flexion'],
@@ -568,13 +570,16 @@ function calculateBlockTimes(sessionMinutes, dayConfig, archetypeKey) {
   // 31-44 min: Tier 1 + partial Tier 2
   if (sessionMinutes <= 44) {
     const keepWod = hasWod && ['obstacle_racer', 'fat_loss'].includes(archetypeKey);
-    return { warmup: 5, mainLifts: 16, wod: keepWod ? 7 : 0, accessories: keepWod ? 0 : 6, armBlaster: 0, core: 5, cooldown: 4,
-      sets: 3, mainLiftCount: 2, accessoryCount: keepWod ? 0 : 1, coreCount: 2, warmupCount: 3, rest: '30-60s' };
+    // Arms kept for muscle-building archetypes even at short sessions (cut WOD instead)
+    const keepArms = hasArms && ['hypertrophy', 'skinny_beginner', 'obstacle_racer'].includes(archetypeKey);
+    return { warmup: 5, mainLifts: 16, wod: keepWod && !keepArms ? 7 : 0, accessories: keepArms ? 0 : (keepWod ? 0 : 6), armBlaster: keepArms ? 6 : 0, core: 5, cooldown: 4,
+      sets: 3, mainLiftCount: 2, accessoryCount: keepArms || keepWod ? 0 : 1, coreCount: 2, warmupCount: 3, rest: '30-60s' };
   }
 
   // 45-59 min: Tier 1 + Tier 2
   if (sessionMinutes <= 59) {
-    const keepArms = hasArms && ['hypertrophy', 'obstacle_racer'].includes(archetypeKey);
+    // Arms for any archetype that benefits from direct arm work
+    const keepArms = hasArms && !['endurance'].includes(archetypeKey);
     return { warmup: 5, mainLifts: hasWod ? 18 : 22, wod: hasWod ? 10 : 0, accessories: keepArms ? 5 : 8, armBlaster: keepArms ? 6 : 0, core: 5, cooldown: 5,
       sets: 3, mainLiftCount: 3, accessoryCount: keepArms ? 1 : 2, coreCount: 3, warmupCount: 3, rest: '30-60s' };
   }
