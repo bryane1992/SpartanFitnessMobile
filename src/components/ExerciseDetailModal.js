@@ -15,22 +15,44 @@ import Constants from 'expo-constants';
 
 // Verified mapping: seed exercise ID → ExerciseDB API ID (for animated GIFs)
 const SEED_TO_EXDB_ID = {
+  // Barbell
   bench_press: '0025', incline_bench: '0047', back_squat: '0043', front_squat: '0024',
   deadlift: '0032', overhead_press: '0774', barbell_row: '0027', sumo_deadlift: '0117',
   romanian_deadlift: '0085', close_grip_bench: '0257', barbell_curl: '0031',
-  barbell_lunge: '0054', skull_crushers: '0060',
+  barbell_lunge: '0054', skull_crushers: '0060', trap_bar_deadlift: '0811',
+  power_clean: '0648', thrusters: '3305', good_morning: '0044',
+  // Dumbbell
   db_bench_press: '0289', db_incline_press: '0314', db_shoulder_press: '0405',
   db_row: '0294', bicep_curl: '0285', hammer_curl: '0313',
-  db_chest_fly: '0308', lateral_raise: '0334', db_lunge: '0291',
-  goblet_squat: '1760', tricep_kickback: '0373',
-  concentration_curl: '0297', db_arnold_press: '0262',
+  db_chest_fly: '0308', db_fly: '0308', lateral_raise: '0334',
+  db_lunges: '0336', db_lunge: '0291', goblet_squat: '1760', db_goblet_squat: '1760',
+  tricep_kickback: '0373', concentration_curl: '0297', db_arnold_press: '2137',
   bulgarian_split_squat: '1757', step_ups: '0809',
+  db_reverse_fly: '0383', preacher_curl: '0372', db_push_press: '1700',
+  db_romanian_deadlift: '1459', db_single_leg_deadlift: '1757',
+  split_squat: '0097',
+  // Bodyweight
   push_ups: '0662', pull_ups: '0652', chin_ups: '1326', dips: '0251',
   mountain_climbers: '0630', sit_ups: '0001', russian_twists: '0687',
   inverted_row: '1412', bench_dips: '0129', pike_push_ups: '0471',
+  burpees: '1160', dead_bug: '0276', v_ups: '0507',
+  glute_bridge: '3013', bear_crawl: '3360', jump_squats: '0514',
+  muscle_ups: '0631', jump_rope: '2612',
+  // Cable/Machine
   lat_pulldown: '2330', cable_tricep_pushdown: '0201', cable_bicep_curl: '0200',
   leg_press: '0739', leg_extension: '0585', leg_curl: '0599',
-  kb_swing: '0549', kb_goblet_squat: '0534', farmer_walk: '2133',
+  cable_face_pulls: '1356', face_pulls: '1356',
+  cable_lateral_raise: '0178', cable_pull_through: '0196',
+  cable_curl: '0868', cable_row: '0862',
+  tricep_pushdown: '1723', machine_shoulder_press: '0603', machine_row: '1350',
+  back_extension: '0573', straight_arm_pulldown: '0237',
+  // Kettlebell
+  kb_swing: '0549', kb_swings: '0549', kb_goblet_squat: '0534',
+  farmer_walk: '2133', turkish_getup: '0551', kb_thruster: '0550',
+  // Rehab/Prehab
+  calf_stretch_wall: '1377', seated_calf_stretch: '1390', ankle_circles: '1368',
+  glute_stretch_seated: '1424', wrist_circles: '1428', neck_stretch: '0716',
+  shoulder_ext_rotation: '0863',
 };
 
 function getRapidApiKey() {
@@ -191,6 +213,40 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
 
       if (!ex) return;
 
+      // Enrich seed exercises with API data (instructions, target muscles, description)
+      const exdbId = SEED_TO_EXDB_ID[ex.id] || (ex.api_id ? ex.api_id : null);
+      const needsEnrichment = !ex.instructions || ex.instructions === '[]' || ex.instructions === 'null';
+      if (needsEnrichment && exdbId) {
+        const apiKey = getRapidApiKey();
+        if (apiKey) {
+          try {
+            const resp = await fetch(`https://exercisedb.p.rapidapi.com/exercises/exercise/${exdbId}`, {
+              headers: { 'X-RapidAPI-Key': apiKey, 'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com' }
+            });
+            if (resp.ok) {
+              const apiData = await resp.json();
+              if (apiData) {
+                ex = {
+                  ...ex,
+                  instructions: JSON.stringify(apiData.instructions || []),
+                  target_muscles: JSON.stringify(apiData.target ? [apiData.target] : []),
+                  secondary_muscles: JSON.stringify(apiData.secondaryMuscles || []),
+                  description: apiData.description || null,
+                };
+                // Cache enrichment to DB so we don't re-fetch
+                try {
+                  const database = await getDatabase();
+                  await database.runAsync(
+                    'UPDATE exercises SET instructions = ?, target_muscles = ?, description = ? WHERE id = ?',
+                    [ex.instructions, ex.target_muscles, ex.description, ex.id]
+                  );
+                } catch { /* ignore cache failure */ }
+              }
+            }
+          } catch { /* offline */ }
+        }
+      }
+
       // Try animated GIF from ExerciseDB paid API first
       if (!ex.gif_url) {
         const exdbId = SEED_TO_EXDB_ID[ex.id] || (ex.api_id ? ex.api_id : null);
@@ -338,6 +394,13 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
                         </View>
                       ))}
                     </View>
+                  </View>
+                ) : null}
+
+                {/* Description */}
+                {exercise.description ? (
+                  <View style={styles.section}>
+                    <Text style={styles.descriptionText}>{String(exercise.description)}</Text>
                   </View>
                 ) : null}
 
@@ -527,6 +590,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1.5,
     marginBottom: 8,
+  },
+
+  descriptionText: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 13,
+    lineHeight: 20,
   },
 
   // Muscles

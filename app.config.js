@@ -59,7 +59,7 @@ export default {
     ],
     extra: {
       eas: {
-        projectId: 'spartan-fitness-2025',
+        projectId: 'a798bcee-131b-4777-bca1-b4be26db20ab',
       },
       exerciseDbApiKey: process.env.EXERCISE_DB_KEY,
       claudeApiKey: process.env.CLAUDE_TOKEN,

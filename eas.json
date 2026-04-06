@@ -12,6 +12,9 @@
     },
     "preview": {
       "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
       "ios": {
         "resourceClass": "m-medium"
       }
@@ -22,7 +25,6 @@
         "autoIncrement": true
       },
       "android": {
-        "resourceClass": "m-medium",
         "autoIncrement": true
       }
     }

@@ -40,6 +40,12 @@ const GOAL_LABELS = {
   general_fitness: 'General Fitness',
 };
 
+const EQUIP_ICONS = {
+  dumbbells: 'DB', barbell: 'BB', squat_rack: 'RK', bench: 'BN',
+  pull_up_bar: 'PU', kettlebell: 'KB', cables: 'CB', machines: 'MC',
+  bands: 'BD', cardio_machines: 'CM', outdoor: 'OD',
+};
+
 const EQUIPMENT_LIST = [
   { id: 'dumbbells', label: 'Dumbbells' },
   { id: 'barbell', label: 'Barbell & Plates' },
@@ -331,64 +337,106 @@ export default function Settings({ navigation }) {
           <Text style={styles.title}>Settings</Text>
         </View>
 
-        {/* Profile Summary */}
+        {/* Profile */}
         {profile && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Profile</Text>
-
-            <View style={styles.profileCard}>
-              <ProfileRow label="Goals" value={
-                profile.goals
-                  ? profile.goals.map(g => GOAL_LABELS[g] || g).join(', ')
-                  : (GOAL_LABELS[profile.goal] || profile.goal || '')
-              } />
-              {profile.sex ? (
-                <ProfileRow label="Sex" value={profile.sex.charAt(0).toUpperCase() + profile.sex.slice(1)} />
+          <>
+            {/* Body Stats */}
+            <View style={styles.statCardsRow}>
+              {profile.weight ? (
+                <View style={styles.statCard}>
+                  <Text style={styles.statCardValue}>{profile.weight}</Text>
+                  <Text style={styles.statCardUnit}>LBS</Text>
+                </View>
               ) : null}
               {profile.height ? (
-                <ProfileRow label="Height" value={profile.height} />
+                <View style={styles.statCard}>
+                  <Text style={styles.statCardValue}>{profile.height}</Text>
+                  <Text style={styles.statCardUnit}>HEIGHT</Text>
+                </View>
               ) : null}
-              {profile.weight ? (
-                <ProfileRow label="Weight" value={`${profile.weight} lbs`} />
-              ) : null}
-              {profile.bmi ? (
-                <ProfileRow label="BMI" value={`${profile.bmi}`} />
-              ) : null}
-              <ProfileRow label="Experience" value={profile.experience?.charAt(0).toUpperCase() + profile.experience?.slice(1)} />
-              {profile.workingWeights && Object.keys(profile.workingWeights).length > 0 ? (
-                <ProfileRow label="Working Weights" value={
-                  Object.entries(profile.workingWeights)
-                    .map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1).replace('_', ' ')}: ${v} lb`)
-                    .join(', ')
-                } />
-              ) : null}
-              <ProfileRow label="Style" value={STYLE_LABELS[profile.workoutStyle] || profile.workoutStyle} />
-              <ProfileRow label="Body Goal" value={
-                profile.bodyCompGoals
-                  ? profile.bodyCompGoals.map(g => BODY_COMP_LABELS[g] || g).join(', ')
-                  : (BODY_COMP_LABELS[profile.bodyCompGoal] || profile.bodyCompGoal || '')
-              } />
-              <ProfileRow label="Days/Week" value={`${profile.trainingDaysPerWeek} days`} />
+              <View style={styles.statCard}>
+                <Text style={styles.statCardValue}>{profile.trainingDaysPerWeek}</Text>
+                <Text style={styles.statCardUnit}>DAYS/WK</Text>
+              </View>
               {profile.sessionDuration ? (
-                <ProfileRow label="Session" value={`${profile.sessionDuration} min`} />
+                <View style={styles.statCard}>
+                  <Text style={styles.statCardValue}>{profile.sessionDuration}</Text>
+                  <Text style={styles.statCardUnit}>MIN</Text>
+                </View>
               ) : null}
+            </View>
+
+            {/* Goals */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Goals</Text>
+              <View style={styles.pillRow}>
+                {(profile.goals || [profile.goal]).filter(Boolean).map((g, i) => (
+                  <View key={i} style={styles.goalPill}>
+                    <Text style={styles.goalPillText}>{GOAL_LABELS[g] || g}</Text>
+                  </View>
+                ))}
+                {(profile.bodyCompGoals || [profile.bodyCompGoal]).filter(Boolean).map((g, i) => (
+                  <View key={`bc-${i}`} style={[styles.goalPill, styles.goalPillSecondary]}>
+                    <Text style={styles.goalPillSecondaryText}>{BODY_COMP_LABELS[g] || g}</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={styles.pillRow}>
+                <View style={styles.infoPill}>
+                  <Text style={styles.infoPillText}>{(profile.experience || 'beginner').toUpperCase()}</Text>
+                </View>
+                <View style={styles.infoPill}>
+                  <Text style={styles.infoPillText}>{STYLE_LABELS[profile.workoutStyle] || profile.workoutStyle || ''}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Working Weights */}
+            {profile.workingWeights && Object.keys(profile.workingWeights).length > 0 ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Working Weights</Text>
+                <View style={styles.weightsGrid}>
+                  {Object.entries(profile.workingWeights).map(([lift, weight]) => (
+                    <View key={lift} style={styles.weightCard}>
+                      <Text style={styles.weightValue}>{weight}</Text>
+                      <Text style={styles.weightLabel}>{lift.replace('_', ' ').toUpperCase()}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {/* Equipment */}
+            <View style={styles.section}>
               <TouchableOpacity onPress={handleUpdateEquipment}>
-                <ProfileRow label="Equipment" value={`${(profile.equipment || []).length} items (tap to edit)`} />
+                <View style={styles.sectionTitleRow}>
+                  <Text style={styles.sectionTitle}>Equipment</Text>
+                  <Text style={styles.editLink}>EDIT</Text>
+                </View>
               </TouchableOpacity>
+              <View style={styles.equipGrid}>
+                {(profile.equipment || []).map((eq, i) => {
+                  const icon = EQUIP_ICONS[eq] || '?';
+                  const label = EQUIPMENT_LIST.find(e => e.id === eq)?.label || eq;
+                  return (
+                    <View key={i} style={styles.equipCard}>
+                      <Text style={styles.equipIcon}>{icon}</Text>
+                      <Text style={styles.equipCardLabel}>{label}</Text>
+                    </View>
+                  );
+                })}
+              </View>
               {profile.equipmentDetails?.barbell?.maxWeight ? (
-                <ProfileRow label="Barbell Max" value={`${profile.equipmentDetails.barbell.maxWeight} lbs`} />
-              ) : null}
-              {profile.equipmentDetails?.kettlebell?.weights ? (
-                <ProfileRow label="Kettlebells" value={`${profile.equipmentDetails.kettlebell.weights} lbs`} />
+                <Text style={styles.equipDetail}>Barbell max: {profile.equipmentDetails.barbell.maxWeight} lbs</Text>
               ) : null}
               {profile.equipmentDetails?.dumbbells?.maxWeight ? (
-                <ProfileRow label="Dumbbells" value={`Up to ${profile.equipmentDetails.dumbbells.maxWeight} lbs each`} />
+                <Text style={styles.equipDetail}>Dumbbells up to {profile.equipmentDetails.dumbbells.maxWeight} lbs each</Text>
               ) : null}
-              {profile.exclusions?.length > 0 && (
-                <ProfileRow label="Exclusions" value={profile.exclusions.join(', ')} />
-              )}
+              {profile.equipmentDetails?.kettlebell?.weights ? (
+                <Text style={styles.equipDetail}>Kettlebells: {profile.equipmentDetails.kettlebell.weights} lbs</Text>
+              ) : null}
             </View>
-          </View>
+          </>
         )}
 
         {/* Plan Info */}
@@ -398,38 +446,19 @@ export default function Settings({ navigation }) {
             <View style={styles.profileCard}>
               <ProfileRow label="Total Weeks" value={`${totalWeeks}`} />
               <ProfileRow label="Phases" value={planPhases.map(p => p.name).join(' > ')} />
+              {profile?.hasRaceDate && profile?.eventDate ? (
+                <ProfileRow label="Race Day" value={(() => {
+                  const d = new Date(profile.eventDate);
+                  const weeksOut = Math.max(0, Math.floor((d - new Date()) / (1000 * 60 * 60 * 24 * 7)));
+                  return `${d.toLocaleDateString()} (${weeksOut} weeks)`;
+                })()} />
+              ) : null}
+              {profile?.raceType ? (
+                <ProfileRow label="Race" value={profile.raceType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} />
+              ) : null}
             </View>
           </View>
         )}
-
-        {/* AI Coach */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>AI Coach</Text>
-          <View style={styles.profileCard}>
-            <ProfileRow label="Status" value="Active" />
-            <ProfileRow label="Model" value="Claude Sonnet 4.6" />
-            <ProfileRow label="Access" value="Tap AI button on any workout" />
-          </View>
-        </View>
-
-        {/* Exercise Library */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Exercise Library</Text>
-          <View style={styles.profileCard}>
-            <ProfileRow label="Exercises" value={`${exerciseCount}`} />
-            <ProfileRow label="Last Sync" value={lastSync ? new Date(lastSync).toLocaleDateString() : 'Never'} />
-          </View>
-          <TouchableOpacity
-            style={[styles.actionButton, { marginTop: 8 }]}
-            onPress={handleSyncLibrary}
-            disabled={isSyncing}
-          >
-            <View style={styles.actionContent}>
-              <Text style={styles.actionLabel}>{isSyncing ? syncProgress : 'Download GIF Demos'}</Text>
-              <Text style={styles.actionDesc}>Fetch 1300+ exercise GIFs for offline viewing</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
 
         {/* Actions */}
         <View style={styles.section}>
@@ -452,9 +481,14 @@ export default function Settings({ navigation }) {
           <TouchableOpacity style={styles.actionButton} onPress={handleExportPlan}>
             <View style={styles.actionContent}>
               <Text style={styles.actionLabel}>Export Plan</Text>
-              <Text style={styles.actionDesc}>Download your workout plan for offline use</Text>
+              <Text style={styles.actionDesc}>Share your workout plan as text</Text>
             </View>
           </TouchableOpacity>
+        </View>
+
+        {/* Dev Tools */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Dev Tools</Text>
 
           <TouchableOpacity style={styles.actionButton} onPress={handleRegenerate}>
             <View style={styles.actionContent}>
@@ -469,11 +503,6 @@ export default function Settings({ navigation }) {
               <Text style={styles.actionDesc}>Change all preferences from scratch</Text>
             </View>
           </TouchableOpacity>
-        </View>
-
-        {/* Dev Tools */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Dev Tools</Text>
 
           <TouchableOpacity style={styles.actionButton} onPress={() => {
             const results = testArchetypes();
@@ -607,6 +636,159 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 10,
   },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  editLink: {
+    color: '#FF4136',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+
+  // Stat Cards (body stats row)
+  statCardsRow: {
+    flexDirection: 'row',
+    marginHorizontal: 15,
+    marginBottom: 16,
+    gap: 8,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  statCardValue: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '900',
+    fontFamily: 'monospace',
+  },
+  statCardUnit: {
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginTop: 3,
+  },
+
+  // Goal Pills
+  pillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  goalPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,65,54,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,65,54,0.2)',
+  },
+  goalPillText: {
+    color: '#FF4136',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  goalPillSecondary: {
+    backgroundColor: 'rgba(1,255,112,0.06)',
+    borderColor: 'rgba(1,255,112,0.15)',
+  },
+  goalPillSecondaryText: {
+    color: '#01FF70',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  infoPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  infoPillText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+
+  // Working Weights
+  weightsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  weightCard: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    minWidth: 80,
+    borderWidth: 1,
+    borderColor: 'rgba(255,65,54,0.1)',
+  },
+  weightValue: {
+    color: '#FF4136',
+    fontSize: 22,
+    fontWeight: '900',
+    fontFamily: 'monospace',
+  },
+  weightLabel: {
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginTop: 4,
+  },
+
+  // Equipment Grid
+  equipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  equipCard: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    minWidth: 70,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  equipIcon: {
+    color: '#FF4136',
+    fontSize: 16,
+    fontWeight: '900',
+    fontFamily: 'monospace',
+  },
+  equipCardLabel: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 9,
+    fontWeight: '600',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  equipDetail: {
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: 11,
+    marginTop: 8,
+    fontFamily: 'monospace',
+  },
+
   profileCard: {
     backgroundColor: '#1A1A1A',
     borderRadius: 14,

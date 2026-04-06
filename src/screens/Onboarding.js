@@ -139,6 +139,12 @@ export default function Onboarding({ navigation }) {
   const [workoutStyles, setWorkoutStyles] = useState([]);
   const [exclusions, setExclusions] = useState([]);
   const [bodyCompGoals, setBodyCompGoals] = useState([]);
+  // Race date
+  const [hasRaceDate, setHasRaceDate] = useState(false);
+  const [raceMonth, setRaceMonth] = useState('');
+  const [raceDay, setRaceDay] = useState('');
+  const [raceYear, setRaceYear] = useState('');
+  const [raceType, setRaceType] = useState(null);
   // Step 8: AI Notes
   const [additionalNotes, setAdditionalNotes] = useState('');
 
@@ -246,9 +252,18 @@ export default function Onboarding({ navigation }) {
     setIsGenerating(true);
 
     try {
-      // Default 16-week plan
-      const eventDate = new Date();
-      eventDate.setDate(eventDate.getDate() + 16 * 7);
+      // Use race date if provided, otherwise default 16-week plan
+      let eventDate;
+      if (hasRaceDate && raceMonth && raceDay && raceYear) {
+        eventDate = new Date(parseInt(raceYear), parseInt(raceMonth) - 1, parseInt(raceDay));
+        // Ensure race date is in the future and at least 4 weeks out
+        const minDate = new Date();
+        minDate.setDate(minDate.getDate() + 28);
+        if (eventDate < minDate) eventDate = minDate;
+      } else {
+        eventDate = new Date();
+        eventDate.setDate(eventDate.getDate() + 16 * 7);
+      }
 
       // Calculate BMI
       const totalInches = (parseInt(heightFt) || 0) * 12 + (parseInt(heightIn) || 0);
@@ -272,6 +287,8 @@ export default function Onboarding({ navigation }) {
           Object.entries(workingWeights).filter(([, v]) => v && parseFloat(v) > 0)
         ),
         eventDate: eventDate.toISOString().split('T')[0],
+        hasRaceDate: hasRaceDate,
+        raceType: raceType,
         trainingDaysPerWeek: daysPerWeek,
         trainingDays: trainingDays,
         sessionDuration: sessionDuration,
@@ -824,6 +841,68 @@ export default function Onboarding({ navigation }) {
             {exclusions.includes(ex.id) && <View style={styles.excludeMark} />}
           </TouchableOpacity>
         ))}
+
+        {/* Race Date */}
+        <Text style={[styles.sectionLabel, { marginTop: 25 }]}>Training for a race or event?</Text>
+        <Text style={styles.sectionDesc}>Your plan will peak at the right time</Text>
+
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+          <TouchableOpacity
+            style={[styles.smallCard, { flex: 1 }, !hasRaceDate && styles.smallCardSelected]}
+            onPress={() => setHasRaceDate(false)}
+          >
+            <Text style={[styles.smallLabel, !hasRaceDate && styles.smallLabelSelected]}>No specific date</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.smallCard, { flex: 1 }, hasRaceDate && styles.smallCardSelected]}
+            onPress={() => { setHasRaceDate(true); setRaceYear(String(new Date().getFullYear())); }}
+          >
+            <Text style={[styles.smallLabel, hasRaceDate && styles.smallLabelSelected]}>I have a race date</Text>
+          </TouchableOpacity>
+        </View>
+
+        {hasRaceDate ? (
+          <View>
+            {/* Race Type */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+              {[
+                { id: 'spartan_sprint', label: 'Spartan Sprint' },
+                { id: 'spartan_super', label: 'Spartan Super' },
+                { id: 'spartan_beast', label: 'Spartan Beast' },
+                { id: '5k', label: '5K' },
+                { id: '10k', label: '10K' },
+                { id: 'half_marathon', label: 'Half Marathon' },
+                { id: 'marathon', label: 'Marathon' },
+                { id: 'other', label: 'Other' },
+              ].map(r => (
+                <TouchableOpacity key={r.id}
+                  style={[styles.raceChip, raceType === r.id && styles.raceChipSelected]}
+                  onPress={() => setRaceType(r.id)}
+                >
+                  <Text style={[styles.raceChipText, raceType === r.id && styles.raceChipTextSelected]}>{r.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Date Input */}
+            <Text style={styles.sectionDesc}>Race date</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+              <TextInput style={[styles.dateInput, { flex: 1 }]} placeholder="MM" placeholderTextColor="rgba(255,255,255,0.15)"
+                value={raceMonth} onChangeText={t => setRaceMonth(t.replace(/[^0-9]/g, '').substring(0, 2))} keyboardType="numeric" maxLength={2} />
+              <TextInput style={[styles.dateInput, { flex: 1 }]} placeholder="DD" placeholderTextColor="rgba(255,255,255,0.15)"
+                value={raceDay} onChangeText={t => setRaceDay(t.replace(/[^0-9]/g, '').substring(0, 2))} keyboardType="numeric" maxLength={2} />
+              <TextInput style={[styles.dateInput, { flex: 1.5 }]} placeholder="YYYY" placeholderTextColor="rgba(255,255,255,0.15)"
+                value={raceYear} onChangeText={t => setRaceYear(t.replace(/[^0-9]/g, '').substring(0, 4))} keyboardType="numeric" maxLength={4} />
+            </View>
+
+            {raceMonth && raceDay && raceYear?.length === 4 ? (() => {
+              const rd = new Date(parseInt(raceYear), parseInt(raceMonth) - 1, parseInt(raceDay));
+              const weeksOut = Math.floor((rd - new Date()) / (1000 * 60 * 60 * 24 * 7));
+              if (weeksOut < 4) return <Text style={styles.raceDateWarning}>Race is less than 4 weeks away — plan will be compressed</Text>;
+              return <Text style={styles.raceDateInfo}>{weeksOut} weeks until race day — plan will peak at the right time</Text>;
+            })() : null}
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={styles.buttonRow}>
@@ -1854,5 +1933,51 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
     fontSize: 12,
     lineHeight: 18,
+  },
+  // Race date
+  raceChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  raceChipSelected: {
+    backgroundColor: 'rgba(255,65,54,0.1)',
+    borderColor: '#FF4136',
+  },
+  raceChipText: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  raceChipTextSelected: {
+    color: '#FF4136',
+  },
+  dateInput: {
+    backgroundColor: '#1A1A1A',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+    textAlign: 'center',
+  },
+  raceDateInfo: {
+    color: '#01FF70',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  raceDateWarning: {
+    color: '#FF851B',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
   },
 });

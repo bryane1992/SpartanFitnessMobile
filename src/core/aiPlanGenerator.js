@@ -296,6 +296,22 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
   const trainingDays = userProfile.trainingDays || Array.from({ length: userProfile.trainingDaysPerWeek || 5 }, (_, i) => i);
   const sessionMinutes = parseInt(userProfile.sessionDuration) || 60;
 
+  // Sanitize working weights — reset any that exceed equipment max (corrupted by coach)
+  const sanitizedProfile = { ...userProfile };
+  if (sanitizedProfile.workingWeights && sanitizedProfile.equipmentDetails) {
+    const ed = sanitizedProfile.equipmentDetails;
+    const barbellMax = ed.barbell?.maxWeight ? parseFloat(ed.barbell.maxWeight) : null;
+    const dbMax = ed.dumbbells?.maxWeight ? parseFloat(ed.dumbbells.maxWeight) : null;
+    for (const [lift, weight] of Object.entries(sanitizedProfile.workingWeights)) {
+      const w = parseFloat(weight);
+      // All barbell lifts: bench, squat, deadlift, ohp, row
+      if (barbellMax && w > barbellMax) {
+        console.log(`[PlanV5] Reset corrupted working weight: ${lift} ${w} lb → ${barbellMax} lb (exceeds barbell max)`);
+        sanitizedProfile.workingWeights[lift] = barbellMax;
+      }
+    }
+  }
+
   // Build exercise lookup from seed
   const allExercises = seedExercises();
   const exerciseById = {};
@@ -416,10 +432,10 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           const ex = exerciseById[compoundIds[i]];
           if (!ex) continue;
           const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets);
-          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
+          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights);
           const rest = getRestForPhase(displayPhase, true);
           // Near-cap strategy: if weight is close to equipment max, add tempo/AMRAP notes
-          const equipMax = userProfile.equipmentDetails?.barbell?.maxWeight;
+          const equipMax = sanitizedProfile.equipmentDetails?.barbell?.maxWeight;
           const weightNum = parseFloat(weight) || 0;
           const capStrategy = equipMax ? getNearCapStrategy(weightNum, equipMax) : null;
           const notes = capStrategy ? capStrategy.notes : null;
@@ -453,24 +469,35 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         wodUsageCount[wodId] = (wodUsageCount[wodId] || 0) + 1;
         const wod = wodById[wodId];
         const wodBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'WOD', type: dayConfig.wod.type || 'CIRCUIT', timeCap: '10 min', isAmrap: true, hasGps: false });
-        const wodExercises = buildWodExercises(wod, userProfile.equipmentDetails);
+        const wodExercises = buildWodExercises(wod, sanitizedProfile.equipmentDetails);
         for (let i = 0; i < wodExercises.length; i++) {
           await savePlanExercise({ planBlockId: wodBlockId, exerciseId: wodExercises[i].id, sortOrder: i, sets: wodExercises[i].sets, reps: wodExercises[i].reps, weight: wodExercises[i].weight, rest: null, notes: wodExercises[i].notes });
         }
         }
       }
 
-      // ── ACCESSORIES — expand pool respecting archetype + phase progression ──
-      // ── ACCESSORIES — only if time budget allows ──
+      // ── ACCESSORIES — expand pool, dedup movement niches vs compounds ──
+      // Track which movement niches are already covered by compounds
+      const usedNiches = new Set();
+      for (const id of compoundIds) {
+        const niche = getMovementNiche(id);
+        if (niche) usedNiches.add(niche);
+      }
       const accPool = bt.accessoryCount > 0 ? expandPool(daySelection.accessories || [], exerciseMenu, dayConfig, archetype, week) : [];
-      const accIds = rotateExercises(accPool, week, recentlyUsed, usedToday, bt.accessoryCount, weeklyExerciseCount);
+      // Filter out accessories that duplicate a compound's movement niche
+      const dedupedAccPool = accPool.filter(id => {
+        const niche = getMovementNiche(id);
+        if (!niche) return true; // unknown niche = allow
+        return !usedNiches.has(niche);
+      });
+      const accIds = rotateExercises(dedupedAccPool.length > 0 ? dedupedAccPool : accPool, week, recentlyUsed, usedToday, bt.accessoryCount, weeklyExerciseCount);
       if (accIds.length > 0) {
         const accBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'ACCESSORIES', type: 'ISOLATION', timeCap: `${bt.accessories} min`, isAmrap: false, hasGps: false });
         for (let i = 0; i < accIds.length; i++) {
           const ex = exerciseById[accIds[i]];
           if (!ex) continue;
           const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets);
-          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
+          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights);
           await savePlanExercise({ planBlockId: accBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: '45-60s', notes: null });
           usedToday.add(ex.id); recentlyUsed.add(ex.id);
         }
@@ -496,7 +523,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           const ex = exerciseById[armIds[i]];
           if (!ex) continue;
           const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets);
-          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
+          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights);
           await savePlanExercise({ planBlockId: armBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: '30-45s', notes: null });
         }
       }
@@ -588,65 +615,79 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 // ═══════════════════════════════════════════════════════════════
 
 function calculateBlockTimes(sessionMinutes, dayConfig, archetypeKey) {
-  const hasWod = !!dayConfig.wod && !dayConfig.run; // no WOD on run days
+  const hasWod = !!dayConfig.wod && !dayConfig.run;
+  const hasRun = !!dayConfig.run;
   const hasArms = !!dayConfig.arm_finisher;
+  const noArmsArchetypes = ['overweight_beginner', 'endurance'];
+  const wantArms = hasArms && !noArmsArchetypes.includes(archetypeKey);
+  const isSprintDay = hasRun && /interval|sprint/i.test(dayConfig.run?.type || '');
+  const isLongRunDay = hasRun && /long/i.test(dayConfig.run?.type || '');
+  const isCarryDay = dayConfig.primary_patterns?.includes('carry');
 
-  // 20-30 min: Tier 1 only (warmup + 2 compounds + core + cooldown)
+  let bt;
+
+  // ── Day-type specific templates ──
+
+  if (isLongRunDay || (isCarryDay && hasRun)) {
+    // Carry + Long Run day: carries + run + cooldown, no accessories/core/arms
+    bt = { warmup: 8, mainLifts: isCarryDay ? 20 : 15, wod: 0, accessories: 0, armBlaster: 0, core: 0, cooldown: 5,
+      sets: 3, mainLiftCount: isCarryDay ? 3 : 2, accessoryCount: 0, coreCount: 0, warmupCount: 3, rest: '60-90s' };
+  } else if (isSprintDay) {
+    // Sprint day: 2 explosive lifts + sprints + core, no accessories/arms
+    bt = { warmup: 8, mainLifts: 15, wod: 0, accessories: 0, armBlaster: 0, core: 5, cooldown: 5,
+      sets: 3, mainLiftCount: 2, accessoryCount: 0, coreCount: 2, warmupCount: 3, rest: '45-60s' };
+  } else if (hasWod) {
+    // WOD day: 2 main lifts + WOD + arms if time, no accessories (WOD IS the volume)
+    const armTime = wantArms ? 8 : 0;
+    bt = { warmup: 6, mainLifts: 15, wod: 10, accessories: 0, armBlaster: armTime, core: 5, cooldown: 5,
+      sets: 3, mainLiftCount: 2, accessoryCount: 0, coreCount: 2, warmupCount: 3, rest: '45-60s' };
+  } else {
+    // Pure lifting day (no WOD, no run): 3 main lifts + accessories + core + arms
+    const armTime = wantArms ? 8 : 0;
+    bt = { warmup: 8, mainLifts: 25, wod: 0, accessories: 8, armBlaster: armTime, core: 8, cooldown: 5,
+      sets: 3, mainLiftCount: 3, accessoryCount: 2, coreCount: 3, warmupCount: 3, rest: '45-60s' };
+  }
+
+  // ── Scale for session duration ──
   if (sessionMinutes <= 30) {
-    return { warmup: 3, mainLifts: 15, wod: 0, accessories: 0, armBlaster: 0, core: 3, cooldown: 3,
-      sets: 3, mainLiftCount: 2, accessoryCount: 0, coreCount: 2, warmupCount: 2, rest: '30-45s' };
+    bt.warmup = 3; bt.mainLifts = 15; bt.wod = 0; bt.accessories = 0; bt.armBlaster = 0; bt.core = 3; bt.cooldown = 3;
+    bt.mainLiftCount = 2; bt.accessoryCount = 0; bt.coreCount = 2; bt.warmupCount = 2; bt.rest = '30-45s';
+  } else if (sessionMinutes <= 44) {
+    bt.warmup = Math.min(bt.warmup, 5); bt.cooldown = 4;
+    bt.mainLiftCount = Math.min(bt.mainLiftCount, 2);
+    bt.armBlaster = 0; bt.accessories = 0; bt.accessoryCount = 0;
+    bt.rest = '30-60s';
+  } else if (sessionMinutes >= 75) {
+    bt.sets = 4; bt.rest = '60-90s';
+    if (!hasWod && !hasRun) { bt.mainLiftCount = 3; bt.accessoryCount = 3; bt.accessories = 12; }
+  } else if (sessionMinutes >= 90) {
+    bt.sets = 4; bt.rest = '90-120s';
+    bt.warmup = 10; bt.warmupCount = 4;
+    if (!hasWod && !hasRun) { bt.mainLiftCount = 4; bt.accessoryCount = 4; bt.accessories = 15; }
   }
 
-  // 31-44 min: Tier 1 + partial Tier 2
-  if (sessionMinutes <= 44) {
-    const keepWod = hasWod && ['obstacle_racer', 'fat_loss'].includes(archetypeKey);
-    // Arms kept for muscle-building archetypes even at short sessions (cut WOD instead)
-    const keepArms = hasArms && ['hypertrophy', 'skinny_beginner', 'obstacle_racer'].includes(archetypeKey);
-    return { warmup: 5, mainLifts: 16, wod: keepWod && !keepArms ? 7 : 0, accessories: keepArms ? 0 : (keepWod ? 0 : 6), armBlaster: keepArms ? 6 : 0, core: 5, cooldown: 4,
-      sets: 3, mainLiftCount: 2, accessoryCount: keepArms || keepWod ? 0 : 1, coreCount: 2, warmupCount: 3, rest: '30-60s' };
-  }
-
-  // 45-59 min: Tier 1 + Tier 2
-  if (sessionMinutes <= 59) {
-    // Arms for any archetype that benefits from direct arm work
-    const keepArms = hasArms && !['endurance'].includes(archetypeKey);
-    return enforceSessionTime({ warmup: 5, mainLifts: hasWod ? 18 : 22, wod: hasWod ? 10 : 0, accessories: keepArms ? 5 : 8, armBlaster: keepArms ? 6 : 0, core: 5, cooldown: 5,
-      sets: 3, mainLiftCount: 3, accessoryCount: keepArms ? 1 : 2, coreCount: 3, warmupCount: 3, rest: '30-60s' }, sessionMinutes);
-  }
-
-  // 60-74 min: Full (default)
-  if (sessionMinutes <= 74) {
-    return enforceSessionTime({ warmup: hasWod && hasArms ? 6 : 8, mainLifts: hasWod && hasArms ? 17 : hasWod ? 20 : 25, wod: hasWod ? 10 : 0,
-      accessories: hasArms ? 8 : 12, armBlaster: hasArms ? 8 : 0, core: hasWod && hasArms ? 5 : 8, cooldown: 5,
-      sets: 3, mainLiftCount: 3, accessoryCount: 2, coreCount: 3, warmupCount: 3, rest: '45-60s' }, sessionMinutes);
-  }
-
-  // 75-89 min: Extended (4 sets, longer rest)
-  if (sessionMinutes <= 89) {
-    return enforceSessionTime({ warmup: 8, mainLifts: 28, wod: hasWod ? 10 : 0, accessories: 15, armBlaster: hasArms ? 8 : 0, core: 8, cooldown: 5,
-      sets: 4, mainLiftCount: 3, accessoryCount: 3, coreCount: 3, warmupCount: 3, rest: '60-90s' }, sessionMinutes);
-  }
-
-  // 90+ min: Long (4 sets, 4 lifts, extended rest)
-  const result = { warmup: 10, mainLifts: 35, wod: hasWod ? 12 : 0, accessories: 20, armBlaster: hasArms ? 10 : 0, core: 10, cooldown: 5,
-    sets: 4, mainLiftCount: 4, accessoryCount: 4, coreCount: 4, warmupCount: 4, rest: '90-120s' };
-  return enforceSessionTime(result, sessionMinutes);
+  return enforceSessionTime(bt, sessionMinutes);
 }
 
 // Enforce session time — drop blocks in tier order if total exceeds budget
-// Drop order: WOD → arm blasters → accessories. Never drop warmup, main lifts, core, cooldown.
+// Drop order: accessories → arm blasters → WOD. Never drop warmup, main lifts, core, cooldown.
 function enforceSessionTime(bt, sessionMinutes) {
   const total = () => bt.warmup + bt.mainLifts + bt.wod + bt.accessories + bt.armBlaster + bt.core + bt.cooldown;
   if (total() <= sessionMinutes) return bt;
-  // Tier 3: drop WOD
-  if (bt.wod > 0 && total() > sessionMinutes) {
-    console.log(`[TimeBudget] Over by ${total() - sessionMinutes}min — dropping WOD (${bt.wod}min)`);
-    bt.wod = 0;
+  // Tier 1: drop accessories
+  if (bt.accessories > 0 && total() > sessionMinutes) {
+    console.log(`[TimeBudget] Over by ${total() - sessionMinutes}min — dropping accessories (${bt.accessories}min)`);
+    bt.accessories = 0; bt.accessoryCount = 0;
   }
   // Tier 2: drop arm blasters
   if (bt.armBlaster > 0 && total() > sessionMinutes) {
     console.log(`[TimeBudget] Still over by ${total() - sessionMinutes}min — dropping arm blaster (${bt.armBlaster}min)`);
     bt.armBlaster = 0;
+  }
+  // Tier 3: drop WOD (rare — only very short sessions)
+  if (bt.wod > 0 && total() > sessionMinutes) {
+    console.log(`[TimeBudget] Still over by ${total() - sessionMinutes}min — dropping WOD (${bt.wod}min)`);
+    bt.wod = 0;
   }
   // Tier 1: reduce accessories
   if (bt.accessories > 0 && total() > sessionMinutes) {
@@ -665,6 +706,40 @@ function enforceSessionTime(bt, sessionMinutes) {
 // Pick a SUBSET from Claude's exercise pool, rotating across weeks
 // Pool of 6 exercises → pick 2-3 per week, different each week
 // weeklyCount tracks frequency to prevent any exercise appearing 3+ times in a week
+// Movement niche — finer than movement pattern, prevents same-angle/same-motion duplication
+// e.g. incline_bench and db_incline_press are both "incline_push" — shouldn't appear in same session
+function getMovementNiche(exerciseId) {
+  const NICHE_MAP = {
+    // Incline push (don't pair barbell incline + DB incline)
+    incline_bench: 'incline_push', db_incline_press: 'incline_push', incline_machine_press: 'incline_push',
+    // Flat push (don't pair barbell bench + DB bench)
+    bench_press: 'flat_push', db_bench_press: 'flat_push', machine_chest_press: 'flat_push',
+    // Floor press is its own niche (different ROM)
+    floor_press: 'floor_push', db_floor_press: 'floor_push',
+    // Fly variations are their own niche (isolation, OK alongside presses)
+    db_chest_fly: 'fly', cable_fly: 'fly', db_fly: 'fly',
+    // Overhead press (don't pair barbell OHP + DB shoulder press)
+    overhead_press: 'overhead_press', db_shoulder_press: 'overhead_press', machine_shoulder_press: 'overhead_press', push_press: 'overhead_press',
+    // Row (don't pair barbell row + DB row)
+    barbell_row: 'row', db_row: 'row', machine_row: 'row', cable_row: 'row',
+    // Vertical pull (pull-ups and lat pulldown are different enough to coexist, but don't double pull-up variants)
+    pull_ups: 'pull_up', chin_ups: 'pull_up', band_assisted_pull_ups: 'pull_up',
+    // Squat (don't pair back squat + front squat usually)
+    back_squat: 'squat_main', front_squat: 'squat_main',
+    goblet_squat: 'squat_light', kb_goblet_squat: 'squat_light', db_goblet_squat: 'squat_light',
+    // Hinge (don't pair deadlift + RDL)
+    deadlift: 'hinge_main', sumo_deadlift: 'hinge_main', trap_bar_deadlift: 'hinge_main',
+    romanian_deadlift: 'hinge_accessory', db_rdl: 'hinge_accessory', db_stiff_leg_deadlift: 'hinge_accessory',
+    // Curl (don't pair two curl variations)
+    bicep_curl: 'curl', hammer_curl: 'curl', cable_bicep_curl: 'curl', concentration_curl: 'curl', barbell_curl: 'curl',
+    // Tricep extension (don't pair two extension variations)
+    skull_crushers: 'tricep_ext', overhead_tricep_ext: 'tricep_ext', cable_tricep_pushdown: 'tricep_ext',
+    // Lateral raise variations
+    lateral_raise: 'lateral_raise', cable_lateral_raise: 'lateral_raise',
+  };
+  return NICHE_MAP[exerciseId] || null;
+}
+
 function rotateExercises(pool, week, recentlyUsed, usedToday, pickCount, weeklyCount) {
   if (pool.length === 0) return [];
   const count = pickCount || Math.min(3, pool.length);

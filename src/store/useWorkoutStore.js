@@ -28,6 +28,10 @@ const useWorkoutStore = create((set, get) => ({
   selectedDate: new Date().toISOString().split('T')[0],
   lastAdjustment: null, // { exerciseName, newWeight, count } — for success toast
   pendingAdjustment: null, // { exerciseName, exerciseId, prescribed, actual, ratio, direction, pctDiff } — for user prompt
+  adjustedExercises: {}, // { exerciseId: true } — already adjusted this session
+  dismissedExercises: {}, // { exerciseId: true } — user said "keep as is"
+  lastAdjustmentRatio: {}, // { exerciseId: ratio } — track what we last adjusted to
+  _lastCheckedWeights: {}, // { planExerciseId: weight } — prevent duplicate checks on same weight
 
   // Plan overview
   planDays: [],
@@ -135,23 +139,42 @@ const useWorkoutStore = create((set, get) => ({
       await dbUpdateExerciseLog(planExerciseId, actualReps, actualWeight, notes);
 
       // Autoregulation: detect significant weight difference and prompt user
-      if (actualWeight && String(actualWeight).trim()) {
+      // Rules:
+      // - Only check when weight actually changed (not on reps-only updates)
+      // - Don't ask if user dismissed this exercise ("keep as is")
+      // - Don't ask if already adjusted, UNLESS new weight is even higher
+      const lastCheckedWeight = get()._lastCheckedWeights?.[planExerciseId];
+      const weightChanged = actualWeight && String(actualWeight).trim() && String(actualWeight) !== String(lastCheckedWeight);
+      if (weightChanged) {
+        set({ _lastCheckedWeights: { ...get()._lastCheckedWeights, [planExerciseId]: actualWeight } });
         const workout = get().todayWorkout;
+        const { dismissedExercises, adjustedExercises } = get();
         if (workout?.blocks) {
           for (const block of workout.blocks) {
             const exercise = (block.exercises || []).find(e => e.id === planExerciseId);
             if (exercise) {
+              const exId = exercise.exercise_id;
+              // User said "keep as is" — never ask again this session
+              if (dismissedExercises[exId]) break;
+
               const prescribed = parseFloat(exercise.weight);
               const actual = parseFloat(actualWeight);
+              console.log(`[Autoregulation] ${exId}: prescribed=${prescribed}, actual=${actual}, diff=${prescribed > 0 ? Math.round(((actual-prescribed)/prescribed)*100) : '?'}%`);
               if (!isNaN(prescribed) && !isNaN(actual) && prescribed > 0 && actual > 0) {
                 const diff = (actual - prescribed) / prescribed;
                 if (Math.abs(diff) > 0.10) {
-                  // Store the pending adjustment for the UI to prompt
+                  // Already adjusted — only re-prompt if weight went HIGHER than what we adjusted to
+                  if (adjustedExercises[exId]) {
+                    const lastRatio = get().lastAdjustmentRatio?.[exId] || 1;
+                    const newRatio = actual / prescribed;
+                    if (newRatio <= lastRatio) break; // same or lower — don't re-ask
+                  }
+
                   const ratio = actual / prescribed;
                   set({
                     pendingAdjustment: {
                       exerciseName: exercise.name,
-                      exerciseId: exercise.exercise_id,
+                      exerciseId: exId,
                       prescribed: `${prescribed} lb`,
                       actual: `${Math.round(actual / 5) * 5} lb`,
                       ratio,
@@ -178,6 +201,8 @@ const useWorkoutStore = create((set, get) => ({
       const adjusted = await dbAdjustFutureWeights(pending.exerciseId, pending.ratio);
       set({
         pendingAdjustment: null,
+        adjustedExercises: { ...get().adjustedExercises, [pending.exerciseId]: true },
+        lastAdjustmentRatio: { ...get().lastAdjustmentRatio, [pending.exerciseId]: pending.ratio },
         lastAdjustment: { exerciseName: pending.exerciseName, newWeight: pending.actual, count: adjusted },
       });
       setTimeout(() => set({ lastAdjustment: null }), 4000);
@@ -188,7 +213,12 @@ const useWorkoutStore = create((set, get) => ({
   },
 
   dismissAdjustment: () => {
-    set({ pendingAdjustment: null });
+    const pending = get().pendingAdjustment;
+    if (pending) {
+      set({ pendingAdjustment: null, dismissedExercises: { ...get().dismissedExercises, [pending.exerciseId]: true } });
+    } else {
+      set({ pendingAdjustment: null });
+    }
   },
 
   saveAmrapRounds: async (planBlockId, rounds) => {

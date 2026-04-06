@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendCoachMessage } from '../data/coachApi';
-import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, getPlanRationales, getWodsFromDb, swapWodBlock } from '../data/database';
+import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, adjustFutureWeights, getPlanRationales, getWodsFromDb, swapWodBlock } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 import { buildExerciseMenu } from '../core/menuBuilder';
 import { detectArchetype, adjustArchetypeForEquipment } from '../core/archetypes';
@@ -201,6 +201,18 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
           action = { type: key, ...action[key] };
         }
       }
+      // Normalize type to camelCase — Claude sometimes returns REMOVEEXERCISE, RemoveExercise, etc.
+      const ACTION_TYPE_MAP = {
+        'removeexercise': 'removeExercise', 'remove_exercise': 'removeExercise', 'remove': 'removeExercise',
+        'adjustweight': 'adjustWeight', 'adjust_weight': 'adjustWeight',
+        'adjustreps': 'adjustReps', 'adjust_reps': 'adjustReps',
+        'flaginjury': 'flagInjury', 'flag_injury': 'flagInjury',
+        'addnote': 'addNote', 'add_note': 'addNote',
+        'swapwod': 'swapWod', 'swap_wod': 'swapWod',
+      };
+      if (action.type) {
+        action.type = ACTION_TYPE_MAP[action.type.toLowerCase()] || action.type;
+      }
       console.log('[AI Coach] Executing action:', action.type, action);
       try {
         switch (action.type) {
@@ -217,7 +229,36 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
           case 'adjustWeight':
             if (action.planExerciseId && action.newWeight) {
               const peIdW = parseInt(action.planExerciseId) || action.planExerciseId;
-              await updateExerciseLog(peIdW, null, action.newWeight, action.reason || null);
+              const exerciseInfo = workout?.blocks?.flatMap(b => b.exercises || []).find(e => e.id === peIdW);
+              if (exerciseInfo) {
+                const oldWeight = parseFloat(exerciseInfo.weight) || 0;
+                let newWeight = parseFloat(action.newWeight) || 0;
+
+                // Equipment ceiling — get max from profile
+                let equipCap = null;
+                try {
+                  const profileStr = await AsyncStorage.getItem('userProfile');
+                  if (profileStr) {
+                    const prof = JSON.parse(profileStr);
+                    const ed = prof.equipmentDetails || {};
+                    const cat = exerciseInfo.category || '';
+                    if (/barbell/i.test(cat) && ed.barbell?.maxWeight) equipCap = parseFloat(ed.barbell.maxWeight);
+                    else if (/dumbbell/i.test(cat) && ed.dumbbells?.maxWeight) equipCap = parseFloat(ed.dumbbells.maxWeight);
+                  }
+                } catch { /* no profile */ }
+
+                // Enforce ceiling
+                if (equipCap && newWeight > equipCap) {
+                  console.log(`[AI Coach] Weight ${newWeight} exceeds equipment cap ${equipCap}, capping`);
+                  newWeight = equipCap;
+                }
+
+                if (oldWeight > 0 && newWeight > 0) {
+                  const ratio = newWeight / oldWeight;
+                  const count = await adjustFutureWeights(exerciseInfo.exercise_id, ratio);
+                  console.log(`[AI Coach] Adjusted ${count} future instances of ${exerciseInfo.exercise_id}: ${oldWeight} → ${newWeight} (ratio ${ratio.toFixed(2)})`);
+                }
+              }
               await store.loadTodayWorkout();
             }
             break;

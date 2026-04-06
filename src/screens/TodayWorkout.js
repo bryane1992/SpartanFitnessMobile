@@ -382,6 +382,51 @@ export default function TodayWorkout({ navigation }) {
 // Exercise Row Component with logging
 // ═══════════════════════════════════════════════════════════════
 
+const NO_GIF_IDS = new Set([
+  // Core holds/bodyweight with no match
+  'plank', 'plank_to_pushup', 'bird_dog', 'high_knees',
+  // Gymnastics/obstacle
+  'dead_hang', 'monkey_bars', 'rope_climb', 'wall_climb', 'handstand_push_ups',
+  // Conditioning without match
+  'wall_balls', 'ball_slams', 'battle_ropes', 'broad_jump', 'double_unders',
+  'burpee_box_jumps', 'assault_bike', 'rowing_machine',
+  // Stretches/warmup/cooldown
+  'samson_stretch', 'dynamic_stretching', 'pvc_pass_throughs', 'lunge_matrix',
+  'hip_flexor_stretch', 'pigeon_pose', 'hamstring_stretch', 'shoulder_stretch',
+  'thoracic_rotation', 'a_skips', 'easy_jog', 'strides', 'push_up_to_t',
+  'cossack_squats',
+  // Carries
+  'suitcase_carry', 'kb_suitcase_carry', 'kb_carry',
+  'overhead_carry', 'overhead_kb_carry', 'sandbag_carry', 'bucket_carry',
+  'plate_carry', 'db_farmer_walk', 'spear_throw', 'plate_pinch',
+  // Cable/other without match
+  'cable_woodchop', 'cable_crunch', 'cable_fly', 'pallof_press', 'ab_wheel',
+  'close_grip_lat_pulldown', 'chest_supported_row', 'single_arm_cable_row',
+  'incline_machine_press', 'machine_chest_press', 'machine_dip',
+  'band_assisted_pull_ups',
+  // DB exercises without match
+  'db_thrusters', 'db_snatches', 'db_clean_press', 'db_hang_clean',
+  'db_hip_thrust', 'db_swing', 'db_good_morning', 'db_floor_press', 'db_seal_row',
+  'overhead_tricep_ext', 'single_leg_glute_bridge',
+  // KB without match
+  'kb_clean_press', 'kb_snatch',
+  // Olympic without match
+  'push_jerk', 'snatch', 'clean_and_jerk', 'hang_clean',
+  // Runs
+  'easy_run', 'interval_run', 'sprint_intervals', 'tempo_run', 'long_run',
+  'fartlek', 'run_400m',
+  // Other
+  'tire_flip', 'sled_push', 'sled_pull', 'toes_to_bar', 'hanging_knee_raise',
+  'pistol_squats', 'floor_press',
+  // Rehab without GIF
+  'tibialis_raise', 'toe_walks', 'heel_walks', 'calf_raise_bodyweight',
+  'quad_stretch', 'knee_circles', 'wall_sit', 'terminal_knee_ext', 'banded_lateral_walk',
+  'hip_90_90', 'clam_shells', 'fire_hydrants', 'adductor_stretch',
+  'band_pull_apart', 'shoulder_int_rotation', 'wall_angels', 'arm_circles', 'chest_doorway_stretch',
+  'cat_cow', 'child_pose', 'cobra_stretch', 'superman_hold', 'lat_stretch',
+  'wrist_flexor_stretch',
+]);
+
 function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress, onNamePress, onRepDropOff }) {
   const isDone = !!exercise.is_completed;
   const [isExpanded, setIsExpanded] = useState(false);
@@ -468,10 +513,12 @@ function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress,
           <Text style={styles.exerciseLoad}>{rest ? `${weight} \u2014 ${rest}` : weight}</Text>
         </View>
 
-        {/* GIF/Demo button */}
-        <TouchableOpacity style={styles.demoBtn} onPress={onNamePress}>
-          <Text style={styles.demoBtnText}>GIF</Text>
-        </TouchableOpacity>
+        {/* GIF/Demo button — hidden for exercises without GIFs */}
+        {!NO_GIF_IDS.has(exercise.exercise_id) ? (
+          <TouchableOpacity style={styles.demoBtn} onPress={onNamePress}>
+            <Text style={styles.demoBtnText}>GIF</Text>
+          </TouchableOpacity>
+        ) : null}
       </TouchableOpacity>
 
       {/* Per-set rows — shown when expanded (tap exercise row to expand) */}

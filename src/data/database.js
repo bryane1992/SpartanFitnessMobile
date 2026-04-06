@@ -765,6 +765,22 @@ export async function adjustFutureWeights(exerciseId, ratio, currentDate) {
   const database = await getDatabase();
   const today = currentDate || new Date().toISOString().split('T')[0];
 
+  // Get equipment limits from user profile
+  const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+  let equipMax = null;
+  try {
+    const profileStr = await AsyncStorage.getItem('userProfile');
+    if (profileStr) {
+      const profile = JSON.parse(profileStr);
+      const ed = profile.equipmentDetails || {};
+      // Determine cap based on exercise's equipment type
+      const ex = await database.getFirstAsync('SELECT category FROM exercises WHERE id = ?', [exerciseId]);
+      const cat = ex?.category || '';
+      if (cat === 'barbell' && ed.barbell?.maxWeight) equipMax = parseFloat(ed.barbell.maxWeight);
+      else if (cat === 'dumbbell' && ed.dumbbells?.maxWeight) equipMax = parseFloat(ed.dumbbells.maxWeight);
+    }
+  } catch { /* no profile */ }
+
   // Get all future unfinished instances with their current weights
   const futureExercises = await database.getAllAsync(
     `SELECT pe.id, pe.weight FROM plan_exercises pe
@@ -781,12 +797,14 @@ export async function adjustFutureWeights(exerciseId, ratio, currentDate) {
   for (const ex of futureExercises) {
     const currentWeight = parseFloat(ex.weight);
     if (isNaN(currentWeight) || currentWeight <= 0) continue;
-    const newWeight = Math.round(currentWeight * ratio / 5) * 5;
+    let newWeight = Math.round(currentWeight * ratio / 5) * 5;
+    // Hard ceiling: never exceed equipment max
+    if (equipMax && newWeight > equipMax) newWeight = Math.round(equipMax / 5) * 5;
     await database.runAsync('UPDATE plan_exercises SET weight = ? WHERE id = ?', [`${newWeight} lb`, ex.id]);
     updated++;
   }
 
-  console.log(`[Autoregulate] Scaled ${exerciseId} by ${ratio.toFixed(2)}x for ${updated} future exercises`);
+  console.log(`[Autoregulate] Scaled ${exerciseId} by ${ratio.toFixed(2)}x for ${updated} future exercises${equipMax ? ` (cap: ${equipMax} lb)` : ''}`);
   return updated;
 }
 
