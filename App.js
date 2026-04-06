@@ -3,14 +3,16 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, syncExerciseDb } from './src/data/database';
 import useWorkoutStore from './src/store/useWorkoutStore';
+import CoachChat from './src/components/CoachChat';
 
 // Import screens
 import TodayWorkout from './src/screens/TodayWorkout';
 import RunTracker from './src/screens/RunTracker';
+import ActivityLogger from './src/screens/ActivityLogger';
 import ProgressionPlan from './src/screens/ProgressionPlan';
 import Settings from './src/screens/Settings';
 import Onboarding from './src/screens/Onboarding';
@@ -20,6 +22,30 @@ import WodLibrary from './src/screens/WodLibrary';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
+
+function MainTabsWithCoach() {
+  const [coachVisible, setCoachVisible] = useState(false);
+  const workout = useWorkoutStore(s => s.todayWorkout);
+
+  return (
+    <View style={{ flex: 1 }}>
+      <MainTabs />
+      <TouchableOpacity
+        style={styles.globalCoachFab}
+        onPress={() => setCoachVisible(true)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.globalCoachFabText}>AI</Text>
+      </TouchableOpacity>
+      <CoachChat
+        visible={coachVisible}
+        onClose={() => setCoachVisible(false)}
+        workout={workout}
+        sessionId={workout ? `workout-${workout.id}` : 'general-coach'}
+      />
+    </View>
+  );
+}
 
 function MainTabs() {
   return (
@@ -60,12 +86,13 @@ function MainTabs() {
         }}
       />
       <Tab.Screen
-        name="Run"
-        component={RunTracker}
+        name="Track"
+        component={ActivityLogger}
         options={{
+          title: 'Log Activity',
           tabBarLabel: 'Track',
           tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 20, color }}>{'\uD83C\uDFC3'}</Text>
+            <Text style={{ fontSize: 14, color, fontWeight: '900', fontFamily: 'monospace' }}>LOG</Text>
           ),
         }}
       />
@@ -187,9 +214,10 @@ export default function App() {
         initialRouteName={hasOnboarded ? 'Main' : 'Onboarding'}
       >
         <Stack.Screen name="Onboarding" component={Onboarding} />
-        <Stack.Screen name="Main" component={MainTabs} />
+        <Stack.Screen name="Main" component={MainTabsWithCoach} />
         <Stack.Screen name="ExerciseLibrary" component={ExerciseDictionary} />
         <Stack.Screen name="WodLibrary" component={WodLibrary} />
+        <Stack.Screen name="GpsRunTracker" component={RunTracker} options={{ headerShown: true, title: 'GPS Run', headerStyle: { backgroundColor: '#0A0A0A' }, headerTintColor: '#fff' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -213,5 +241,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'monospace',
     marginTop: 12,
+  },
+  globalCoachFab: {
+    position: 'absolute',
+    bottom: 80,
+    right: 16,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FF4136',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#FF4136',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    zIndex: 1000,
+  },
+  globalCoachFabText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
 });

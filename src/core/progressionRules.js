@@ -313,6 +313,9 @@ export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal, ses
     build:      { compound: 8,  isolation: 10 },
     peak:       { compound: 6,  isolation: 8 },
   };
+
+  // Phase-aware rest: heavier phases need longer rest for recovery
+  // This is exported separately via getRestForPhase() for the builder
   const phaseReps = PHASE_REPS[phase] || PHASE_REPS.foundation;
   let reps = isCompound ? phaseReps.compound : phaseReps.isolation;
 
@@ -354,6 +357,31 @@ export function getTempoForExercise(exercise, weekNumber) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Phase-Aware Rest Times (for main compound lifts)
+// ═══════════════════════════════════════════════════════════════
+
+const PHASE_REST = {
+  foundation: '45-60s',   // 3x10 — lighter weight, shorter rest
+  build:      '60-90s',   // 3x8  — moderate weight
+  peak:       '90-120s',  // 3x6  — heavy, needs full recovery
+  race_prep:  '90-120s',  // 3x5  — heavy on main lifts
+};
+
+export function getRestForPhase(phase, isCompound = true) {
+  if (!isCompound) return '30-45s'; // accessories always short rest
+  return PHASE_REST[phase] || PHASE_REST.foundation;
+}
+
+// Near-Cap Strategy: when prescribed weight is within 15% of equipment max,
+// use tempo/pause reps or AMRAP last set instead of adding weight
+export function getNearCapStrategy(prescribedWeight, equipmentMax) {
+  if (!equipmentMax || prescribedWeight < equipmentMax * 0.85) return null;
+  if (prescribedWeight >= equipmentMax) {
+    return { type: 'amrap_last_set', notes: `AMRAP last set at ${equipmentMax} lb — tempo 3-1-1` };
+  }
+  return { type: 'tempo', notes: `Tempo 3-1-1 (3s down, 1s pause, 1s up)` };
+}
+
 // Run Parameters
 // ═══════════════════════════════════════════════════════════════
 

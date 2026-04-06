@@ -49,6 +49,14 @@ function formatTime(seconds) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// Format pace as mm:ss/mi instead of decimal (8.5 → "8:30")
+function formatPace(decimalPace) {
+  if (!decimalPace || decimalPace <= 0) return '--:--';
+  const mins = Math.floor(decimalPace);
+  const secs = Math.round((decimalPace - mins) * 60);
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
 export default function PerformanceTracker() {
   const {
     completedWorkouts,
@@ -63,6 +71,10 @@ export default function PerformanceTracker() {
     weeklyProgress,
     weekOverWeekLifts,
     runProgression,
+    wodProgression,
+    wodStats,
+    customSessions,
+    weeklySummary,
     exerciseSearchResults,
     selectedExerciseId,
     selectedExerciseHistory,
@@ -120,22 +132,32 @@ export default function PerformanceTracker() {
 
         {/* Quick Stats Row */}
         <View style={styles.statsGrid}>
-          <MiniStat value={String(completedWorkouts)} label="WORKOUTS" color="#FF4136" />
-          <MiniStat value={`${totalRunDistance.toFixed(1)}`} label="MILES RUN" color="#0074D9" />
-          <MiniStat value={String(exercisesLogged)} label="LOGGED" color="#FF851B" />
+          <MiniStat value={String(completedWorkouts + (weeklySummary?.customSessions || 0))} label="WORKOUTS" color="#FF4136" />
+          <MiniStat value={`${totalRunDistance.toFixed(1)}`} label="MILES" color="#0074D9" />
+          <MiniStat value={String(wodStats.totalPlanWods + wodStats.totalLibraryWods)} label="WODs" color="#FF851B" />
           <MiniStat value={`${completionRate}%`} label="COMPLETE" color="#01FF70" />
         </View>
 
+        {/* Weekly Summary */}
+        {weeklySummary && (weeklySummary.planSessions > 0 || weeklySummary.customSessions > 0) ? (
+          <View style={styles.weeklySummary}>
+            <Text style={styles.weeklySummaryText}>
+              {weeklySummary.planSessions} plan + {weeklySummary.customSessions} custom this week
+              {weeklySummary.customCardioMinutes > 0 ? ` \u2022 ${weeklySummary.customCardioMinutes}min cardio` : ''}
+            </Text>
+          </View>
+        ) : null}
+
         {/* Tab Selector */}
         <View style={styles.tabRow}>
-          {['lifts', 'runs', 'prs'].map(tab => (
+          {['lifts', 'runs', 'wods', 'prs'].map(tab => (
             <TouchableOpacity
               key={tab}
               style={[styles.tab, activeTab === tab && styles.tabActive]}
               onPress={() => setActiveTab(tab)}
             >
               <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                {tab === 'lifts' ? 'LIFTS' : tab === 'runs' ? 'RUNS' : 'PRs'}
+                {tab === 'lifts' ? 'LIFTS' : tab === 'runs' ? 'RUNS' : tab === 'wods' ? 'WODs' : 'PRs'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -201,17 +223,23 @@ export default function PerformanceTracker() {
                   <ActivityIndicator size="small" color="#FF4136" />
                 ) : (
                   selectedExerciseHistory.map((entry, i) => {
-                    const repsDisplay = formatRepsDisplay(entry.actual_reps, entry.sets);
-                    const targetReps = parseInt((entry.sets || '').match(/x(\d+)/)?.[1]) || 0;
-                    const actualNums = (entry.actual_reps || '').split(',').map(r => parseInt(r.trim())).filter(r => !isNaN(r));
+                    const weight = entry.actual_weight || entry.weight || '--';
+                    const repsVal = entry.actual_reps || entry.reps || '';
+                    const repsDisplay = formatRepsDisplay(repsVal, entry.sets);
+                    const targetReps = parseInt(String(entry.sets || '').match(/x(\d+)/)?.[1]) || 0;
+                    const actualNums = String(repsVal).split(',').map(r => parseInt(r.trim())).filter(r => !isNaN(r));
                     const allHit = targetReps > 0 && actualNums.length > 0 && actualNums.every(r => r >= targetReps);
                     const anyMissed = targetReps > 0 && actualNums.some(r => r < targetReps - 1);
+                    const isCustom = entry.source === 'custom';
                     return (
                       <View key={i} style={styles.historyRow}>
-                        <Text style={styles.historyDate}>{entry.week_number ? `Wk${entry.week_number}` : String(entry.date || '').slice(5)}</Text>
-                        <Text style={styles.historyWeight}>{String(entry.actual_weight || '--')}</Text>
+                        <Text style={styles.historyDate}>
+                          {entry.week_number ? `Wk${entry.week_number}` : String(entry.date || '').slice(5)}
+                          {isCustom ? ' *' : ''}
+                        </Text>
+                        <Text style={styles.historyWeight}>{String(weight)}</Text>
                         <Text style={[styles.historyReps, allHit && { color: '#01FF70' }, anyMissed && { color: '#FF4136' }]}>{repsDisplay}</Text>
-                        <Text style={styles.historyTarget}>{entry.sets || ''}</Text>
+                        <Text style={styles.historyTarget}>{isCustom ? 'LOG' : (entry.sets || '')}</Text>
                       </View>
                     );
                   })
@@ -239,6 +267,56 @@ export default function PerformanceTracker() {
                 </View>
               </View>
             ) : null}
+
+            {/* Custom Sessions — expandable */}
+            {customSessions?.length > 0 ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>YOUR LOGGED WORKOUTS</Text>
+                {customSessions.slice(0, 8).map((sess) => {
+                  const isExpanded = expandedSection === `custom-${sess.id}`;
+                  const sourceLabel = sess.source === 'wod' ? 'WOD' : sess.source === 'ai_freetext' ? 'Logged' : 'Gym';
+                  const srcColor = sess.source === 'wod' ? '#FF4136' : sess.source === 'ai_freetext' ? '#B10DC9' : '#FF851B';
+                  return (
+                    <TouchableOpacity key={sess.id} activeOpacity={0.7}
+                      onPress={() => setExpandedSection(isExpanded ? null : `custom-${sess.id}`)}>
+                      <View style={styles.customSessionRow}>
+                        <View style={[styles.accentBar, { backgroundColor: srcColor }]} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.customSessionTitle}>{String(sess.title || 'Workout')}</Text>
+                          <Text style={styles.customSessionMeta}>
+                            {String(sess.date || '')}{sess.duration_minutes ? `  ${sess.duration_minutes} min` : ''}
+                            {sess.entries?.length ? `  ${sess.entries.length} exercises` : ''}
+                          </Text>
+                        </View>
+                        <Text style={[styles.customSessionSource, { color: srcColor }]}>{sourceLabel}</Text>
+                      </View>
+                      {isExpanded && sess.entries?.length > 0 ? (
+                        <View style={styles.customEntries}>
+                          {sess.entries.map((entry, i) => (
+                            <View key={i} style={styles.customEntryRow}>
+                              <View style={styles.customEntryHeader}>
+                                <Text style={styles.customEntryName}>{String(entry.exercise_name || '')}</Text>
+                                {entry.weight_lbs ? <Text style={styles.customEntryWeight}>{entry.weight_lbs} lb</Text> : null}
+                              </View>
+                              <Text style={styles.customEntryDetail}>
+                                {[
+                                  entry.sets ? `${entry.sets} sets` : null,
+                                  entry.reps ? `${entry.reps} reps` : null,
+                                  entry.duration_minutes ? `${entry.duration_minutes} min` : null,
+                                  entry.distance_miles ? `${entry.distance_miles} mi` : null,
+                                  entry.wod_score ? `Score: ${entry.wod_score}` : null,
+                                  entry.category === 'sport' ? 'Sport' : entry.category === 'cardio' ? 'Cardio' : null,
+                                ].filter(Boolean).join('  \u2022  ')}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -258,7 +336,8 @@ export default function PerformanceTracker() {
                         <View style={styles.runBarTrack}>
                           <View style={[styles.runBarFill, { height: `${Math.max(barHeight, 3)}%` }]} />
                         </View>
-                        <Text style={styles.runBarDist}>{(week.total_distance || 0).toFixed(1)}</Text>
+                        <Text style={styles.runBarDist}>{(week.total_distance || 0).toFixed(1)} mi</Text>
+                        <Text style={styles.runBarPace}>{formatPace(week.avg_pace)}</Text>
                         <Text style={styles.runBarLabel}>{`W${week.week_num}`}</Text>
                       </View>
                     );
@@ -274,7 +353,7 @@ export default function PerformanceTracker() {
                       <>
                         <Text style={styles.paceTrend}>AVG PACE TREND</Text>
                         <Text style={[styles.paceValue, { color: paceDelta < 0 ? '#01FF70' : paceDelta > 0 ? '#FF4136' : '#fff' }]}>
-                          {first.avg_pace > 0 ? `${first.avg_pace.toFixed(1)}` : '--'}{' \u2192 '}{last.avg_pace > 0 ? `${last.avg_pace.toFixed(1)}` : '--'} min/mi
+                          {formatPace(first.avg_pace)}{' \u2192 '}{formatPace(last.avg_pace)} /mi
                         </Text>
                       </>
                     );
@@ -313,8 +392,8 @@ export default function PerformanceTracker() {
                         <Text style={styles.runStatSub}>{formatTime(run.total_time)}</Text>
                       </View>
                       <View style={styles.runPace}>
-                        <Text style={styles.runStatVal}>{run.avg_pace > 0 ? `${run.avg_pace.toFixed(1)}` : '--'}</Text>
-                        <Text style={styles.runStatSub}>min/mi</Text>
+                        <Text style={styles.runStatVal}>{formatPace(run.avg_pace)}</Text>
+                        <Text style={styles.runStatSub}>/mi</Text>
                       </View>
                     </View>
                   );
@@ -325,6 +404,116 @@ export default function PerformanceTracker() {
                   <Text style={styles.viewAll}>VIEW ALL</Text>
                 </TouchableOpacity>
               ) : null}
+            </View>
+          </View>
+        ) : null}
+
+        {/* ═══ WODs TAB ═══ */}
+        {activeTab === 'wods' ? (
+          <View>
+            {/* AMRAP Progression */}
+            {wodProgression.length > 0 ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>AMRAP ROUNDS PROGRESSION</Text>
+                {(() => {
+                  // Group by WOD name
+                  const byWod = {};
+                  for (const w of wodProgression) {
+                    const name = w.wod_name || 'WOD';
+                    if (!byWod[name]) byWod[name] = [];
+                    byWod[name].push(w);
+                  }
+                  return Object.entries(byWod).map(([wodName, entries]) => {
+                    const maxRounds = Math.max(...entries.map(e => parseInt(e.amrap_rounds) || 0), 1);
+                    return (
+                      <View key={wodName} style={{ marginBottom: 16 }}>
+                        <Text style={styles.wodGroupName}>{wodName}</Text>
+                        <Text style={styles.wodTimeCap}>{entries[0]?.time_cap || ''}</Text>
+                        <View style={styles.amrapChart}>
+                          {entries.map((entry, i) => {
+                            const rounds = parseInt(entry.amrap_rounds) || 0;
+                            const barHeight = (rounds / maxRounds) * 100;
+                            const phaseColor = PHASE_COLORS[entry.phase?.toLowerCase()] || '#FF4136';
+                            return (
+                              <View key={i} style={styles.amrapChartBar}>
+                                <View style={styles.amrapBarTrack}>
+                                  <View style={[styles.amrapBarFill, { height: `${Math.max(barHeight, 5)}%`, backgroundColor: phaseColor }]} />
+                                </View>
+                                <Text style={styles.amrapBarRounds}>{rounds}</Text>
+                                <Text style={styles.amrapBarLabel}>{`W${entry.week_number}`}</Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                        {/* Best vs first */}
+                        {entries.length >= 2 ? (() => {
+                          const first = parseInt(entries[0].amrap_rounds) || 0;
+                          const best = Math.max(...entries.map(e => parseInt(e.amrap_rounds) || 0));
+                          const gain = best - first;
+                          return (
+                            <View style={styles.wodSummaryRow}>
+                              <Text style={styles.wodSummaryLabel}>BEST</Text>
+                              <Text style={styles.wodSummaryValue}>{best} rounds</Text>
+                              {gain > 0 ? (
+                                <View style={[styles.deltaChip, { backgroundColor: 'rgba(1,255,112,0.1)', marginLeft: 8 }]}>
+                                  <Text style={[styles.deltaText, { color: '#01FF70', fontSize: 12 }]}>+{gain}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                          );
+                        })() : null}
+                      </View>
+                    );
+                  });
+                })()}
+              </View>
+            ) : (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>AMRAP ROUNDS PROGRESSION</Text>
+                <Text style={styles.emptyText}>Complete AMRAP WODs to see your round progression</Text>
+              </View>
+            )}
+
+            {/* WOD Library Scores */}
+            {wodStats.recentScores.length > 0 ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>RECENT WOD SCORES</Text>
+                {wodStats.recentScores.map((score, i) => (
+                  <View key={i} style={styles.wodScoreRow}>
+                    <View style={[styles.accentBar, { backgroundColor: '#FF4136' }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.wodScoreName}>{String(score.wod_name || score.wod_id || '')}</Text>
+                      <Text style={styles.wodScoreDate}>{String(score.date || '')}</Text>
+                    </View>
+                    <View style={styles.wodScoreBox}>
+                      <Text style={styles.wodScoreVal}>{String(score.score || '')}</Text>
+                      <Text style={styles.wodScoreType}>{String(score.score_type || '').toUpperCase()}</Text>
+                    </View>
+                    {score.rx ? <Text style={styles.rxBadge}>RX</Text> : null}
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {/* WOD Quick Stats */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>WOD SUMMARY</Text>
+              <View style={styles.profileCard}>
+                <View style={styles.wodStatRow}>
+                  <Text style={styles.wodStatLabel}>In-Plan WODs</Text>
+                  <Text style={styles.wodStatValue}>{String(wodStats.totalPlanWods)}</Text>
+                </View>
+                <View style={styles.wodStatRow}>
+                  <Text style={styles.wodStatLabel}>Library WODs</Text>
+                  <Text style={styles.wodStatValue}>{String(wodStats.totalLibraryWods)}</Text>
+                </View>
+                {wodStats.bestAmrap?.wod_name ? (
+                  <View style={styles.wodStatRow}>
+                    <Text style={styles.wodStatLabel}>Best AMRAP</Text>
+                    <Text style={styles.wodStatValue}>{wodStats.bestAmrap.best_rounds} rounds</Text>
+                  </View>
+                ) : null}
+              </View>
             </View>
           </View>
         ) : null}
@@ -341,11 +530,11 @@ export default function PerformanceTracker() {
               {personalRecords.length === 0 ? (
                 <Text style={styles.emptyText}>Log exercises with weight to track PRs</Text>
               ) : (
-                personalRecords.slice(0, expandedSection === 'prs' ? 30 : 10).map((pr) => (
+                personalRecords.slice(0, expandedSection === 'prs' ? 30 : 10).map((pr, idx) => (
                   <TouchableOpacity
-                    key={pr.exercise_id}
+                    key={pr.exercise_seed_id || pr.exercise_name || idx}
                     style={styles.prRow}
-                    onPress={() => handleExerciseTap(pr.exercise_id)}
+                    onPress={() => handleExerciseTap(pr.exercise_seed_id || pr.exercise_id)}
                   >
                     <View style={[styles.accentBar, { backgroundColor: '#FF4136' }]} />
                     <View style={styles.prContent}>
@@ -379,17 +568,23 @@ export default function PerformanceTracker() {
                   <ActivityIndicator size="small" color="#FF4136" />
                 ) : (
                   selectedExerciseHistory.map((entry, i) => {
-                    const repsDisplay = formatRepsDisplay(entry.actual_reps, entry.sets);
-                    const targetReps = parseInt((entry.sets || '').match(/x(\d+)/)?.[1]) || 0;
-                    const actualNums = (entry.actual_reps || '').split(',').map(r => parseInt(r.trim())).filter(r => !isNaN(r));
+                    const weight = entry.actual_weight || entry.weight || '--';
+                    const repsVal = entry.actual_reps || entry.reps || '';
+                    const repsDisplay = formatRepsDisplay(repsVal, entry.sets);
+                    const targetReps = parseInt(String(entry.sets || '').match(/x(\d+)/)?.[1]) || 0;
+                    const actualNums = String(repsVal).split(',').map(r => parseInt(r.trim())).filter(r => !isNaN(r));
                     const allHit = targetReps > 0 && actualNums.length > 0 && actualNums.every(r => r >= targetReps);
                     const anyMissed = targetReps > 0 && actualNums.some(r => r < targetReps - 1);
+                    const isCustom = entry.source === 'custom';
                     return (
                       <View key={i} style={styles.historyRow}>
-                        <Text style={styles.historyDate}>{entry.week_number ? `Wk${entry.week_number}` : String(entry.date || '').slice(5)}</Text>
-                        <Text style={styles.historyWeight}>{String(entry.actual_weight || '--')}</Text>
+                        <Text style={styles.historyDate}>
+                          {entry.week_number ? `Wk${entry.week_number}` : String(entry.date || '').slice(5)}
+                          {isCustom ? ' *' : ''}
+                        </Text>
+                        <Text style={styles.historyWeight}>{String(weight)}</Text>
                         <Text style={[styles.historyReps, allHit && { color: '#01FF70' }, anyMissed && { color: '#FF4136' }]}>{repsDisplay}</Text>
-                        <Text style={styles.historyTarget}>{entry.sets || ''}</Text>
+                        <Text style={styles.historyTarget}>{isCustom ? 'LOG' : (entry.sets || '')}</Text>
                       </View>
                     );
                   })
@@ -520,11 +715,12 @@ const styles = StyleSheet.create({
   weekLabel: { color: 'rgba(255,255,255,0.2)', fontSize: 7, fontFamily: 'monospace', marginTop: 3 },
 
   // Run Chart
-  runChart: { flexDirection: 'row', alignItems: 'flex-end', height: 100, marginBottom: 8 },
+  runChart: { flexDirection: 'row', alignItems: 'flex-end', height: 120, marginBottom: 8 },
   runChartBar: { flex: 1, alignItems: 'center', height: '100%', justifyContent: 'flex-end' },
   runBarTrack: { width: 10, flex: 1, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 5, overflow: 'hidden', justifyContent: 'flex-end' },
   runBarFill: { width: '100%', borderRadius: 5, backgroundColor: '#0074D9', minHeight: 2 },
   runBarDist: { color: 'rgba(255,255,255,0.4)', fontSize: 8, fontFamily: 'monospace', marginTop: 2 },
+  runBarPace: { color: 'rgba(255,255,255,0.25)', fontSize: 7, fontFamily: 'monospace' },
   runBarLabel: { color: 'rgba(255,255,255,0.2)', fontSize: 7, fontFamily: 'monospace', marginTop: 1 },
   paceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
   paceTrend: { color: 'rgba(255,255,255,0.3)', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
@@ -567,4 +763,44 @@ const styles = StyleSheet.create({
   searchName: { color: '#fff', fontSize: 13, fontWeight: '600', textTransform: 'uppercase' },
   searchMeta: { color: 'rgba(255,255,255,0.2)', fontSize: 10, fontFamily: 'monospace', marginTop: 2 },
   searchArrow: { color: 'rgba(255,255,255,0.15)', fontSize: 10 },
+
+  // WOD Tab
+  wodGroupName: { color: '#FF4136', fontSize: 14, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
+  wodTimeCap: { color: 'rgba(255,255,255,0.25)', fontSize: 10, fontFamily: 'monospace', marginBottom: 8 },
+  amrapChart: { flexDirection: 'row', alignItems: 'flex-end', height: 100, marginBottom: 8 },
+  amrapChartBar: { flex: 1, alignItems: 'center', height: '100%', justifyContent: 'flex-end' },
+  amrapBarTrack: { width: 14, flex: 1, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 7, overflow: 'hidden', justifyContent: 'flex-end' },
+  amrapBarFill: { width: '100%', borderRadius: 7, minHeight: 3 },
+  amrapBarRounds: { color: '#fff', fontSize: 11, fontWeight: '800', fontFamily: 'monospace', marginTop: 3 },
+  amrapBarLabel: { color: 'rgba(255,255,255,0.2)', fontSize: 7, fontFamily: 'monospace', marginTop: 1 },
+  wodSummaryRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
+  wodSummaryLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
+  wodSummaryValue: { color: '#fff', fontSize: 13, fontWeight: '700', fontFamily: 'monospace', marginLeft: 8 },
+  wodScoreRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.03)' },
+  wodScoreName: { color: '#fff', fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
+  wodScoreDate: { color: 'rgba(255,255,255,0.2)', fontSize: 10, fontFamily: 'monospace', marginTop: 2 },
+  wodScoreBox: { alignItems: 'flex-end', marginRight: 8 },
+  wodScoreVal: { color: '#FF4136', fontSize: 15, fontWeight: '900', fontFamily: 'monospace' },
+  wodScoreType: { color: 'rgba(255,255,255,0.2)', fontSize: 8, fontFamily: 'monospace' },
+  rxBadge: { color: '#01FF70', fontSize: 10, fontWeight: '900', letterSpacing: 1, backgroundColor: 'rgba(1,255,112,0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  wodStatRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  wodStatLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 13, fontWeight: '600' },
+  wodStatValue: { color: '#fff', fontSize: 14, fontWeight: '700', fontFamily: 'monospace' },
+  profileCard: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 8, overflow: 'hidden' },
+
+  // Weekly Summary
+  weeklySummary: { marginHorizontal: 12, marginTop: 8, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(255,65,54,0.04)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,65,54,0.08)' },
+  weeklySummaryText: { color: 'rgba(255,255,255,0.4)', fontSize: 11, fontFamily: 'monospace', textAlign: 'center' },
+
+  // Custom Sessions
+  customSessionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' },
+  customSessionTitle: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  customSessionMeta: { color: 'rgba(255,255,255,0.45)', fontSize: 11, marginTop: 3 },
+  customSessionSource: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  customEntries: { paddingLeft: 13, paddingBottom: 10, marginBottom: 4, backgroundColor: 'rgba(255,255,255,0.015)', borderRadius: 6 },
+  customEntryRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.03)' },
+  customEntryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  customEntryName: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600' },
+  customEntryWeight: { color: '#FF4136', fontSize: 14, fontWeight: '800', fontFamily: 'monospace' },
+  customEntryDetail: { color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 3 },
 });

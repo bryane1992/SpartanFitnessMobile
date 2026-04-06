@@ -425,8 +425,8 @@ export default function Settings({ navigation }) {
             disabled={isSyncing}
           >
             <View style={styles.actionContent}>
-              <Text style={styles.actionLabel}>{isSyncing ? syncProgress : 'Refresh Library'}</Text>
-              <Text style={styles.actionDesc}>Download latest exercises with GIF demos</Text>
+              <Text style={styles.actionLabel}>{isSyncing ? syncProgress : 'Download GIF Demos'}</Text>
+              <Text style={styles.actionDesc}>Fetch 1300+ exercise GIFs for offline viewing</Text>
             </View>
           </TouchableOpacity>
         </View>
@@ -483,6 +483,23 @@ export default function Settings({ navigation }) {
             <View style={styles.actionContent}>
               <Text style={styles.actionLabel}>Test Archetypes</Text>
               <Text style={styles.actionDesc}>Run archetype detection on 7 test profiles</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.actionButton} onPress={async () => {
+            try {
+              Alert.alert('Seeding...', 'Creating 8 weeks of workout history...');
+              const { seedTestWorkoutData } = require('../core/seedTestData');
+              await seedTestWorkoutData();
+              Alert.alert('Done', 'Seeded 8 weeks of workout history with weight progressions, runs, and AMRAP scores. Check the Stats tab!');
+            } catch (e) {
+              console.error('Seed error:', e);
+              Alert.alert('Error', e.message);
+            }
+          }}>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionLabel}>Seed Test Data</Text>
+              <Text style={styles.actionDesc}>Create 8 weeks of workout history for stats testing</Text>
             </View>
           </TouchableOpacity>
 

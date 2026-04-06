@@ -11,8 +11,128 @@ import {
   Dimensions,
 } from 'react-native';
 import { getExerciseFullById, getDatabase } from '../data/database';
+import Constants from 'expo-constants';
 
-const API_BASE = 'https://exercisedb-api.vercel.app/api/v1';
+// Verified mapping: seed exercise ID → ExerciseDB API ID (for animated GIFs)
+const SEED_TO_EXDB_ID = {
+  bench_press: '0025', incline_bench: '0047', back_squat: '0043', front_squat: '0024',
+  deadlift: '0032', overhead_press: '0774', barbell_row: '0027', sumo_deadlift: '0117',
+  romanian_deadlift: '0085', close_grip_bench: '0257', barbell_curl: '0031',
+  barbell_lunge: '0054', skull_crushers: '0060',
+  db_bench_press: '0289', db_incline_press: '0314', db_shoulder_press: '0405',
+  db_row: '0294', bicep_curl: '0285', hammer_curl: '0313',
+  db_chest_fly: '0308', lateral_raise: '0334', db_lunge: '0291',
+  goblet_squat: '1760', tricep_kickback: '0373',
+  concentration_curl: '0297', db_arnold_press: '0262',
+  bulgarian_split_squat: '1757', step_ups: '0809',
+  push_ups: '0662', pull_ups: '0652', chin_ups: '1326', dips: '0251',
+  mountain_climbers: '0630', sit_ups: '0001', russian_twists: '0687',
+  inverted_row: '1412', bench_dips: '0129', pike_push_ups: '0471',
+  lat_pulldown: '2330', cable_tricep_pushdown: '0201', cable_bicep_curl: '0200',
+  leg_press: '0739', leg_extension: '0585', leg_curl: '0599',
+  kb_swing: '0549', kb_goblet_squat: '0534', farmer_walk: '2133',
+};
+
+function getRapidApiKey() {
+  return Constants.expoConfig?.extra?.exerciseDbApiKey
+    || Constants.manifest?.extra?.exerciseDbApiKey
+    || null;
+}
+
+const GITHUB_IMG_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises';
+
+// Verified mapping: seed exercise ID → GitHub exercise DB image folder name
+const SEED_TO_IMAGE = {
+  // Barbell compounds
+  bench_press: 'Barbell_Bench_Press_-_Medium_Grip',
+  incline_bench: 'Barbell_Incline_Bench_Press_-_Medium_Grip',
+  back_squat: 'Barbell_Squat',
+  front_squat: 'Front_Squat_Clean_Grip',
+  deadlift: 'Barbell_Deadlift',
+  overhead_press: 'Standing_Military_Press',
+  barbell_row: 'Bent_Over_Barbell_Row',
+  sumo_deadlift: 'Sumo_Deadlift',
+  romanian_deadlift: 'Romanian_Deadlift',
+  close_grip_bench: 'Close-Grip_Barbell_Bench_Press',
+  push_press: 'Push_Press',
+  power_clean: 'Power_Clean',
+  barbell_curl: 'Barbell_Curl',
+  barbell_hip_thrust: 'Barbell_Hip_Thrust',
+  good_morning: 'Good_Morning',
+  barbell_lunge: 'Barbell_Lunge',
+  barbell_thrusters: 'Barbell_Squat', // closest
+  // Dumbbell
+  db_bench_press: 'Dumbbell_Bench_Press',
+  db_incline_press: 'Hammer_Grip_Incline_DB_Bench_Press',
+  db_shoulder_press: 'Dumbbell_Shoulder_Press',
+  db_row: 'Bent_Over_Two-Dumbbell_Row',
+  bicep_curl: 'Dumbbell_Bicep_Curl',
+  hammer_curl: 'Hammer_Curls',
+  db_chest_fly: 'Dumbbell_Flyes',
+  lateral_raise: 'Side_Lateral_Raise',
+  db_lunge: 'Dumbbell_Lunges',
+  goblet_squat: 'Goblet_Squat',
+  db_rdl: 'Stiff-Legged_Dumbbell_Deadlift',
+  skull_crushers: 'Lying_Dumbbell_Tricep_Extension',
+  overhead_tricep_ext: 'Standing_Dumbbell_Triceps_Extension',
+  tricep_kickback: 'Tricep_Dumbbell_Kickback',
+  concentration_curl: 'Concentration_Curls',
+  db_arnold_press: 'Arnold_Dumbbell_Press',
+  db_reverse_fly: 'Seated_Bent-Over_Rear_Delt_Raise',
+  bulgarian_split_squat: 'Split_Squats',
+  step_ups: 'Barbell_Step_Ups',
+  db_walking_lunge: 'Bodyweight_Walking_Lunge',
+  db_thrusters: 'Dumbbell_Squat',
+  // Bodyweight
+  push_ups: 'Push-Ups_-_Close_Triceps_Position',
+  pull_ups: 'Scapular_Pull-Up',
+  chin_ups: 'Chin-Up',
+  dips: 'Dips_-_Chest_Version',
+  air_squats: 'Bodyweight_Squat',
+  burpees: 'Frog_Sit-Ups',
+  mountain_climbers: 'Mountain_Climbers',
+  sit_ups: 'Sit-Up',
+  plank: 'Plank',
+  bird_dog: null,
+  dead_bug: null,
+  v_ups: 'Jackknife_Sit-Up',
+  russian_twists: 'Russian_Twist',
+  box_jumps: 'Front_Box_Jump',
+  glute_bridge: 'Butt_Lift_Bridge',
+  pike_push_ups: 'Handstand_Push-Ups',
+  inverted_row: 'Inverted_Row',
+  bench_dips: 'Bench_Dips',
+  high_knees: null,
+  bear_crawl: 'Bear_Crawl',
+  // Cable/Machine
+  lat_pulldown: 'Wide-Grip_Lat_Pulldown',
+  cable_row: 'Seated_Cable_Rows',
+  cable_fly: 'Flat_Bench_Cable_Flyes',
+  cable_tricep_pushdown: 'Triceps_Pushdown',
+  cable_bicep_curl: 'Cable_Hammer_Curls_-_Rope_Attachment',
+  cable_face_pulls: 'Face_Pull',
+  cable_lateral_raise: 'Cable_Seated_Lateral_Raise',
+  cable_woodchop: null,
+  cable_crunch: null,
+  leg_press: 'Leg_Press',
+  leg_extension: 'Leg_Extensions',
+  leg_curl: 'Lying_Leg_Curls',
+  machine_chest_press: 'Machine_Bench_Press',
+  machine_shoulder_press: 'Leverage_Shoulder_Press',
+  machine_row: null,
+  // Kettlebell
+  kb_swing: 'One-Arm_Kettlebell_Swings',
+  kb_goblet_squat: 'Goblet_Squat',
+  farmer_walk: 'Farmers_Walk',
+  // Olympic
+  hang_power_clean: 'Power_Clean',
+};
+
+function getSeedImageUrl(exerciseId) {
+  const folder = SEED_TO_IMAGE[exerciseId];
+  if (!folder) return null;
+  return `${GITHUB_IMG_BASE}/${folder}/0.jpg`;
+}
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -38,27 +158,32 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
     try {
       let ex = await getExerciseFullById(exerciseId);
 
-      // If not in local DB, try fetching from API
+      // If not in local DB, try fetching from RapidAPI
       if (!ex) {
         try {
-          const response = await fetch(`${API_BASE}/exercises/${exerciseId}`);
-          if (response.ok) {
-            const result = await response.json();
-            const apiEx = result.data;
-            if (apiEx) {
-              ex = {
-                id: apiEx.exerciseId,
-                name: apiEx.name,
-                gif_url: apiEx.gifUrl,
-                muscle_group: apiEx.bodyParts?.[0] || '',
-                category: apiEx.equipments?.[0] || 'bodyweight',
-                equipment_required: JSON.stringify(apiEx.equipments || []),
-                instructions: JSON.stringify(apiEx.instructions || []),
-                target_muscles: JSON.stringify(apiEx.targetMuscles || []),
-                secondary_muscles: JSON.stringify(apiEx.secondaryMuscles || []),
-                is_compound: (apiEx.targetMuscles?.length || 0) + (apiEx.secondaryMuscles?.length || 0) >= 3 ? 1 : 0,
-                default_sets: 3, default_reps: '10', default_weight: 'BW',
-              };
+          const rapidApiKey = Constants.expoConfig?.extra?.exerciseDbApiKey
+            || Constants.manifest?.extra?.exerciseDbApiKey;
+          if (rapidApiKey) {
+            const response = await fetch(`https://exercisedb.p.rapidapi.com/exercises/exercise/${exerciseId}`, {
+              headers: { 'X-RapidAPI-Key': rapidApiKey, 'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com' }
+            });
+            if (response.ok) {
+              const apiEx = await response.json();
+              if (apiEx) {
+                ex = {
+                  id: apiEx.id,
+                  name: apiEx.name,
+                  gif_url: null, // RapidAPI doesn't include GIF URLs — we'll resolve below
+                  muscle_group: apiEx.bodyPart || '',
+                  category: apiEx.equipment || 'bodyweight',
+                  equipment_required: JSON.stringify([apiEx.equipment].filter(Boolean)),
+                  instructions: JSON.stringify(apiEx.instructions || []),
+                  target_muscles: JSON.stringify(apiEx.target ? [apiEx.target] : []),
+                  secondary_muscles: JSON.stringify(apiEx.secondaryMuscles || []),
+                  is_compound: (1 + (apiEx.secondaryMuscles?.length || 0)) >= 3 ? 1 : 0,
+                  default_sets: 3, default_reps: '10', default_weight: 'BW',
+                };
+              }
             }
           }
         } catch (e) { /* offline */ }
@@ -66,71 +191,41 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
 
       if (!ex) return;
 
-      // If exercise already has gif_url, we're good
-      if (ex.gif_url) {
-        setExercise(ex);
-        setGifLoading(true);
-        return;
-      }
-
-      // Seed exercise without gif — expand abbreviations for search
-      const NAME_EXPANSIONS = {
-        'db': 'dumbbell', 'kb': 'kettlebell', 'bb': 'barbell', 'ez': 'ez-bar',
-      };
-      let searchName = (ex.name || '').toLowerCase();
-      for (const [abbr, full] of Object.entries(NAME_EXPANSIONS)) {
-        searchName = searchName.replace(new RegExp(`^${abbr}\\s+`, 'i'), `${full} `);
-      }
-
-      // Try local DB first
-      const database = await getDatabase();
-      let match = await database.getFirstAsync(
-        "SELECT gif_url, instructions, target_muscles FROM exercises WHERE gif_url IS NOT NULL AND LOWER(name) LIKE ? LIMIT 1",
-        [`%${searchName}%`]
-      );
-
-      // If no local match, try the API directly
-      if (!match) {
-        try {
-          const encoded = encodeURIComponent(searchName.split(' ').slice(0, 3).join(' '));
-          const response = await fetch(`${API_BASE}/exercises?search=${encoded}&limit=10`);
-          if (response.ok) {
-            const result = await response.json();
-            if (result.data?.length > 0) {
-              // Score results: prefer shortest name that contains all our search words
-              const searchWords = searchName.toLowerCase().split(' ').filter(w => w.length > 2);
-              let bestMatch = null;
-              let bestScore = -1;
-
-              for (const apiEx of result.data) {
-                if (!apiEx.gifUrl) continue;
-                const apiName = apiEx.name.toLowerCase();
-                // Count how many of our search words appear in the API name
-                const wordMatches = searchWords.filter(w => apiName.includes(w)).length;
-                // Prefer more word matches, then shorter names (more specific)
-                const score = (wordMatches * 100) - apiName.length;
-                if (score > bestScore) {
-                  bestScore = score;
-                  bestMatch = apiEx;
+      // Try animated GIF from ExerciseDB paid API first
+      if (!ex.gif_url) {
+        const exdbId = SEED_TO_EXDB_ID[ex.id] || (ex.api_id ? ex.api_id : null);
+        if (exdbId) {
+          const apiKey = getRapidApiKey();
+          if (apiKey) {
+            try {
+              const response = await fetch(
+                `https://exercisedb.p.rapidapi.com/image?exerciseId=${exdbId}&resolution=720`,
+                { headers: { 'X-RapidAPI-Key': apiKey, 'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com' } }
+              );
+              if (response.ok) {
+                const blob = await response.blob();
+                const dataUri = await new Promise((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result);
+                  reader.readAsDataURL(blob);
+                });
+                if (dataUri) {
+                  ex = { ...ex, gif_url: dataUri };
                 }
               }
-
-              if (bestMatch) {
-                match = {
-                  gif_url: bestMatch.gifUrl,
-                  instructions: JSON.stringify(bestMatch.instructions || []),
-                  target_muscles: JSON.stringify(bestMatch.targetMuscles || []),
-                };
-              }
+            } catch (e) {
+              console.log('[GIF] API fetch failed:', e.message);
             }
           }
-        } catch (e) {
-          // Offline or rate limited — show placeholder
         }
       }
 
-      if (match) {
-        ex = { ...ex, gif_url: match.gif_url, instructions: match.instructions || ex.instructions, target_muscles: match.target_muscles || ex.target_muscles };
+      // Fallback: GitHub static images
+      if (!ex.gif_url) {
+        const imageUrl = getSeedImageUrl(ex.id);
+        if (imageUrl) {
+          ex = { ...ex, gif_url: imageUrl };
+        }
       }
 
       setExercise(ex);
@@ -184,7 +279,7 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
                 <Text style={styles.placeholderText}>{String(exercise.name).toUpperCase()}</Text>
                 <Text style={styles.placeholderSub}>{exercise.category || ''}</Text>
                 {!exercise.gif_url ? (
-                  <Text style={styles.placeholderHint}>Sync exercises in Settings for GIF demos</Text>
+                  <Text style={styles.placeholderHint}>No demo image available for this exercise</Text>
                 ) : null}
               </View>
             ) : (

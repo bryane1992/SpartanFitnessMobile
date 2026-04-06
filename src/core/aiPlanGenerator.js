@@ -6,7 +6,7 @@
 
 import Constants from 'expo-constants';
 import { calculatePhases, getPhaseForWeek, isDeloadWeek } from './phaseCalculator';
-import { calculateWeight, calculateSetsReps, calculateRunParams, getBodyCompParams, getMesocyclePhase, STIMULUS_TYPES } from './progressionRules';
+import { calculateWeight, calculateSetsReps, calculateRunParams, getBodyCompParams, getMesocyclePhase, getRestForPhase, getNearCapStrategy, STIMULUS_TYPES } from './progressionRules';
 import { savePlanDay, savePlanBlock, savePlanExercise, getExercisesByFilter, getWodsFromDb, updateBlockRunType, savePlanRationales } from '../data/database';
 import { getRaceRequirements, getRaceExerciseRequirements, getRaceDistance } from './raceRequirements';
 import { detectArchetype, adjustArchetypeForEquipment } from './archetypes';
@@ -322,6 +322,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
   const recentlyUsed = new Set();
   const weeklyExerciseCount = {}; // track how many times each exercise appears per week
+  const wodUsageCount = {}; // track how many times each WOD is used across the plan
+  const MAX_WOD_REPEATS = 3; // no WOD should appear more than 3 times in the plan
 
   for (let week = 1; week <= totalWeeks; week++) {
     const phase = getPhaseForWeek(phases, week);
@@ -415,7 +417,13 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           if (!ex) continue;
           const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets);
           const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, userProfile.equipmentDetails, userProfile.workingWeights);
-          await savePlanExercise({ planBlockId: compBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: bt.rest, notes: null });
+          const rest = getRestForPhase(displayPhase, true);
+          // Near-cap strategy: if weight is close to equipment max, add tempo/AMRAP notes
+          const equipMax = userProfile.equipmentDetails?.barbell?.maxWeight;
+          const weightNum = parseFloat(weight) || 0;
+          const capStrategy = equipMax ? getNearCapStrategy(weightNum, equipMax) : null;
+          const notes = capStrategy ? capStrategy.notes : null;
+          await savePlanExercise({ planBlockId: compBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest, notes });
           usedToday.add(ex.id); recentlyUsed.add(ex.id);
         }
       }
@@ -431,16 +439,24 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
       }
 
-      // ── WOD — only if time budget allows ──
-      if (dayConfig.wod && wodPool.length > 0 && bt.wod > 0) {
+      // ── WOD — skip entirely on run days (the run IS the conditioning) ──
+      const hasRunBlock = !!dayConfig.run;
+      if (dayConfig.wod && wodPool.length > 0 && bt.wod > 0 && !hasRunBlock) {
+        const eligibleWods = wodPool;
+        {
+        // Filter out WODs that have hit the repeat cap
+        const cappedWods = eligibleWods.filter(id => (wodUsageCount[id] || 0) < MAX_WOD_REPEATS);
+        const rotationPool = cappedWods.length > 0 ? cappedWods : eligibleWods; // fallback if all capped
         // Combine week + day index for rotation so different days get different WODs
-        const wodRotationIdx = ((week - 1) * dayConfigs.length + tdi) % Math.max(1, wodPool.length);
-        const wodId = wodPool[wodRotationIdx] || wodPool[0];
+        const wodRotationIdx = ((week - 1) * dayConfigs.length + tdi) % Math.max(1, rotationPool.length);
+        const wodId = rotationPool[wodRotationIdx] || rotationPool[0];
+        wodUsageCount[wodId] = (wodUsageCount[wodId] || 0) + 1;
         const wod = wodById[wodId];
         const wodBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'WOD', type: dayConfig.wod.type || 'CIRCUIT', timeCap: '10 min', isAmrap: true, hasGps: false });
         const wodExercises = buildWodExercises(wod, userProfile.equipmentDetails);
         for (let i = 0; i < wodExercises.length; i++) {
           await savePlanExercise({ planBlockId: wodBlockId, exerciseId: wodExercises[i].id, sortOrder: i, sets: wodExercises[i].sets, reps: wodExercises[i].reps, weight: wodExercises[i].weight, rest: null, notes: wodExercises[i].notes });
+        }
         }
       }
 
@@ -461,7 +477,13 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       }
 
       // ── ARM FINISHER — only if time budget allows ──
-      let armIds = daySelection.arms || [];
+      // Filter Claude's arm picks: must be arm isolation (arm_pull/arm_push), not compounds like clean & press
+      let armIds = (daySelection.arms || []).filter(id => {
+        const ex = exerciseById[id];
+        if (!ex) return false;
+        const pattern = getMovementPattern(ex);
+        return pattern === 'arm_pull' || pattern === 'arm_push';
+      });
       if (armIds.length === 0 && dayConfig.arm_finisher && bt.armBlaster > 0) {
         const armPullOptions = exerciseMenu.filter(e => e.pattern === 'arm_pull').map(e => e.id);
         const armPushOptions = exerciseMenu.filter(e => e.pattern === 'arm_push').map(e => e.id);
@@ -495,7 +517,15 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         ['flexion', 'rotation'],
       ];
       const corePair = corePairs[tdi % corePairs.length];
-      let coreIds = daySelection.core || [];
+      // Filter Claude's core picks: must be actual core exercises, not carries/compounds
+      const VALID_CORE_IDS = new Set(Object.values(CORE_CATEGORIES).flat());
+      let coreIds = (daySelection.core || []).filter(id => {
+        if (VALID_CORE_IDS.has(id)) return true;
+        const ex = exerciseById[id];
+        if (!ex) return false;
+        const pattern = getMovementPattern(ex);
+        return pattern === 'core' && ex.muscle_group === 'core';
+      });
       if (coreIds.length === 0) {
         // Auto-select from category rotation
         for (const cat of corePair) {
@@ -558,7 +588,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 // ═══════════════════════════════════════════════════════════════
 
 function calculateBlockTimes(sessionMinutes, dayConfig, archetypeKey) {
-  const hasWod = !!dayConfig.wod;
+  const hasWod = !!dayConfig.wod && !dayConfig.run; // no WOD on run days
   const hasArms = !!dayConfig.arm_finisher;
 
   // 20-30 min: Tier 1 only (warmup + 2 compounds + core + cooldown)
@@ -580,26 +610,56 @@ function calculateBlockTimes(sessionMinutes, dayConfig, archetypeKey) {
   if (sessionMinutes <= 59) {
     // Arms for any archetype that benefits from direct arm work
     const keepArms = hasArms && !['endurance'].includes(archetypeKey);
-    return { warmup: 5, mainLifts: hasWod ? 18 : 22, wod: hasWod ? 10 : 0, accessories: keepArms ? 5 : 8, armBlaster: keepArms ? 6 : 0, core: 5, cooldown: 5,
-      sets: 3, mainLiftCount: 3, accessoryCount: keepArms ? 1 : 2, coreCount: 3, warmupCount: 3, rest: '30-60s' };
+    return enforceSessionTime({ warmup: 5, mainLifts: hasWod ? 18 : 22, wod: hasWod ? 10 : 0, accessories: keepArms ? 5 : 8, armBlaster: keepArms ? 6 : 0, core: 5, cooldown: 5,
+      sets: 3, mainLiftCount: 3, accessoryCount: keepArms ? 1 : 2, coreCount: 3, warmupCount: 3, rest: '30-60s' }, sessionMinutes);
   }
 
   // 60-74 min: Full (default)
   if (sessionMinutes <= 74) {
-    return { warmup: hasWod && hasArms ? 6 : 8, mainLifts: hasWod && hasArms ? 17 : hasWod ? 20 : 25, wod: hasWod ? 10 : 0,
+    return enforceSessionTime({ warmup: hasWod && hasArms ? 6 : 8, mainLifts: hasWod && hasArms ? 17 : hasWod ? 20 : 25, wod: hasWod ? 10 : 0,
       accessories: hasArms ? 8 : 12, armBlaster: hasArms ? 8 : 0, core: hasWod && hasArms ? 5 : 8, cooldown: 5,
-      sets: 3, mainLiftCount: 3, accessoryCount: 2, coreCount: 3, warmupCount: 3, rest: '45-60s' };
+      sets: 3, mainLiftCount: 3, accessoryCount: 2, coreCount: 3, warmupCount: 3, rest: '45-60s' }, sessionMinutes);
   }
 
   // 75-89 min: Extended (4 sets, longer rest)
   if (sessionMinutes <= 89) {
-    return { warmup: 8, mainLifts: 28, wod: hasWod ? 10 : 0, accessories: 15, armBlaster: hasArms ? 8 : 0, core: 8, cooldown: 5,
-      sets: 4, mainLiftCount: 3, accessoryCount: 3, coreCount: 3, warmupCount: 3, rest: '60-90s' };
+    return enforceSessionTime({ warmup: 8, mainLifts: 28, wod: hasWod ? 10 : 0, accessories: 15, armBlaster: hasArms ? 8 : 0, core: 8, cooldown: 5,
+      sets: 4, mainLiftCount: 3, accessoryCount: 3, coreCount: 3, warmupCount: 3, rest: '60-90s' }, sessionMinutes);
   }
 
   // 90+ min: Long (4 sets, 4 lifts, extended rest)
-  return { warmup: 10, mainLifts: 35, wod: hasWod ? 12 : 0, accessories: 20, armBlaster: hasArms ? 10 : 0, core: 10, cooldown: 5,
+  const result = { warmup: 10, mainLifts: 35, wod: hasWod ? 12 : 0, accessories: 20, armBlaster: hasArms ? 10 : 0, core: 10, cooldown: 5,
     sets: 4, mainLiftCount: 4, accessoryCount: 4, coreCount: 4, warmupCount: 4, rest: '90-120s' };
+  return enforceSessionTime(result, sessionMinutes);
+}
+
+// Enforce session time — drop blocks in tier order if total exceeds budget
+// Drop order: WOD → arm blasters → accessories. Never drop warmup, main lifts, core, cooldown.
+function enforceSessionTime(bt, sessionMinutes) {
+  const total = () => bt.warmup + bt.mainLifts + bt.wod + bt.accessories + bt.armBlaster + bt.core + bt.cooldown;
+  if (total() <= sessionMinutes) return bt;
+  // Tier 3: drop WOD
+  if (bt.wod > 0 && total() > sessionMinutes) {
+    console.log(`[TimeBudget] Over by ${total() - sessionMinutes}min — dropping WOD (${bt.wod}min)`);
+    bt.wod = 0;
+  }
+  // Tier 2: drop arm blasters
+  if (bt.armBlaster > 0 && total() > sessionMinutes) {
+    console.log(`[TimeBudget] Still over by ${total() - sessionMinutes}min — dropping arm blaster (${bt.armBlaster}min)`);
+    bt.armBlaster = 0;
+  }
+  // Tier 1: reduce accessories
+  if (bt.accessories > 0 && total() > sessionMinutes) {
+    const overage = total() - sessionMinutes;
+    const cut = Math.min(bt.accessories, overage);
+    console.log(`[TimeBudget] Still over by ${overage}min — trimming accessories by ${cut}min`);
+    bt.accessories -= cut;
+    if (bt.accessories <= 0) { bt.accessories = 0; bt.accessoryCount = 0; }
+  }
+  if (total() > sessionMinutes) {
+    console.log(`[TimeBudget] WARNING: Session still ${total() - sessionMinutes}min over ${sessionMinutes}min budget after all cuts`);
+  }
+  return bt;
 }
 
 // Pick a SUBSET from Claude's exercise pool, rotating across weeks

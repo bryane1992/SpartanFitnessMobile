@@ -300,31 +300,48 @@ export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanG
   }
 
   const DEFAULTS = {
+    // Recovery rule: max 2 heavy lower days, 48hrs apart. Sprints between heavies, not adjacent.
+    // Run days: no WOD — the run IS the conditioning.
+    // Racers get 2 run exposures (long + quality). Non-racers get 0 unless explicit.
     3: [
-      { type: 'lower_power', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['carry'], arm_finisher: wantArms, wod: { type: 'AMRAP' } },
+      { type: 'lower_power', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['carry'], arm_finisher: wantArms, wod: { type: 'AMRAP' }, lowerStress: 'heavy' },
       { type: 'upper_push_pull', primary_patterns: ['horizontal_push', 'horizontal_pull'], secondary_patterns: ['vertical_push'], arm_finisher: true, core_block: true },
-      { type: 'endurance', primary_patterns: [], secondary_patterns: [], run: { type: 'long_run', label: 'LONG RUN' }, wod: { type: 'FOR TIME' } },
+      hasSpartanGoal
+        ? { type: 'endurance', primary_patterns: [], secondary_patterns: [], run: { type: 'long_run', label: 'LONG RUN' }, core_block: true }
+        : { type: 'full_body_c', primary_patterns: ['hinge', 'horizontal_pull'], secondary_patterns: [], core_block: true, wod: { type: 'CIRCUIT' } },
     ],
     4: [
-      { type: 'lower_power', primary_patterns: ['squat', 'hinge'], secondary_patterns: [], arm_finisher: wantArms, wod: { type: 'AMRAP' } },
+      { type: 'lower_power', primary_patterns: ['squat', 'hinge'], secondary_patterns: [], arm_finisher: wantArms, wod: { type: 'AMRAP' }, lowerStress: 'heavy' },
       { type: 'upper_push', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true, core_block: true },
-      { type: 'sprint_conditioning', primary_patterns: [], secondary_patterns: [], run: { type: 'intervals', label: 'SPRINT INTERVALS' }, wod: { type: 'FOR TIME' } },
-      { type: 'upper_pull_endurance', primary_patterns: ['horizontal_pull', 'pull_up'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, run: { type: 'long_run', label: 'LONG RUN' } },
+      hasSpartanGoal
+        ? { type: 'sprint_conditioning', primary_patterns: [], secondary_patterns: [], run: { type: 'intervals', label: 'SPRINT INTERVALS' }, core_block: true, lowerStress: 'moderate' }
+        : { type: 'full_body_pull', primary_patterns: ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, wod: { type: 'CIRCUIT' } },
+      hasSpartanGoal
+        ? { type: 'upper_pull_endurance', primary_patterns: ['horizontal_pull', 'pull_up'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, run: { type: 'long_run', label: 'LONG RUN' } }
+        : { type: 'lower_hyp', primary_patterns: ['squat'], secondary_patterns: ['hinge'], core_block: true, lowerStress: 'heavy' },
     ],
     5: [
-      { type: 'lower_power', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['carry'], arm_finisher: wantArms, wod: { type: 'AMRAP' } },
+      { type: 'lower_power', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['carry'], arm_finisher: wantArms, wod: { type: 'AMRAP' }, lowerStress: 'heavy' },
       { type: 'upper_push', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true },
-      { type: 'sprint_conditioning', primary_patterns: [], secondary_patterns: [], run: { type: 'intervals', label: 'SPRINT INTERVALS' }, wod: { type: 'FOR TIME' }, core_block: true },
+      hasSpartanGoal
+        ? { type: 'sprint_conditioning', primary_patterns: [], secondary_patterns: [], run: { type: 'intervals', label: 'SPRINT INTERVALS' }, core_block: true, lowerStress: 'moderate' }
+        : { type: 'full_body_c', primary_patterns: ['hinge', 'horizontal_push'], secondary_patterns: [], core_block: true, wod: { type: 'CIRCUIT' } },
       { type: 'olympic_upper_pull', primary_patterns: hasSpartanGoal ? ['pull_up', 'horizontal_pull'] : ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, core_block: true },
-      { type: 'endurance_metabolic', primary_patterns: hasSpartanGoal ? ['carry'] : [], secondary_patterns: [], run: { type: 'long_run', label: 'LONG RUN' }, wod: { type: 'FOR TIME' } },
+      hasSpartanGoal
+        ? { type: 'endurance', primary_patterns: hasSpartanGoal ? ['carry'] : [], secondary_patterns: [], run: { type: 'long_run', label: 'LONG RUN' }, core_block: true }
+        : { type: 'lower_hypertrophy', primary_patterns: ['squat'], secondary_patterns: ['hinge'], core_block: true, wod: { type: 'AMRAP' }, lowerStress: 'heavy' },
     ],
     6: [
-      { type: 'lower_power', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['carry'], arm_finisher: wantArms },
+      { type: 'lower_power', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['carry'], arm_finisher: wantArms, lowerStress: 'heavy' },
       { type: 'upper_push', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true },
-      { type: 'sprint_conditioning', primary_patterns: [], secondary_patterns: [], run: { type: 'intervals', label: 'SPRINT INTERVALS' }, wod: { type: 'FOR TIME' }, core_block: true },
+      hasSpartanGoal
+        ? { type: 'sprint_conditioning', primary_patterns: [], secondary_patterns: [], run: { type: 'intervals', label: 'SPRINT INTERVALS' }, core_block: true, lowerStress: 'moderate' }
+        : { type: 'full_body_c', primary_patterns: ['hinge', 'horizontal_push'], secondary_patterns: [], core_block: true, wod: { type: 'CIRCUIT' } },
       { type: 'olympic_pull', primary_patterns: ['olympic', 'pull_up'], secondary_patterns: ['elbow_flexion'], arm_finisher: true },
-      { type: 'lower_hypertrophy', primary_patterns: ['squat'], secondary_patterns: ['hinge'], core_block: true, wod: { type: 'AMRAP' } },
-      { type: 'endurance_metabolic', primary_patterns: [], secondary_patterns: [], run: { type: 'long_run', label: 'LONG RUN' }, wod: { type: 'FOR TIME' } },
+      { type: 'lower_hypertrophy', primary_patterns: ['squat'], secondary_patterns: ['hinge'], core_block: true, wod: { type: 'AMRAP' }, lowerStress: 'heavy' },
+      hasSpartanGoal
+        ? { type: 'endurance', primary_patterns: [], secondary_patterns: [], run: { type: 'long_run', label: 'LONG RUN' }, core_block: true }
+        : { type: 'metabolic', primary_patterns: ['hinge'], secondary_patterns: [], core_block: true, wod: { type: 'FOR TIME' } },
     ],
   };
 

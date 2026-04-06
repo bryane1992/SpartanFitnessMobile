@@ -33,6 +33,12 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
   const [isLoading, setIsLoading] = useState(false);
   const [apiKey, setApiKey] = useState('bundled'); // Always available, uses bundled key
   const scrollRef = useRef(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     if (visible) {
@@ -153,7 +159,16 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
       // Save assistant response
       await saveCoachMessage(sessionId, 'assistant', response.message, response.actions);
 
-      // Execute immediate actions (non-option ones like flagInjury)
+      // Set message in state FIRST — before executing actions that trigger re-renders
+      if (!mountedRef.current) return;
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: response.message,
+        actions: response.actions,
+        options: response.options || [],
+      }]);
+
+      // Execute immediate actions AFTER state update (loadTodayWorkout can cause re-render)
       if (response.actions && response.actions.length > 0) {
         try {
           await executeActions(response.actions);
@@ -161,15 +176,9 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
           console.error('[AI Coach] Action execution failed:', actionErr);
         }
       }
-
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: response.message,
-        actions: response.actions,
-        options: response.options || [],
-      }]);
     } catch (e) {
       console.error('Coach error:', e);
+      if (!mountedRef.current) return;
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: 'Having trouble connecting. Try again in a moment.',
@@ -177,6 +186,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
       }]);
     }
 
+    if (!mountedRef.current) return;
     setIsLoading(false);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   };

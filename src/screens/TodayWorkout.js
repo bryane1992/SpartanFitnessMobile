@@ -12,7 +12,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import useWorkoutStore from '../store/useWorkoutStore';
 import ExerciseSwapModal from './ExerciseSwapModal';
 import ExerciseDetailModal from '../components/ExerciseDetailModal';
-import CoachChat from '../components/CoachChat';
 import WodTimer from '../components/WodTimer';
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -37,7 +36,7 @@ export default function TodayWorkout({ navigation }) {
   const [expandedBlocks, setExpandedBlocks] = useState({});
   const [swapModal, setSwapModal] = useState(null);
   const [detailExerciseId, setDetailExerciseId] = useState(null);
-  const [coachVisible, setCoachVisible] = useState(false);
+  // Coach chat moved to global App.js — available on all screens
   const [repSuggestion, setRepSuggestion] = useState(null); // coach suggestion for rep drop-off
 
   useEffect(() => {
@@ -374,19 +373,7 @@ export default function TodayWorkout({ navigation }) {
         onClose={() => setDetailExerciseId(null)}
       />
 
-      {/* AI Coach floating button */}
-      {workout && !isRestDay ? (
-        <TouchableOpacity style={styles.coachFab} onPress={() => setCoachVisible(true)}>
-          <Text style={styles.coachFabText}>AI</Text>
-        </TouchableOpacity>
-      ) : null}
-
-      <CoachChat
-        visible={coachVisible}
-        onClose={() => setCoachVisible(false)}
-        workout={workout}
-        sessionId={workout ? `workout-${workout.id}-${selectedDate}` : null}
-      />
+      {/* AI Coach button moved to global App.js — available on all screens */}
     </SafeAreaView>
   );
 }

@@ -234,9 +234,57 @@ export async function initDatabase() {
     "ALTER TABLE exercises ADD COLUMN api_id TEXT",
     "ALTER TABLE exercises ADD COLUMN description TEXT",
     "ALTER TABLE plan_blocks ADD COLUMN amrap_rounds TEXT",
+    `CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      duration_minutes INTEGER,
+      distance_miles REAL,
+      pace TEXT,
+      exercises TEXT,
+      score TEXT,
+      score_type TEXT,
+      calories_est INTEGER,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS custom_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'manual',
+      title TEXT,
+      raw_input TEXT,
+      duration_minutes INTEGER,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS custom_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id INTEGER NOT NULL,
+      exercise_seed_id TEXT,
+      exercise_name TEXT NOT NULL,
+      muscle_group TEXT,
+      category TEXT NOT NULL DEFAULT 'strength',
+      sets INTEGER,
+      reps TEXT,
+      weight_lbs REAL,
+      duration_minutes INTEGER,
+      distance_miles REAL,
+      intensity TEXT,
+      wod_id TEXT,
+      wod_score TEXT,
+      wod_score_type TEXT,
+      sort_order INTEGER DEFAULT 0,
+      FOREIGN KEY (session_id) REFERENCES custom_sessions(id) ON DELETE CASCADE
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_custom_entries_session ON custom_entries(session_id)",
+    "CREATE INDEX IF NOT EXISTS idx_custom_entries_exercise ON custom_entries(exercise_seed_id)",
+    "CREATE INDEX IF NOT EXISTS idx_custom_sessions_date ON custom_sessions(date DESC)",
   ];
   for (const sql of migrations) {
-    try { await database.runAsync(sql); } catch (e) { /* column already exists */ }
+    try { await database.runAsync(sql); } catch (e) { /* column already exists or table exists */ }
   }
 
   // Data migration: remove deprecated 'heavy_barbell' exclusion tag from all exercises
@@ -1170,6 +1218,67 @@ export async function getWeeklyProgress() {
   );
 }
 
+// WOD progression — AMRAP rounds from plan_blocks over time
+export async function getWodProgression() {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    `SELECT pb.name as wod_name, pb.amrap_rounds, pb.time_cap,
+            pd.week_number, pd.date, pd.phase
+     FROM plan_blocks pb
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     WHERE pb.is_amrap = 1
+       AND pb.amrap_rounds IS NOT NULL
+       AND pb.amrap_rounds != ''
+       AND pd.is_completed = 1
+     ORDER BY pd.date ASC`
+  );
+}
+
+// WOD stats summary — total WODs completed, best rounds, recent scores
+export async function getWodStats() {
+  const database = await getDatabase();
+
+  // Count from plan_blocks (in-plan WODs)
+  const planWods = await database.getFirstAsync(
+    `SELECT COUNT(*) as total
+     FROM plan_blocks pb
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     WHERE pb.is_amrap = 1 AND pd.is_completed = 1`
+  );
+
+  // Count from wod_history (standalone WOD library)
+  const libraryWods = await database.getFirstAsync(
+    'SELECT COUNT(*) as total FROM wod_history'
+  );
+
+  // Best AMRAP rounds
+  const bestAmrap = await database.getFirstAsync(
+    `SELECT pb.name as wod_name, MAX(CAST(pb.amrap_rounds AS INTEGER)) as best_rounds, pb.time_cap
+     FROM plan_blocks pb
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     WHERE pb.is_amrap = 1
+       AND pb.amrap_rounds IS NOT NULL
+       AND pb.amrap_rounds != ''
+       AND pd.is_completed = 1`
+  );
+
+  // Recent wod_history entries
+  const recentScores = await database.getAllAsync(
+    `SELECT wh.wod_id, w.name as wod_name, wh.score, wh.score_type, wh.rx, wh.date
+     FROM wod_history wh
+     LEFT JOIN wods w ON w.id = wh.wod_id
+     ORDER BY wh.date DESC
+     LIMIT 10`
+  );
+
+  return {
+    totalPlanWods: planWods?.total || 0,
+    totalLibraryWods: libraryWods?.total || 0,
+    bestAmrap,
+    recentScores,
+  };
+}
+
 export async function updateBlockRunType(blockId, runType) {
   const database = await getDatabase();
   await database.runAsync(
@@ -1217,15 +1326,13 @@ export async function syncExerciseDb(onProgress) {
   const database = await getDatabase();
   let totalInserted = 0;
 
-  // Fetch and save one page at a time so progress is never lost
+  // Use RapidAPI (paid, HQ GIFs) as primary
   const firstPage = await fetchPagedExercises(0);
   const total = firstPage.total;
 
-  // Insert first page
   totalInserted += await insertExerciseBatch(database, firstPage.data);
   if (onProgress) onProgress(totalInserted, total);
 
-  // Fetch remaining pages
   const totalPages = Math.ceil(total / 100);
   for (let page = 1; page < totalPages; page++) {
     try {
@@ -1233,16 +1340,108 @@ export async function syncExerciseDb(onProgress) {
       totalInserted += await insertExerciseBatch(database, pageData.data);
       if (onProgress) onProgress(totalInserted, total);
     } catch (e) {
-      // Rate limited or error — save what we have and stop
-      console.log(`Sync paused at page ${page}: ${e.message}. Saved ${totalInserted} exercises.`);
+      console.log(`[Sync] Paused at page ${page}: ${e.message}. Saved ${totalInserted} exercises.`);
       break;
     }
   }
 
+  // After syncing ExerciseDB exercises, update seed exercises with matching GIFs
   if (totalInserted > 0) {
+    await linkSeedExerciseGifs(database);
     await AsyncStorage.setItem('lastExerciseSync', new Date().toISOString());
   }
   return totalInserted;
+}
+
+// After sync, find GIFs for seed exercises by matching names to synced ExerciseDB exercises
+async function linkSeedExerciseGifs(database) {
+  const SEED_TO_EXDB = {
+    bench_press: 'barbell bench press',
+    incline_bench: 'incline barbell bench press',
+    back_squat: 'barbell full squat',
+    front_squat: 'barbell front squat',
+    deadlift: 'barbell deadlift',
+    overhead_press: 'barbell standing military press',
+    barbell_row: 'barbell bent over row',
+    sumo_deadlift: 'barbell sumo deadlift',
+    romanian_deadlift: 'barbell romanian deadlift',
+    close_grip_bench: 'close grip barbell bench press',
+    push_press: 'barbell push press',
+    power_clean: 'barbell power clean',
+    barbell_curl: 'barbell curl',
+    barbell_hip_thrust: 'barbell hip thrust',
+    good_morning: 'barbell good morning',
+    barbell_lunge: 'barbell lunge',
+    db_bench_press: 'dumbbell bench press',
+    db_incline_press: 'dumbbell incline bench press',
+    db_shoulder_press: 'dumbbell shoulder press',
+    db_row: 'dumbbell bent over row',
+    bicep_curl: 'dumbbell bicep curl',
+    hammer_curl: 'dumbbell hammer curl',
+    db_chest_fly: 'dumbbell fly',
+    lateral_raise: 'dumbbell lateral raise',
+    db_lunge: 'dumbbell lunge',
+    goblet_squat: 'dumbbell goblet squat',
+    db_rdl: 'dumbbell romanian deadlift',
+    skull_crushers: 'dumbbell lying triceps extension',
+    overhead_tricep_ext: 'dumbbell overhead triceps extension',
+    tricep_kickback: 'dumbbell kickback',
+    concentration_curl: 'dumbbell concentration curl',
+    db_arnold_press: 'dumbbell arnold press',
+    db_reverse_fly: 'dumbbell reverse fly',
+    bulgarian_split_squat: 'dumbbell bulgarian split squat',
+    step_ups: 'dumbbell step-up',
+    db_walking_lunge: 'dumbbell walking lunge',
+    db_thrusters: 'dumbbell thruster',
+    push_ups: 'push-up',
+    pull_ups: 'pull-up',
+    chin_ups: 'chin-up',
+    dips: 'chest dip',
+    air_squats: 'bodyweight squat',
+    burpees: 'burpee',
+    mountain_climbers: 'mountain climber',
+    sit_ups: 'sit-up',
+    plank: 'front plank',
+    bird_dog: 'bird dog',
+    dead_bug: 'dead bug',
+    v_ups: 'v-up',
+    russian_twists: 'russian twist',
+    box_jumps: 'box jump',
+    glute_bridge: 'glute bridge march',
+    pike_push_ups: 'pike push-up',
+    inverted_row: 'inverted row',
+    bench_dips: 'bench dip',
+    lat_pulldown: 'cable wide-grip lat pulldown',
+    cable_row: 'cable seated row',
+    cable_fly: 'cable fly',
+    cable_tricep_pushdown: 'cable pushdown',
+    cable_bicep_curl: 'cable curl',
+    cable_face_pulls: 'cable face pull',
+    cable_lateral_raise: 'cable lateral raise',
+    leg_press: 'leg press',
+    leg_extension: 'leg extension',
+    leg_curl: 'leg curl',
+    machine_chest_press: 'machine chest press',
+    kb_swing: 'kettlebell swing',
+    kb_goblet_squat: 'kettlebell goblet squat',
+    farmer_walk: 'farmer walk',
+    barbell_thrusters: 'barbell thruster',
+  };
+
+  let linked = 0;
+  for (const [seedId, exdbName] of Object.entries(SEED_TO_EXDB)) {
+    try {
+      const match = await database.getFirstAsync(
+        "SELECT gif_url FROM exercises WHERE gif_url IS NOT NULL AND LOWER(name) = ? AND source = 'exercisedb' LIMIT 1",
+        [exdbName.toLowerCase()]
+      );
+      if (match?.gif_url) {
+        await database.runAsync('UPDATE exercises SET gif_url = ? WHERE id = ? AND (gif_url IS NULL OR gif_url = "")', [match.gif_url, seedId]);
+        linked++;
+      }
+    } catch { /* skip */ }
+  }
+  console.log(`[Sync] Linked ${linked} seed exercises to HQ GIFs`);
 }
 
 async function insertExerciseBatch(database, apiExercises) {
@@ -1285,6 +1484,288 @@ export async function getExerciseCount() {
 export async function getExerciseFullById(exerciseId) {
   const database = await getDatabase();
   return database.getFirstAsync('SELECT * FROM exercises WHERE id = ?', [exerciseId]);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Activity Log (freeform activity tracking)
+// ═══════════════════════════════════════════════════════════════
+
+export async function saveActivity(activity) {
+  const database = await getDatabase();
+  const result = await database.runAsync(
+    `INSERT INTO activity_log (date, type, title, description, duration_minutes, distance_miles, pace, exercises, score, score_type, calories_est, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      activity.date || new Date().toISOString().split('T')[0],
+      activity.type || 'workout',
+      activity.title || 'Activity',
+      activity.description || null,
+      activity.duration_minutes || null,
+      activity.distance_miles || null,
+      activity.pace || null,
+      activity.exercises ? JSON.stringify(activity.exercises) : null,
+      activity.score || null,
+      activity.score_type || null,
+      activity.calories_est || null,
+      activity.notes || null,
+    ]
+  );
+  return result.lastInsertRowId;
+}
+
+export async function getActivityLog(limit = 30) {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    'SELECT * FROM activity_log ORDER BY date DESC, created_at DESC LIMIT ?',
+    [limit]
+  );
+}
+
+export async function getActivityStats() {
+  const database = await getDatabase();
+  const total = await database.getFirstAsync('SELECT COUNT(*) as count FROM activity_log');
+  const thisWeek = await database.getFirstAsync(
+    "SELECT COUNT(*) as count FROM activity_log WHERE date >= date('now', '-7 days')"
+  );
+  const totalDuration = await database.getFirstAsync(
+    'SELECT COALESCE(SUM(duration_minutes), 0) as total FROM activity_log'
+  );
+  const totalDistance = await database.getFirstAsync(
+    'SELECT COALESCE(SUM(distance_miles), 0) as total FROM activity_log WHERE distance_miles > 0'
+  );
+  return {
+    totalActivities: total?.count || 0,
+    thisWeekActivities: thisWeek?.count || 0,
+    totalDurationMinutes: totalDuration?.total || 0,
+    totalDistanceMiles: totalDistance?.total || 0,
+  };
+}
+
+export async function deleteActivity(id) {
+  const database = await getDatabase();
+  await database.runAsync('DELETE FROM activity_log WHERE id = ?', [id]);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Custom Workout Sessions (structured logging with entries)
+// ═══════════════════════════════════════════════════════════════
+
+export async function saveCustomSession(session) {
+  const database = await getDatabase();
+  const result = await database.runAsync(
+    `INSERT INTO custom_sessions (date, source, title, raw_input, duration_minutes, notes)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      session.date || new Date().toISOString().split('T')[0],
+      session.source || 'manual',
+      session.title || 'Workout',
+      session.raw_input || null,
+      session.duration_minutes || null,
+      session.notes || null,
+    ]
+  );
+  const sessionId = result.lastInsertRowId;
+
+  // Insert entries
+  console.log(`[CustomSession] Saved session ${sessionId}: "${session.title}", ${session.entries?.length || 0} entries`);
+  if (session.entries?.length > 0) {
+    for (let i = 0; i < session.entries.length; i++) {
+      const e = session.entries[i];
+      await database.runAsync(
+        `INSERT INTO custom_entries (session_id, exercise_seed_id, exercise_name, muscle_group, category,
+         sets, reps, weight_lbs, duration_minutes, distance_miles, intensity, wod_id, wod_score, wod_score_type, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [sessionId, e.exercise_seed_id || null, e.exercise_name || 'Unknown', e.muscle_group || null,
+         e.category || 'strength', e.sets || null, e.reps || null, e.weight_lbs || null,
+         e.duration_minutes || null, e.distance_miles || null, e.intensity || null,
+         e.wod_id || null, e.wod_score || null, e.wod_score_type || null, i]
+      );
+    }
+  }
+  return sessionId;
+}
+
+export async function getCustomSessions(limit = 30) {
+  const database = await getDatabase();
+  const sessions = await database.getAllAsync(
+    'SELECT * FROM custom_sessions ORDER BY date DESC, created_at DESC LIMIT ?', [limit]
+  );
+  for (const s of sessions) {
+    s.entries = await database.getAllAsync(
+      'SELECT * FROM custom_entries WHERE session_id = ? ORDER BY sort_order', [s.id]
+    );
+  }
+  return sessions;
+}
+
+export async function deleteCustomSession(id) {
+  const database = await getDatabase();
+  await database.runAsync('DELETE FROM custom_entries WHERE session_id = ?', [id]);
+  await database.runAsync('DELETE FROM custom_sessions WHERE id = ?', [id]);
+}
+
+// Unified exercise history — merges plan logs + custom logs for a given exercise
+export async function getUnifiedExerciseHistory(exerciseSeedId, limit = 30) {
+  const database = await getDatabase();
+  // Plan exercises
+  const planRows = await database.getAllAsync(
+    `SELECT pe.actual_weight as weight, pe.actual_reps as reps, pe.sets, pd.date, pd.week_number, 'plan' as source
+     FROM plan_exercises pe
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     WHERE pe.exercise_id = ? AND pe.is_completed = 1 AND pe.actual_weight IS NOT NULL
+     ORDER BY pd.date DESC LIMIT ?`,
+    [exerciseSeedId, limit]
+  );
+  // Custom entries
+  const customRows = await database.getAllAsync(
+    `SELECT ce.weight_lbs as weight, ce.reps, ce.sets, cs.date, NULL as week_number, 'custom' as source
+     FROM custom_entries ce
+     JOIN custom_sessions cs ON cs.id = ce.session_id
+     WHERE ce.exercise_seed_id = ? AND ce.weight_lbs IS NOT NULL
+     ORDER BY cs.date DESC LIMIT ?`,
+    [exerciseSeedId, limit]
+  );
+  // Merge and sort by date
+  return [...planRows, ...customRows]
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    .slice(0, limit);
+}
+
+// Unified PR board — best weight across plan + custom for each exercise
+export async function getUnifiedPersonalRecords() {
+  const database = await getDatabase();
+  // Plan PRs
+  const planPRs = await database.getAllAsync(
+    `SELECT pe.exercise_id as exercise_seed_id, e.name as exercise_name,
+            MAX(CAST(pe.actual_weight AS REAL)) as best_weight, pd.date
+     FROM plan_exercises pe
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     JOIN exercises e ON e.id = pe.exercise_id
+     WHERE pe.is_completed = 1 AND pe.actual_weight IS NOT NULL
+       AND pe.actual_weight != '' AND pe.actual_weight != 'BW'
+       AND CAST(pe.actual_weight AS REAL) > 0
+     GROUP BY pe.exercise_id`
+  );
+  // Custom PRs — include entries with OR without exercise_seed_id
+  const customPRs = await database.getAllAsync(
+    `SELECT ce.exercise_seed_id, ce.exercise_name,
+            MAX(ce.weight_lbs) as best_weight, cs.date
+     FROM custom_entries ce
+     JOIN custom_sessions cs ON cs.id = ce.session_id
+     WHERE ce.weight_lbs > 0
+     GROUP BY COALESCE(ce.exercise_seed_id, ce.exercise_name)`
+  );
+  // Merge — keep best across both sources, key by seed_id or name
+  const prMap = {};
+  for (const pr of [...planPRs, ...customPRs]) {
+    const key = pr.exercise_seed_id || pr.exercise_name;
+    if (!prMap[key] || pr.best_weight > prMap[key].best_weight) {
+      prMap[key] = pr;
+    }
+  }
+  return Object.values(prMap).sort((a, b) => b.best_weight - a.best_weight);
+}
+
+// Muscle group volume distribution — weekly sets by muscle group from plan + custom
+export async function getMuscleGroupVolume(weeks = 8) {
+  const database = await getDatabase();
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - weeks * 7);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+
+  // Plan volume by muscle group per week
+  const planVol = await database.getAllAsync(
+    `SELECT pd.week_number, e.muscle_group, COUNT(*) as total_sets
+     FROM plan_exercises pe
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     JOIN exercises e ON e.id = pe.exercise_id
+     WHERE pe.is_completed = 1 AND pd.date >= ?
+     GROUP BY pd.week_number, e.muscle_group`,
+    [cutoffStr]
+  );
+
+  // Custom volume by muscle group per week
+  const customVol = await database.getAllAsync(
+    `SELECT strftime('%W', cs.date) as week_num, ce.muscle_group,
+            SUM(COALESCE(ce.sets, 1)) as total_sets
+     FROM custom_entries ce
+     JOIN custom_sessions cs ON cs.id = ce.session_id
+     WHERE cs.date >= ? AND ce.muscle_group IS NOT NULL
+     GROUP BY week_num, ce.muscle_group`,
+    [cutoffStr]
+  );
+
+  return { plan: planVol, custom: customVol };
+}
+
+// Weekly activity summary — plan + custom combined
+export async function getWeeklyActivitySummary() {
+  const database = await getDatabase();
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 7);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+
+  const planSessions = await database.getFirstAsync(
+    `SELECT COUNT(DISTINCT pd.id) as count
+     FROM plan_days pd
+     JOIN plan_blocks pb ON pb.plan_day_id = pd.id
+     JOIN plan_exercises pe ON pe.plan_block_id = pb.id
+     WHERE pd.date >= ? AND pe.is_completed = 1`,
+    [cutoffStr]
+  );
+  const customSessions = await database.getFirstAsync(
+    'SELECT COUNT(*) as count FROM custom_sessions WHERE date >= ?', [cutoffStr]
+  );
+  const customCardioMin = await database.getFirstAsync(
+    `SELECT COALESCE(SUM(ce.duration_minutes), 0) as total
+     FROM custom_entries ce JOIN custom_sessions cs ON cs.id = ce.session_id
+     WHERE cs.date >= ? AND ce.category IN ('cardio', 'sport')`,
+    [cutoffStr]
+  );
+
+  return {
+    planSessions: planSessions?.count || 0,
+    customSessions: customSessions?.count || 0,
+    customCardioMinutes: customCardioMin?.total || 0,
+  };
+}
+
+// Search WODs from seed library
+export async function searchWods(query) {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    `SELECT id, name, category, type, movements, scheme, difficulty, time_cap
+     FROM wods WHERE name LIKE ? ORDER BY name LIMIT 20`,
+    [`%${query}%`]
+  );
+}
+
+// Get all WODs grouped by category
+export async function getWodsByCategory() {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    'SELECT id, name, category, type, movements, scheme, difficulty, time_cap FROM wods ORDER BY category, name'
+  );
+}
+
+// Search seed exercises with muscle group filter
+export async function searchSeedExercises(query, muscleGroup) {
+  const database = await getDatabase();
+  let sql = "SELECT id, name, muscle_group, category, is_compound FROM exercises WHERE source = 'seed'";
+  const params = [];
+  if (query) {
+    sql += ' AND name LIKE ?';
+    params.push(`%${query}%`);
+  }
+  if (muscleGroup) {
+    sql += ' AND muscle_group = ?';
+    params.push(muscleGroup);
+  }
+  sql += ' ORDER BY name LIMIT 30';
+  return database.getAllAsync(sql, params);
 }
 
 // ═══════════════════════════════════════════════════════════════

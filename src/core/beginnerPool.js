@@ -33,7 +33,7 @@ const KETTLEBELL = [
 const BARBELL_BEGINNER = [
   'bench_press', 'back_squat', 'deadlift', 'overhead_press',
   'barbell_row', 'romanian_deadlift', 'front_squat',
-  'floor_press', 'hip_thrust', 'trap_bar_deadlift',
+  'floor_press', 'hip_thrust',
   'sumo_deadlift',
 ];
 

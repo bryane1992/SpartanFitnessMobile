@@ -2,14 +2,19 @@ import { create } from 'zustand';
 import {
   getWorkoutStats,
   getRunStats,
-  getPersonalRecords,
   getRunHistory,
   getBiggestStrengthGains,
   getWeeklyProgress,
   getWeekOverWeekLifts,
   getRunProgression,
+  getWodProgression,
+  getWodStats,
+  getCustomSessions,
+  getWeeklyActivitySummary,
+  getUnifiedPersonalRecords,
+  getUnifiedExerciseHistory,
+  getMuscleGroupVolume,
   searchExercises as dbSearchExercises,
-  getExerciseHistory as dbGetExerciseHistory,
 } from '../data/database';
 
 const usePerformanceStore = create((set, get) => ({
@@ -28,6 +33,13 @@ const usePerformanceStore = create((set, get) => ({
   weeklyProgress: [],
   weekOverWeekLifts: [],
   runProgression: [],
+  wodProgression: [],
+  wodStats: { totalPlanWods: 0, totalLibraryWods: 0, bestAmrap: null, recentScores: [] },
+
+  // Custom workout data
+  customSessions: [],
+  weeklySummary: { planSessions: 0, customSessions: 0, customCardioMinutes: 0 },
+  muscleGroupVolume: { plan: [], custom: [] },
 
   // Exercise search
   exerciseSearchResults: [],
@@ -41,15 +53,21 @@ const usePerformanceStore = create((set, get) => ({
   loadDashboard: async () => {
     set({ isLoading: true });
     try {
-      const [workoutStats, runStats, prs, runs, gains, weekly, liftDeltas, runProg] = await Promise.all([
+      const [workoutStats, runStats, prs, runs, gains, weekly, liftDeltas, runProg,
+             wodProg, wodSt, custom, weeklySumm, muscleVol] = await Promise.all([
         getWorkoutStats(),
         getRunStats(),
-        getPersonalRecords(),
+        getUnifiedPersonalRecords().catch(() => []),
         getRunHistory(10),
         getBiggestStrengthGains(),
         getWeeklyProgress(),
         getWeekOverWeekLifts().catch(() => []),
         getRunProgression().catch(() => []),
+        getWodProgression().catch(() => []),
+        getWodStats().catch(() => ({ totalPlanWods: 0, totalLibraryWods: 0, bestAmrap: null, recentScores: [] })),
+        getCustomSessions(10).catch(() => []),
+        getWeeklyActivitySummary().catch(() => ({ planSessions: 0, customSessions: 0, customCardioMinutes: 0 })),
+        getMuscleGroupVolume(8).catch(() => ({ plan: [], custom: [] })),
       ]);
 
       set({
@@ -65,6 +83,11 @@ const usePerformanceStore = create((set, get) => ({
         weeklyProgress: weekly,
         weekOverWeekLifts: liftDeltas,
         runProgression: runProg,
+        wodProgression: wodProg,
+        wodStats: wodSt,
+        customSessions: custom,
+        weeklySummary: weeklySumm,
+        muscleGroupVolume: muscleVol,
         isLoading: false,
       });
     } catch (e) {
@@ -86,10 +109,11 @@ const usePerformanceStore = create((set, get) => ({
     }
   },
 
+  // Unified exercise history — plan + custom merged
   loadExerciseHistory: async (exerciseId) => {
     set({ isLoadingExercise: true, selectedExerciseId: exerciseId });
     try {
-      const history = await dbGetExerciseHistory(exerciseId);
+      const history = await getUnifiedExerciseHistory(exerciseId);
       set({ selectedExerciseHistory: history, isLoadingExercise: false });
     } catch (e) {
       console.error('Error loading exercise history:', e);
