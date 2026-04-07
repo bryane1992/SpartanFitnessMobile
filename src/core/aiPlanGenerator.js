@@ -532,9 +532,13 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           // Phase tier
           const meta = getWodMetadata(w);
           if (!effectiveTiers.includes(meta.phaseTier)) return false;
-          // Duration cap: WODs on days with other blocks max 15 min
+          // Duration cap: WODs on days with other blocks max 20 min
           const estTime = parseInt(w.estimatedTime) || parseInt(w.time_cap) || 10;
           if (estTime > 20) return false; // skip 30-min WODs like Chelsea/Murph
+          // Must have 2+ distinct movements (no single-exercise WODs like Grace, Isabel)
+          let wMov = w.movements;
+          if (typeof wMov === 'string') { try { wMov = JSON.parse(wMov); } catch { wMov = []; } }
+          if (!Array.isArray(wMov) || wMov.length < 2) return false;
           // Movement ability check: skip WODs with movements user can't do
           let movArr = w.movements;
           if (typeof movArr === 'string') { try { movArr = JSON.parse(movArr); } catch { movArr = []; } }
@@ -1038,28 +1042,54 @@ function parseWodMovement(movement, scheme, index) {
 }
 
 function fuzzyMatchWodMovement(name) {
-  const n = name.toLowerCase().replace(/[-_]/g, ' ').replace(/[^a-z\s]/g, '').trim();
+  // Normalize: lowercase, hyphens→spaces, & → and, strip non-alpha except spaces
+  const n = name.toLowerCase().replace(/[-_]/g, ' ').replace(/&/g, 'and').replace(/[^a-z\s]/g, '').trim();
+
+  // Ordered from most specific to least — first match wins
   const MAP = [
-    ['handstand push ups', 'handstand_push_ups'], ['muscle ups', 'muscle_ups'],
-    ['front squats', 'front_squat'], ['front squat', 'front_squat'],
-    ['overhead squats', 'front_squat'], ['pistol squats', 'pistol_squats'],
-    ['air squats', 'air_squats'], ['airsquats', 'air_squats'], ['squats', 'air_squats'],
-    ['pull ups', 'pull_ups'], ['pullups', 'pull_ups'], ['pull-ups', 'pull_ups'],
-    ['push ups', 'push_ups'], ['pushups', 'push_ups'], ['push-ups', 'push_ups'],
-    ['burpees', 'burpees'], ['sit ups', 'sit_ups'], ['situps', 'sit_ups'], ['sit-ups', 'sit_ups'],
-    ['toes to bar', 'sit_ups'], ['thrusters', 'barbell_thrusters'],
-    ['deadlifts', 'deadlift'], ['deadlift', 'deadlift'],
-    ['hang power cleans', 'hang_clean'], ['power cleans', 'power_clean'],
-    ['cleans', 'power_clean'], ['clean and jerk', 'clean_and_jerk'],
-    ['push jerk', 'push_jerk'], ['push press', 'push_press'],
-    ['snatches', 'snatch'], ['snatch', 'snatch'],
-    ['box jumps', 'box_jumps'], ['kb swings', 'kb_swings'],
-    ['kettlebell swings', 'kb_swings'], ['wall balls', 'wall_balls'],
-    ['double unders', 'jump_rope'], ['dips', 'dips'],
-    ['step ups', 'step_ups'], ['farmer walk', 'farmer_walk'],
-    ['mile run', 'easy_run'], ['run', 'easy_run'], ['row', 'easy_run'],
+    // Gymnastics
+    ['handstand push ups', 'handstand_push_ups'], ['handstand push up', 'handstand_push_ups'],
+    ['muscle ups', 'muscle_ups'], ['muscle up', 'muscle_ups'],
+    ['pistol squats', 'pistol_squats'], ['pistol squat', 'pistol_squats'],
+    ['toes to bar', 'toes_to_bar'], ['knees to elbow', 'hanging_knee_raise'],
+    ['rope climb', 'rope_climb'], ['ring dip', 'dips'], ['bar muscle up', 'muscle_ups'],
+    // Bodyweight
+    ['pull ups', 'pull_ups'], ['pullups', 'pull_ups'], ['chin ups', 'chin_ups'],
+    ['push ups', 'push_ups'], ['pushups', 'push_ups'],
+    ['air squats', 'air_squats'], ['airsquats', 'air_squats'],
+    ['burpees', 'burpees'], ['burpee', 'burpees'],
+    ['sit ups', 'sit_ups'], ['situps', 'sit_ups'],
+    ['box jumps', 'box_jumps'], ['box jump', 'box_jumps'],
+    ['double unders', 'jump_rope'], ['double under', 'jump_rope'],
+    ['dips', 'dips'], ['step ups', 'step_ups'],
+    // Barbell — specific before general
+    ['clean and jerk', 'clean_and_jerk'], ['cleanand jerk', 'clean_and_jerk'],
+    ['hang power clean', 'hang_clean'], ['power clean', 'power_clean'],
+    ['hang clean', 'hang_clean'], ['squat clean', 'power_clean'],
+    ['bench press', 'bench_press'], ['overhead press', 'overhead_press'],
+    ['push press', 'push_press'], ['push jerk', 'push_jerk'],
+    ['front squat', 'front_squat'], ['back squat', 'back_squat'],
+    ['overhead squat', 'front_squat'],
+    ['sumo deadlift', 'sumo_deadlift'], ['deadlift', 'deadlift'],
+    ['thruster', 'barbell_thrusters'], ['snatch', 'snatch'],
+    ['clean', 'power_clean'], // generic clean — after specific cleans
+    // KB
+    ['kb swing', 'kb_swings'], ['kettlebell swing', 'kb_swings'],
+    ['kb snatch', 'kb_snatch'], ['turkish get up', 'turkish_getup'],
+    // Other
+    ['wall ball', 'wall_balls'], ['ball slam', 'ball_slams'],
+    ['farmer walk', 'farmer_walk'], ['farmer carry', 'farmer_walk'],
+    ['battle rope', 'battle_ropes'],
+    ['squats', 'air_squats'], // generic "squats" → air squats
+    // Cardio
+    ['mile run', 'easy_run'], ['run', 'easy_run'], ['row', 'rowing_machine'],
+    ['bike', 'assault_bike'], ['ski erg', 'rowing_machine'],
   ];
+
   for (const [key, id] of MAP) { if (n.includes(key)) return id; }
+
+  // If nothing matched, log it and return burpees as last resort
+  console.warn(`[WOD] Unmatched movement: "${name}" → defaulting to burpees`);
   return 'burpees';
 }
 
