@@ -408,6 +408,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
     const weekWodIdx = (week - 1) % Math.max(1, wodPool.length);
     const weekWodTypesUsed = []; // track WOD types used this week for variety
+    const weekWodIdsUsed = []; // track WOD IDs used this week — no same WOD twice in one week
     // Reset weekly exercise frequency counter
     for (const key of Object.keys(weeklyExerciseCount)) weeklyExerciseCount[key] = 0;
 
@@ -519,9 +520,11 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         const isDeload = isDeloadWeek(week);
         const effectiveTiers = isDeload ? ['standard'] : allowedTiers;
 
-        // Filter pool: tier + repeat cap + recency (no repeat within 4 weeks)
+        // Filter pool: tier + repeat cap + recency + no same WOD twice in one week
         let eligibleWods = wodPool.filter(id => {
           if ((wodUsageCount[id] || 0) >= MAX_WOD_REPEATS) return false;
+          // No same WOD twice in one week
+          if (weekWodIdsUsed.includes(id)) return false;
           // Recency: don't repeat within last 4 week-slots
           if (wodRecentWindow.includes(id)) return false;
           // Phase tier
@@ -569,11 +572,13 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         if (selectedWod) {
           wodUsageCount[wodId] = (wodUsageCount[wodId] || 0) + 1;
           wodRecentWindow.push(wodId);
-          if (wodRecentWindow.length > 8) wodRecentWindow.shift(); // 4-week window × 2 WOD days
+          if (wodRecentWindow.length > 8) wodRecentWindow.shift();
+          weekWodIdsUsed.push(wodId);
           weekWodTypesUsed.push((selectedWod.type || '').toLowerCase());
           const selectedMeta = getWodMetadata(selectedWod);
           if (selectedMeta.phaseTier === 'hero') heroWodCount++;
 
+          console.log(`[PlanV5] WOD assigned: ${selectedWod.name} (${selectedMeta.phaseTier}) on ${dayConfig.type} week ${week}`);
           const wodBlockType = selectedWod.type || dayConfig.wod.type || 'CIRCUIT';
           const isAmrap = /amrap/i.test(wodBlockType);
           const wodBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: selectedWod.name || 'WOD', type: wodBlockType, timeCap: selectedWod.time_cap || '10 min', isAmrap: isAmrap ? 1 : 0, hasGps: false });

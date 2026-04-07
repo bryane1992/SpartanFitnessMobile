@@ -31,6 +31,7 @@ export function validatePlan(planDays, userProfile) {
   // Track across plan
   const wodCounts = {};
   const weekWodTypes = {};
+  let weekWodNames = {};
   const exerciseWeightsByPhase = {};
 
   for (const day of planDays) {
@@ -53,12 +54,23 @@ export function validatePlan(planDays, userProfile) {
         if (!weekWodTypes[wk]) weekWodTypes[wk] = [];
         weekWodTypes[wk].push(block.type || 'CIRCUIT');
 
-        // ── Check: Fake WOD (single exercise, no real WOD name) ──
+        // ── Check: Fake WOD (single exercise, not a real WOD) ──
         const uniqueMovements = new Set(exercises.map(e => e.exercise_id));
         if (uniqueMovements.size < 2) {
           violations.push({ check: 'fake_wod', severity: 'warning',
             details: `WOD block on wk${day.week_number} has only ${uniqueMovements.size} movement(s) — not a real WOD` });
         }
+
+        // ── Check: Same WOD name twice in one week ──
+        const wodName = block.name || '';
+        const weekKey2 = `wk${day.week_number}`;
+        if (!weekWodNames) weekWodNames = {};
+        if (!weekWodNames[weekKey2]) weekWodNames[weekKey2] = [];
+        if (weekWodNames[weekKey2].includes(wodName) && wodName !== 'WOD') {
+          violations.push({ check: 'wod_same_week', severity: 'warning',
+            details: `"${wodName}" appears twice in week ${day.week_number}` });
+        }
+        weekWodNames[weekKey2].push(wodName);
       }
 
       for (const ex of exercises) {
