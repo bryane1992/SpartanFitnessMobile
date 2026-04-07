@@ -539,6 +539,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           let wMov = w.movements;
           if (typeof wMov === 'string') { try { wMov = JSON.parse(wMov); } catch { wMov = []; } }
           if (!Array.isArray(wMov) || wMov.length < 2) return false;
+          // Running WODs (Helen, Nancy) only for racers — others get non-running WODs
+          if (meta.containsRunning && !shouldHaveRuns) return false;
           // Movement ability check: skip WODs with movements user can't do
           let movArr = w.movements;
           if (typeof movArr === 'string') { try { movArr = JSON.parse(movArr); } catch { movArr = []; } }
