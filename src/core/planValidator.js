@@ -52,6 +52,13 @@ export function validatePlan(planDays, userProfile) {
         const wk = day.week_number;
         if (!weekWodTypes[wk]) weekWodTypes[wk] = [];
         weekWodTypes[wk].push(block.type || 'CIRCUIT');
+
+        // ── Check: Fake WOD (single exercise, no real WOD name) ──
+        const uniqueMovements = new Set(exercises.map(e => e.exercise_id));
+        if (uniqueMovements.size < 2) {
+          violations.push({ check: 'fake_wod', severity: 'warning',
+            details: `WOD block on wk${day.week_number} has only ${uniqueMovements.size} movement(s) — not a real WOD` });
+        }
       }
 
       for (const ex of exercises) {

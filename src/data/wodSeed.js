@@ -60,8 +60,24 @@ export function getWodMetadata(wod) {
     tier = 'beginner';
   }
 
+  // Phase tier: standard (repeatable conditioning), intermediate (harder), hero (max effort benchmarks)
+  // Hero/Girl WODs with advanced difficulty = hero tier
+  // Named benchmarks with intermediate difficulty = intermediate tier
+  // Everything else = standard
+  const HERO_IDS = new Set(['grace', 'dt', 'isabel', 'fran', 'murph', 'eva', 'daniel', 'josh', 'badger', 'arnie', 'loredo', 'lynne', 'bear_complex', 'kelly', 'jackie', 'amanda', 'king_kong', 'filthy_fifty', 'nate', 'jt', 'michael', 'randy', 'tommy_v', 'lumberjack', 'war_frank', 'glen', 'whitten', 'nutts', 'chad', 'holbrook', 'rankel', 'manion', 'severin', 'rj', 'tom', 'hansen', 'mcghee', 'hammer', 'ship', 'weaver']);
+  const isHeroCategory = wod.category === 'hero' || wod.category === 'girl';
+  let phaseTier;
+  if (HERO_IDS.has(wod.id) || (isHeroCategory && diffScore >= 3)) {
+    phaseTier = 'hero';
+  } else if (diffScore >= 2 || containsOlympic || containsBarbell || totalEstimatedReps > 150) {
+    phaseTier = 'intermediate';
+  } else {
+    phaseTier = 'standard';
+  }
+
   return {
     tier,
+    phaseTier,
     totalEstimatedReps,
     containsRunning,
     containsPullUps,

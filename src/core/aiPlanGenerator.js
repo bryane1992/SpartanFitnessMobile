@@ -12,6 +12,7 @@ import { getRaceRequirements, getRaceExerciseRequirements, getRaceDistance } fro
 import { detectArchetype, adjustArchetypeForEquipment } from './archetypes';
 import { buildExerciseMenu, buildWodMenu, formatExerciseMenu, formatWodMenu, buildFullExercisePool } from './menuBuilder';
 import { seedExercises, getMovementPattern } from '../data/exerciseSeed';
+import { getWodMetadata } from '../data/wodSeed';
 import { buildDayBlocks, getDefaultDayConfigs } from './dayTemplates';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
@@ -383,6 +384,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
   const weeklyExerciseCount = {}; // track how many times each exercise appears per week
   const wodUsageCount = {}; // track how many times each WOD is used across the plan
   const MAX_WOD_REPEATS = 2; // no WOD should appear more than twice in any plan
+  const wodRecentWindow = []; // last 8 WOD IDs assigned (4-week recency window)
+  let heroWodCount = 0; // max 3 hero WODs across entire plan
 
   for (let week = 1; week <= totalWeeks; week++) {
     const phase = getPhaseForWeek(phases, week);
@@ -504,38 +507,80 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
       // ── WOD — skip entirely on run days (the run IS the conditioning) ──
       const hasRunBlock = !!dayConfig.run;
-      console.log(`[PlanV5] WOD check: dayConfig.wod=${!!dayConfig.wod}, wodPool=${wodPool.length}, bt.wod=${bt.wod}, hasRunBlock=${hasRunBlock}, day=${dayConfig.type}`);
       if (dayConfig.wod && wodPool.length > 0 && bt.wod > 0 && !hasRunBlock) {
-        // Filter: repeat cap + type diversity within the week
-        const weekWodTypes = weekWodTypesUsed || [];
-        const preferredType = dayConfig.wod?.type?.toLowerCase() || 'amrap';
-        let eligibleWods = wodPool.filter(id => (wodUsageCount[id] || 0) < MAX_WOD_REPEATS);
-        if (eligibleWods.length === 0) eligibleWods = [...wodPool];
+        // Phase-tier filtering: hero WODs only in Peak, standard in Foundation/Deload
+        const PHASE_ALLOWED_TIERS = {
+          foundation: ['standard'],
+          build: ['standard', 'intermediate'],
+          peak: ['standard', 'intermediate', 'hero'],
+          race_prep: ['standard', 'intermediate'],
+        };
+        const allowedTiers = PHASE_ALLOWED_TIERS[displayPhase] || ['standard', 'intermediate'];
+        const isDeload = isDeloadWeek(week);
+        const effectiveTiers = isDeload ? ['standard'] : allowedTiers;
 
-        // Try to avoid same WOD type as already used this week
-        if (weekWodTypes.length > 0) {
+        // Filter pool: tier + repeat cap + recency (no repeat within 4 weeks)
+        let eligibleWods = wodPool.filter(id => {
+          if ((wodUsageCount[id] || 0) >= MAX_WOD_REPEATS) return false;
+          // Recency: don't repeat within last 4 week-slots
+          if (wodRecentWindow.includes(id)) return false;
+          // Phase tier
+          const w = wodById[id];
+          if (w) {
+            const meta = getWodMetadata(w);
+            if (!effectiveTiers.includes(meta.phaseTier)) return false;
+          }
+          return true;
+        });
+        if (eligibleWods.length === 0) {
+          // Relax: allow repeats but still respect tier
+          eligibleWods = wodPool.filter(id => {
+            const w = wodById[id];
+            if (!w) return false;
+            const meta = getWodMetadata(w);
+            return effectiveTiers.includes(meta.phaseTier);
+          });
+        }
+        if (eligibleWods.length === 0) eligibleWods = [...wodPool]; // last resort
+
+        // Type diversity within the week
+        if (weekWodTypesUsed.length > 0) {
           const diverseWods = eligibleWods.filter(id => {
             const w = wodById[id];
-            const wType = (w?.type || '').toLowerCase();
-            return !weekWodTypes.includes(wType);
+            return w && !weekWodTypesUsed.includes((w.type || '').toLowerCase());
           });
           if (diverseWods.length > 0) eligibleWods = diverseWods;
         }
 
-        {
-        const rotationPool = eligibleWods;
-        // Combine week + day index for rotation so different days get different WODs
-        const wodRotationIdx = ((week - 1) * dayConfigs.length + tdi) % Math.max(1, rotationPool.length);
-        const wodId = rotationPool[wodRotationIdx] || rotationPool[0];
-        wodUsageCount[wodId] = (wodUsageCount[wodId] || 0) + 1;
-        const assignedWodType = (wod?.type || '').toLowerCase();
-        weekWodTypesUsed.push(assignedWodType);
-        const wod = wodById[wodId];
-        const wodBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'WOD', type: dayConfig.wod.type || 'CIRCUIT', timeCap: '10 min', isAmrap: true, hasGps: false });
-        const wodExercises = buildWodExercises(wod, sanitizedProfile.equipmentDetails);
-        for (let i = 0; i < wodExercises.length; i++) {
-          await savePlanExercise({ planBlockId: wodBlockId, exerciseId: wodExercises[i].id, sortOrder: i, sets: wodExercises[i].sets, reps: wodExercises[i].reps, weight: wodExercises[i].weight, rest: null, notes: wodExercises[i].notes });
+        // Hero WOD cap: max 2-3 across entire plan
+        if (heroWodCount >= 3) {
+          eligibleWods = eligibleWods.filter(id => {
+            const w = wodById[id];
+            if (!w) return true;
+            return getWodMetadata(w).phaseTier !== 'hero';
+          });
+          if (eligibleWods.length === 0) eligibleWods = wodPool.filter(id => (wodUsageCount[id] || 0) < MAX_WOD_REPEATS);
         }
+
+        // Select WOD
+        const wodRotationIdx = ((week - 1) * dayConfigs.length + tdi) % Math.max(1, eligibleWods.length);
+        const wodId = eligibleWods[wodRotationIdx] || eligibleWods[0];
+        const selectedWod = wodById[wodId];
+        if (selectedWod) {
+          wodUsageCount[wodId] = (wodUsageCount[wodId] || 0) + 1;
+          wodRecentWindow.push(wodId);
+          if (wodRecentWindow.length > 8) wodRecentWindow.shift(); // 4-week window × 2 WOD days
+          weekWodTypesUsed.push((selectedWod.type || '').toLowerCase());
+          const selectedMeta = getWodMetadata(selectedWod);
+          if (selectedMeta.phaseTier === 'hero') heroWodCount++;
+
+          const wodBlockType = selectedWod.type || dayConfig.wod.type || 'CIRCUIT';
+          const isAmrap = /amrap/i.test(wodBlockType);
+          const wodBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: selectedWod.name || 'WOD', type: wodBlockType, timeCap: selectedWod.time_cap || '10 min', isAmrap: isAmrap ? 1 : 0, hasGps: false });
+          const wodExercises = buildWodExercises(selectedWod, sanitizedProfile.equipmentDetails);
+          for (let i = 0; i < wodExercises.length; i++) {
+            await savePlanExercise({ planBlockId: wodBlockId, exerciseId: wodExercises[i].id, sortOrder: i, sets: wodExercises[i].sets, reps: wodExercises[i].reps, weight: wodExercises[i].weight, rest: null, notes: wodExercises[i].notes });
+          }
         }
       }
 
