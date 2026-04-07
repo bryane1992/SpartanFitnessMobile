@@ -41,6 +41,8 @@ const EQUIPMENT = [
   { id: 'bands', label: 'Resistance Bands', icon: '', desc: 'Loop or tube bands' },
   { id: 'cardio_machines', label: 'Cardio Machines', icon: '', desc: 'Rower, bike, treadmill' },
   { id: 'outdoor', label: 'Outdoor Space', icon: '', desc: 'Park, yard, trail access' },
+  { id: 'rings', label: 'Gymnastics Rings', icon: '', desc: 'Hanging rings for dips, muscle-ups' },
+  { id: 'jump_rope', label: 'Jump Rope', icon: '', desc: 'Speed rope or weighted rope' },
 ];
 
 const EXPERIENCE = [
@@ -61,7 +63,7 @@ const EQUIPMENT_PRESETS = {
   full_gym: {
     label: 'Full Gym',
     desc: 'Commercial gym with everything',
-    equipment: ['dumbbells', 'barbell', 'squat_rack', 'bench', 'pull_up_bar', 'kettlebell', 'cables', 'machines', 'cardio_machines'],
+    equipment: ['dumbbells', 'barbell', 'squat_rack', 'bench', 'pull_up_bar', 'kettlebell', 'cables', 'machines', 'cardio_machines', 'jump_rope'],
   },
   home_gym: {
     label: 'Home Gym',

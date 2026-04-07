@@ -185,19 +185,20 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
   // Foundation: 65-70% 1RM = moderate (≈ user's working weight for higher reps)
   // Build: 75-80% 1RM = challenging
   // Peak: 85-90% 1RM = heavy
-  // Race prep: 70-75% 1RM = maintain without fatigue
+  // Race prep: taper is volume (fewer sets/accessories), NOT load
+  // Weights hold near peak — 85% 1RM with 3x5 = reduced volume, maintained intensity
   const PHASE_INTENSITY = {
     foundation: { compound: 0.70, isolation: 0.60 },
     build:      { compound: 0.80, isolation: 0.70 },
     peak:       { compound: 0.90, isolation: 0.80 },
-    race_prep:  { compound: 0.75, isolation: 0.65 },
+    race_prep:  { compound: 0.85, isolation: 0.70 },
   };
   const phaseKey = phase === 'race_prep' ? 'race_prep' : phase === 'peak' ? 'peak' : phase === 'build' ? 'build' : 'foundation';
   const phaseIntensity = PHASE_INTENSITY[phaseKey]?.[category] || 0.70;
 
   // Step 4: Weekly progression — cumulative across ALL weeks (not reset per phase)
-  // Compounds: +2.5% per week, Isolation: +1.5% per week
-  const weeklyBump = isCompound ? 0.02 : 0.01;
+  // Compounds: +2% per week, Isolation: +0.5% per week (accessories stay lighter)
+  const weeklyBump = isCompound ? 0.02 : 0.005;
   const progressionMultiplier = 1 + ((weekNumber - 1) * weeklyBump);
 
   // Step 5: Experience multiplier (only when no working weights)

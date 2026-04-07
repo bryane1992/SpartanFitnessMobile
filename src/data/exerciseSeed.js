@@ -87,6 +87,17 @@ export function getMovementPattern(exercise) {
     overhead_tricep_ext: 'arm_push', close_grip_bench: 'arm_push',
     incline_machine_press: 'horizontal_push',
     cable_woodchop: 'core', bird_dog: 'core',
+    // Rehab/mobility — never main lifts
+    cat_cow: 'warmup', child_pose: 'warmup', cobra_stretch: 'warmup', superman_hold: 'warmup',
+    lat_stretch: 'warmup', calf_stretch_wall: 'warmup', seated_calf_stretch: 'warmup',
+    tibialis_raise: 'warmup', ankle_circles: 'warmup', toe_walks: 'warmup', heel_walks: 'warmup',
+    calf_raise_bodyweight: 'warmup', quad_stretch: 'warmup', knee_circles: 'warmup',
+    wall_sit: 'warmup', terminal_knee_ext: 'warmup', banded_lateral_walk: 'warmup',
+    hip_90_90: 'warmup', glute_stretch_seated: 'warmup', clam_shells: 'warmup',
+    fire_hydrants: 'warmup', adductor_stretch: 'warmup',
+    band_pull_apart: 'warmup', shoulder_ext_rotation: 'warmup', shoulder_int_rotation: 'warmup',
+    wall_angels: 'warmup', arm_circles: 'warmup', chest_doorway_stretch: 'warmup',
+    wrist_circles: 'warmup', wrist_flexor_stretch: 'warmup', neck_stretch: 'warmup',
   };
 
   if (PATTERN_MAP[id]) return PATTERN_MAP[id];
@@ -173,7 +184,7 @@ export function seedExercises() {
     { id: 'mountain_climbers', name: 'Mountain Climbers', emoji: '', muscle_group: 'core', secondary_muscles: ['shoulders', 'legs'], category: 'bodyweight', style_tags: ['crossfit', 'bodyweight', 'hybrid'], exclusion_tags: [], equipment_required: [], default_sets: 3, default_reps: '20 ea', default_weight: 'BW', is_compound: true, difficulty: 'beginner' },
     { id: 'pike_push_ups', name: 'Pike Push-Ups', emoji: '', muscle_group: 'shoulders', secondary_muscles: ['triceps'], category: 'bodyweight', style_tags: ['bodyweight', 'hybrid'], exclusion_tags: ['overhead'], equipment_required: [], default_sets: 3, default_reps: '10', default_weight: 'BW', is_compound: true, difficulty: 'intermediate' },
     { id: 'handstand_push_ups', name: 'Handstand Push-Ups', emoji: '', muscle_group: 'shoulders', secondary_muscles: ['triceps', 'core'], category: 'bodyweight', style_tags: ['crossfit', 'bodyweight'], exclusion_tags: ['overhead'], equipment_required: [], default_sets: 3, default_reps: '5', default_weight: 'BW', is_compound: true, difficulty: 'advanced' },
-    { id: 'muscle_ups', name: 'Muscle-Ups', emoji: '', muscle_group: 'full_body', secondary_muscles: ['back', 'chest', 'triceps'], category: 'bodyweight', style_tags: ['crossfit', 'bodyweight'], exclusion_tags: [], equipment_required: [], default_sets: 3, default_reps: '3', default_weight: 'BW', is_compound: true, difficulty: 'elite' },
+    { id: 'muscle_ups', name: 'Muscle-Ups', emoji: '', muscle_group: 'full_body', secondary_muscles: ['back', 'chest', 'triceps'], category: 'bodyweight', style_tags: ['crossfit', 'bodyweight'], exclusion_tags: [], equipment_required: ['rings'], default_sets: 3, default_reps: '3', default_weight: 'BW', is_compound: true, difficulty: 'elite' },
     { id: 'inverted_row', name: 'Inverted Row', emoji: '', muscle_group: 'back', secondary_muscles: ['biceps'], category: 'bodyweight', style_tags: ['bodyweight', 'hybrid'], exclusion_tags: [], equipment_required: ['rack'], default_sets: 3, default_reps: '12', default_weight: 'BW', is_compound: true, difficulty: 'beginner' },
 
     // ═══════════════════════════════════════════════════════════
@@ -200,8 +211,8 @@ export function seedExercises() {
     { id: 'sprint_intervals', name: 'Sprint Intervals', emoji: '', muscle_group: 'cardio', secondary_muscles: ['legs', 'glutes'], category: 'cardio', style_tags: ['crossfit', 'hybrid'], exclusion_tags: ['running'], equipment_required: [], default_sets: 8, default_reps: '30s on / 60s off', default_weight: '90% effort', is_compound: false, difficulty: 'intermediate' },
     { id: 'rowing_machine', name: 'Rowing Machine', emoji: '', muscle_group: 'cardio', secondary_muscles: ['back', 'legs'], category: 'machine', style_tags: ['crossfit', 'hybrid', 'traditional'], exclusion_tags: [], equipment_required: ['machine'], default_sets: 1, default_reps: '500m', default_weight: 'Max effort', is_compound: true, difficulty: 'beginner' },
     { id: 'assault_bike', name: 'Assault Bike', emoji: '', muscle_group: 'cardio', secondary_muscles: ['legs', 'arms'], category: 'machine', style_tags: ['crossfit', 'hybrid'], exclusion_tags: [], equipment_required: ['machine'], default_sets: 1, default_reps: '15 cal', default_weight: 'All out', is_compound: true, difficulty: 'beginner' },
-    { id: 'jump_rope', name: 'Jump Rope', emoji: '', muscle_group: 'cardio', secondary_muscles: ['legs'], category: 'cardio', style_tags: ['crossfit', 'bodyweight', 'hybrid'], exclusion_tags: ['jumping'], equipment_required: [], default_sets: 3, default_reps: '50', default_weight: 'BW', is_compound: false, difficulty: 'beginner' },
-    { id: 'double_unders', name: 'Double Unders', emoji: '', muscle_group: 'cardio', secondary_muscles: ['legs', 'shoulders'], category: 'cardio', style_tags: ['crossfit', 'hybrid'], exclusion_tags: ['jumping'], equipment_required: [], default_sets: 3, default_reps: '30', default_weight: 'BW', is_compound: false, difficulty: 'intermediate' },
+    { id: 'jump_rope', name: 'Jump Rope', emoji: '', muscle_group: 'cardio', secondary_muscles: ['legs'], category: 'cardio', style_tags: ['crossfit', 'bodyweight', 'hybrid'], exclusion_tags: ['jumping'], equipment_required: ['jump_rope'], default_sets: 3, default_reps: '50', default_weight: 'BW', is_compound: false, difficulty: 'beginner' },
+    { id: 'double_unders', name: 'Double Unders', emoji: '', muscle_group: 'cardio', secondary_muscles: ['legs', 'shoulders'], category: 'cardio', style_tags: ['crossfit', 'hybrid'], exclusion_tags: ['jumping'], equipment_required: ['jump_rope'], default_sets: 3, default_reps: '30', default_weight: 'BW', is_compound: false, difficulty: 'intermediate' },
     { id: 'high_knees', name: 'High Knees', emoji: '', muscle_group: 'cardio', secondary_muscles: ['legs', 'core'], category: 'bodyweight', style_tags: ['crossfit', 'bodyweight', 'hybrid'], exclusion_tags: [], equipment_required: [], default_sets: 3, default_reps: '30s', default_weight: 'BW', is_compound: false, difficulty: 'beginner' },
 
     // ═══════════════════════════════════════════════════════════

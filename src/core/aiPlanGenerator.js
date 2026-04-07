@@ -136,6 +136,29 @@ export async function generateAIPlan(userProfile, onStatus) {
     }
   }
 
+  // Step 5b: Reorder days based on user notes (e.g. "no legs Monday")
+  const userNotes = (userProfile.additionalNotes || '').toLowerCase();
+  const trainingDayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  // Check for "no legs [day]" or "no lower [day]" patterns
+  const noLegsMatch = userNotes.match(/no\s+(?:legs?|lower|squat)\s+(?:on\s+)?(\w+day)/i);
+  if (noLegsMatch) {
+    const avoidDay = trainingDayNames.indexOf(noLegsMatch[1].toLowerCase());
+    const trainingDaysList = userProfile.trainingDays || Array.from({ length: daysPerWeek }, (_, i) => i);
+    const avoidIdx = trainingDaysList.indexOf(avoidDay);
+    if (avoidIdx >= 0) {
+      // Find the leg day config and swap it away from the avoided day
+      const legIdx = dayConfigs.findIndex(d => d.primary_patterns?.includes('squat') && d.primary_patterns?.includes('hinge'));
+      if (legIdx >= 0 && legIdx === avoidIdx) {
+        // Find a non-leg day to swap with
+        const swapIdx = dayConfigs.findIndex((d, i) => i !== legIdx && !d.primary_patterns?.includes('squat'));
+        if (swapIdx >= 0) {
+          console.log(`[PlanV5] Reordering: moving leg day from ${trainingDayNames[trainingDaysList[legIdx]]} to ${trainingDayNames[trainingDaysList[swapIdx]]} (user requested no legs ${noLegsMatch[1]})`);
+          [dayConfigs[legIdx], dayConfigs[swapIdx]] = [dayConfigs[swapIdx], dayConfigs[legIdx]];
+        }
+      }
+    }
+  }
+
   if (onStatus) onStatus('Designing your program...');
 
   // Step 6: Claude picks exercises from menu
@@ -322,16 +345,36 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
   const wodById = {};
   for (const w of allWods) wodById[w.id] = w;
 
-  // WOD pool — minimum 3 for rotation variety
+  // WOD pool — expand based on user's equipment for maximum variety
   let wodPool = (selections.wodPool || []).filter(id => wodById[id]);
-  // Pad with beginner defaults if pool is too small
-  if (wodPool.length < 3) {
-    const defaults = ['amrap_bodyweight_10', 'beginner_circuit_1', 'beginner_fortime_1', 'beginner_circuit_2', 'beginner_circuit_4'];
-    for (const d of defaults) {
-      if (!wodPool.includes(d) && wodById[d]) wodPool.push(d);
-      if (wodPool.length >= 5) break;
+
+  // Build equipment set for WOD filtering
+  const userEquipForWods = new Set((userProfile.equipment || []).map(e => e.toLowerCase()));
+  userEquipForWods.add('bodyweight'); // everyone has bodyweight
+
+  // Expand pool from ALL available WODs that match user's equipment
+  if (wodPool.length < 15) {
+    const equipMap = { dumbbells: 'dumbbell', barbell: 'barbell', kettlebell: 'kettlebell', pull_up_bar: 'pull_up_bar', bands: 'band', outdoor: 'outdoor', rings: 'rings', jump_rope: 'jump_rope' };
+    const mappedEquip = new Set();
+    userEquipForWods.forEach(eq => { if (equipMap[eq]) mappedEquip.add(equipMap[eq]); });
+    mappedEquip.add('bodyweight');
+
+    for (const wod of allWods) {
+      if (wodPool.includes(wod.id)) continue;
+      // Check if WOD's equipment is available
+      let equipField = wod.equipment;
+      if (typeof equipField === 'string') { try { equipField = JSON.parse(equipField); } catch { equipField = []; } }
+      const wodEquip = Array.isArray(equipField) ? equipField : [];
+      const canDo = wodEquip.length === 0 || wodEquip.every(e => mappedEquip.has(e) || userEquipForWods.has(e));
+      if (canDo) wodPool.push(wod.id);
+      if (wodPool.length >= 30) break;
     }
   }
+
+  // Shuffle for variety
+  wodPool = wodPool.sort(() => Math.random() - 0.5);
+
+  console.log(`[PlanV5] WOD pool: ${wodPool.length} WODs — ${wodPool.slice(0, 8).join(', ')}`);
 
   // Warmup pool — no jog if can't run
   const warmupPool = shouldHaveRuns ? WARMUP_IDS_WITH_JOG : WARMUP_IDS;
@@ -339,7 +382,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
   const recentlyUsed = new Set();
   const weeklyExerciseCount = {}; // track how many times each exercise appears per week
   const wodUsageCount = {}; // track how many times each WOD is used across the plan
-  const MAX_WOD_REPEATS = 3; // no WOD should appear more than 3 times in the plan
+  const MAX_WOD_REPEATS = 2; // no WOD should appear more than twice in any plan
 
   for (let week = 1; week <= totalWeeks; week++) {
     const phase = getPhaseForWeek(phases, week);
@@ -361,6 +404,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
     }
 
     const weekWodIdx = (week - 1) % Math.max(1, wodPool.length);
+    const weekWodTypesUsed = []; // track WOD types used this week for variety
     // Reset weekly exercise frequency counter
     for (const key of Object.keys(weeklyExerciseCount)) weeklyExerciseCount[key] = 0;
 
@@ -417,12 +461,15 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       }
 
       // ── COMPOUNDS — expand pool, filter out non-compound exercises ──
-      const NEVER_MAIN_LIFT = /plank|dead.?bug|bird.?dog|v.?up|sit.?up|mountain.?climb|russian.?twist|cable.?wood|pallof|wall.?ball|ball.?slam|battle.?rope|lunge.?matrix|cossack|dead.?hang|farmer.?walk/i;
+      const NEVER_MAIN_LIFT = /plank|dead.?bug|bird.?dog|v.?up|sit.?up|mountain.?climb|russian.?twist|cable.?wood|pallof|wall.?ball|ball.?slam|battle.?rope|lunge.?matrix|cossack|dead.?hang|farmer.?walk|cat.?cow|child.?pose|cobra|superman|stretch|circles|clam|hydrant|wall.?angel|pull.?apart/i;
       const rawCompoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig, archetype, week);
       const compoundPool = rawCompoundPool.filter(id => {
         const ex = exerciseById[id];
         if (!ex) return false;
         if (NEVER_MAIN_LIFT.test(ex.name)) return false;
+        // Also block by movement pattern — warmup exercises should never be main lifts
+        const pattern = getMovementPattern(ex);
+        if (pattern === 'warmup' || pattern === 'cardio') return false;
         return true;
       });
       const compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, bt.mainLiftCount, weeklyExerciseCount);
@@ -457,16 +504,32 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
       // ── WOD — skip entirely on run days (the run IS the conditioning) ──
       const hasRunBlock = !!dayConfig.run;
+      console.log(`[PlanV5] WOD check: dayConfig.wod=${!!dayConfig.wod}, wodPool=${wodPool.length}, bt.wod=${bt.wod}, hasRunBlock=${hasRunBlock}, day=${dayConfig.type}`);
       if (dayConfig.wod && wodPool.length > 0 && bt.wod > 0 && !hasRunBlock) {
-        const eligibleWods = wodPool;
+        // Filter: repeat cap + type diversity within the week
+        const weekWodTypes = weekWodTypesUsed || [];
+        const preferredType = dayConfig.wod?.type?.toLowerCase() || 'amrap';
+        let eligibleWods = wodPool.filter(id => (wodUsageCount[id] || 0) < MAX_WOD_REPEATS);
+        if (eligibleWods.length === 0) eligibleWods = [...wodPool];
+
+        // Try to avoid same WOD type as already used this week
+        if (weekWodTypes.length > 0) {
+          const diverseWods = eligibleWods.filter(id => {
+            const w = wodById[id];
+            const wType = (w?.type || '').toLowerCase();
+            return !weekWodTypes.includes(wType);
+          });
+          if (diverseWods.length > 0) eligibleWods = diverseWods;
+        }
+
         {
-        // Filter out WODs that have hit the repeat cap
-        const cappedWods = eligibleWods.filter(id => (wodUsageCount[id] || 0) < MAX_WOD_REPEATS);
-        const rotationPool = cappedWods.length > 0 ? cappedWods : eligibleWods; // fallback if all capped
+        const rotationPool = eligibleWods;
         // Combine week + day index for rotation so different days get different WODs
         const wodRotationIdx = ((week - 1) * dayConfigs.length + tdi) % Math.max(1, rotationPool.length);
         const wodId = rotationPool[wodRotationIdx] || rotationPool[0];
         wodUsageCount[wodId] = (wodUsageCount[wodId] || 0) + 1;
+        const assignedWodType = (wod?.type || '').toLowerCase();
+        weekWodTypesUsed.push(assignedWodType);
         const wod = wodById[wodId];
         const wodBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'WOD', type: dayConfig.wod.type || 'CIRCUIT', timeCap: '10 min', isAmrap: true, hasGps: false });
         const wodExercises = buildWodExercises(wod, sanitizedProfile.equipmentDetails);
@@ -528,7 +591,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
       }
 
-      // ── CORE — ALWAYS present, category rotation, equipment-filtered ──
+      // ── CORE — present when time budget allows ──
+      if (bt.core <= 0) { /* skip core on days with no time budget for it (e.g. carry + long run) */ } else {
       const userEquipSet = new Set((userProfile.equipment || []).map(e => e.toLowerCase()));
       const hasCables = userEquipSet.has('cables') || userEquipSet.has('cable');
       const CORE_CATEGORIES = {
@@ -580,6 +644,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           await savePlanExercise({ planBlockId: coreBlockId, exerciseId: ex.id, sortOrder: i, sets: '3x15', reps: ex.default_reps || '15', weight: 'BW', rest: null, notes: null });
         }
       }
+      } // end core time budget check
 
       // ── COOLDOWN ──
       if (sessionMinutes >= 45) {

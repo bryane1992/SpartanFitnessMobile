@@ -24,37 +24,53 @@ export function calculatePhases(startDate, eventDate) {
   let phases;
 
   if (totalWeeks >= 12) {
-    // Full 4-phase plan
-    const foundation = Math.min(6, Math.max(2, Math.round(totalWeeks * 0.25)));
-    const build = Math.min(8, Math.max(3, Math.round(totalWeeks * 0.35)));
-    const racePrepWeeks = Math.min(3, Math.max(1, Math.round(totalWeeks * 0.15)));
-    const peak = totalWeeks - foundation - build - racePrepWeeks;
+    // Full 4-phase: Foundation → Build → Peak → Race Prep
+    // Never skip Peak. Compress Foundation or Build first.
+    const racePrep = Math.min(3, Math.max(2, Math.round(totalWeeks * 0.15)));
+    const peak = Math.min(4, Math.max(3, Math.round(totalWeeks * 0.20)));
+    const remaining = totalWeeks - peak - racePrep;
+    const foundation = Math.min(4, Math.max(2, Math.round(remaining * 0.40)));
+    const build = remaining - foundation;
 
     phases = [
       { phase: 'foundation', weeks: foundation },
-      { phase: 'build', weeks: build },
-      { phase: 'peak', weeks: Math.max(2, peak) },
-      { phase: 'race_prep', weeks: racePrepWeeks },
+      { phase: 'build', weeks: Math.max(2, build) },
+      { phase: 'peak', weeks: peak },
+      { phase: 'race_prep', weeks: racePrep },
     ];
   } else if (totalWeeks >= 8) {
-    // 3-phase plan
-    const foundation = Math.round(totalWeeks * 0.3);
-    const build = Math.round(totalWeeks * 0.4);
-    const racePrepWeeks = totalWeeks - foundation - build;
+    // 8-11 weeks: still include Peak — compress Foundation
+    const racePrep = 2;
+    const peak = Math.max(2, Math.round(totalWeeks * 0.20));
+    const remaining = totalWeeks - peak - racePrep;
+    const foundation = Math.max(2, Math.round(remaining * 0.40));
+    const build = remaining - foundation;
 
     phases = [
       { phase: 'foundation', weeks: foundation },
-      { phase: 'build', weeks: build },
-      { phase: 'race_prep', weeks: Math.max(1, racePrepWeeks) },
+      { phase: 'build', weeks: Math.max(2, build) },
+      { phase: 'peak', weeks: peak },
+      { phase: 'race_prep', weeks: racePrep },
+    ];
+  } else if (totalWeeks >= 6) {
+    // 6-7 weeks: 3 phases, compress Foundation
+    const racePrep = 1;
+    const peak = 2;
+    const foundation = totalWeeks - peak - racePrep;
+
+    phases = [
+      { phase: 'foundation', weeks: Math.max(1, foundation) },
+      { phase: 'peak', weeks: peak },
+      { phase: 'race_prep', weeks: racePrep },
     ];
   } else {
-    // Short plan: 2 phases
-    const foundation = Math.round(totalWeeks * 0.5);
-    const racePrepWeeks = totalWeeks - foundation;
+    // <6 weeks: 2 phases, skip Foundation
+    const racePrep = Math.max(1, Math.round(totalWeeks * 0.3));
+    const peak = totalWeeks - racePrep;
 
     phases = [
-      { phase: 'foundation', weeks: foundation },
-      { phase: 'race_prep', weeks: Math.max(1, racePrepWeeks) },
+      { phase: 'peak', weeks: Math.max(1, peak) },
+      { phase: 'race_prep', weeks: racePrep },
     ];
   }
 
@@ -84,6 +100,8 @@ export function calculatePhases(startDate, eventDate) {
     });
   }
 
+  console.log(`[Phases] ${totalWeeks} weeks: ${result.map(p => `${p.name}(${p.totalWeeks}w)`).join(' → ')}`);
+
   return {
     totalWeeks,
     startDate: startDate,
@@ -96,6 +114,8 @@ export function getPhaseForWeek(phases, weekNumber) {
   return phases.find(p => weekNumber >= p.startWeek && weekNumber <= p.endWeek);
 }
 
+// Deload weeks: end of each 4-week block within Build phase
+// For a 12-week plan with Build weeks 4-6, deload falls on the last Build week
 export function isDeloadWeek(weekNumber) {
   return weekNumber > 1 && weekNumber % 4 === 0;
 }

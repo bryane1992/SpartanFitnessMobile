@@ -43,7 +43,7 @@ const GOAL_LABELS = {
 const EQUIP_ICONS = {
   dumbbells: 'DB', barbell: 'BB', squat_rack: 'RK', bench: 'BN',
   pull_up_bar: 'PU', kettlebell: 'KB', cables: 'CB', machines: 'MC',
-  bands: 'BD', cardio_machines: 'CM', outdoor: 'OD',
+  bands: 'BD', cardio_machines: 'CM', outdoor: 'OD', rings: 'RG', jump_rope: 'JR',
 };
 
 const EQUIPMENT_LIST = [
@@ -58,6 +58,8 @@ const EQUIPMENT_LIST = [
   { id: 'bands', label: 'Resistance Bands' },
   { id: 'cardio_machines', label: 'Cardio Machines' },
   { id: 'outdoor', label: 'Outdoor Space' },
+  { id: 'rings', label: 'Gymnastics Rings' },
+  { id: 'jump_rope', label: 'Jump Rope' },
 ];
 
 export default function Settings({ navigation }) {
