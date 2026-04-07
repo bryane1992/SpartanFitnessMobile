@@ -510,8 +510,10 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       const hasRunBlock = !!dayConfig.run;
       if (dayConfig.wod && wodPool.length > 0 && bt.wod > 0 && !hasRunBlock) {
         // Phase-tier filtering: hero WODs only in Peak, standard in Foundation/Deload
+        // Foundation allows standard + intermediate (Helen, The Chief are fine for base building)
+        // Only hero WODs (Grace, DT, Fran) are restricted to Peak
         const PHASE_ALLOWED_TIERS = {
-          foundation: ['standard'],
+          foundation: ['standard', 'intermediate'],
           build: ['standard', 'intermediate'],
           peak: ['standard', 'intermediate', 'hero'],
           race_prep: ['standard', 'intermediate'],
@@ -520,31 +522,44 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         const isDeload = isDeloadWeek(week);
         const effectiveTiers = isDeload ? ['standard'] : allowedTiers;
 
-        // Filter pool: tier + repeat cap + recency + no same WOD twice in one week
+        // Filter pool: tier + repeat cap + recency + no same WOD twice in one week + equipment + duration
         let eligibleWods = wodPool.filter(id => {
           if ((wodUsageCount[id] || 0) >= MAX_WOD_REPEATS) return false;
-          // No same WOD twice in one week
           if (weekWodIdsUsed.includes(id)) return false;
-          // Recency: don't repeat within last 4 week-slots
           if (wodRecentWindow.includes(id)) return false;
-          // Phase tier
           const w = wodById[id];
-          if (w) {
-            const meta = getWodMetadata(w);
-            if (!effectiveTiers.includes(meta.phaseTier)) return false;
-          }
+          if (!w) return false;
+          // Phase tier
+          const meta = getWodMetadata(w);
+          if (!effectiveTiers.includes(meta.phaseTier)) return false;
+          // Duration cap: WODs on days with other blocks max 15 min
+          const estTime = parseInt(w.estimatedTime) || parseInt(w.time_cap) || 10;
+          if (estTime > 20) return false; // skip 30-min WODs like Chelsea/Murph
+          // Movement ability check: skip WODs with movements user can't do
+          let movArr = w.movements;
+          if (typeof movArr === 'string') { try { movArr = JSON.parse(movArr); } catch { movArr = []; } }
+          const movText = (Array.isArray(movArr) ? movArr.join(' ') : '').toLowerCase();
+          if (/handstand push.?up/i.test(movText) && !userEquipForWods.has('rings')) return false;
+          if (/pistol squat/i.test(movText)) return false; // requires elite skill, not just equipment
+          if (/muscle.?up/i.test(movText) && !userEquipForWods.has('rings')) return false;
           return true;
         });
         if (eligibleWods.length === 0) {
-          // Relax: allow repeats but still respect tier
+          // Relax recency but still enforce repeat cap + tier + week dedup
           eligibleWods = wodPool.filter(id => {
+            if ((wodUsageCount[id] || 0) >= MAX_WOD_REPEATS) return false;
+            if (weekWodIdsUsed.includes(id)) return false;
             const w = wodById[id];
             if (!w) return false;
             const meta = getWodMetadata(w);
             return effectiveTiers.includes(meta.phaseTier);
           });
         }
-        if (eligibleWods.length === 0) eligibleWods = [...wodPool]; // last resort
+        if (eligibleWods.length === 0) {
+          // Last resort: allow any WOD not used this week
+          eligibleWods = wodPool.filter(id => !weekWodIdsUsed.includes(id));
+        }
+        if (eligibleWods.length === 0) eligibleWods = [...wodPool];
 
         // Type diversity within the week
         if (weekWodTypesUsed.length > 0) {
@@ -974,10 +989,20 @@ function buildWodExercises(wod, equipmentDetails) {
       { id: 'burpees', sets: '1x5', reps: '5', weight: 'BW', notes: null },
     ];
   }
+  // Parse movements — could be JSON string from DB or array from seed
+  let movements = wod.movements;
+  if (typeof movements === 'string') {
+    try { movements = JSON.parse(movements); } catch { movements = [movements]; }
+  }
+  if (!Array.isArray(movements) || movements.length === 0) {
+    console.warn(`[WOD] ${wod.name} has no parseable movements:`, wod.movements);
+    return [{ id: 'burpees', sets: '1x10', reps: '10', weight: 'BW', notes: `${wod.name} — movements not found` }];
+  }
+
   const exercises = [];
   const usedIds = new Set();
-  for (let i = 0; i < wod.movements.length; i++) {
-    const movement = wod.movements[i];
+  for (let i = 0; i < movements.length; i++) {
+    const movement = movements[i];
     const parsed = parseWodMovement(movement, wod.scheme, i);
     const exerciseId = fuzzyMatchWodMovement(parsed.name);
     // Skip duplicate exercise IDs in the same WOD
