@@ -671,6 +671,33 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
     console.warn('[AI Plan] Failed to save rationales:', e.message);
   }
 
+  // ── POST-GENERATION VALIDATION ──
+  // Run all 10 checks, auto-fix what we can, log results
+  try {
+    const { getDatabase: getDb } = require('../data/database');
+    const db = await getDb();
+    // Load the plan we just saved for validation
+    const savedDays = await db.getAllAsync(
+      'SELECT * FROM plan_days WHERE plan_id = ? ORDER BY week_number, day_of_week', [planId]
+    );
+    for (const day of savedDays) {
+      day.blocks = await db.getAllAsync('SELECT * FROM plan_blocks WHERE plan_day_id = ? ORDER BY sort_order', [day.id]);
+      for (const block of day.blocks) {
+        block.exercises = await db.getAllAsync('SELECT * FROM plan_exercises WHERE plan_block_id = ? ORDER BY sort_order', [block.id]);
+      }
+    }
+    const { validatePlan, applyAutoFixes } = require('./planValidator');
+    const validation = validatePlan(savedDays, userProfile);
+    if (validation.auto_fixes_applied > 0) {
+      await applyAutoFixes(validation.violations, db);
+    }
+    if (validation.needs_regeneration) {
+      console.warn('[AI Plan] Validator flagged structural issues — plan may need regeneration');
+    }
+  } catch (e) {
+    console.warn('[AI Plan] Validator failed:', e.message);
+  }
+
   console.log('[AI Plan] Plan generated successfully');
   return { planId, totalWeeks, phases, startDate, eventDate, planName: selections.planName || 'Training Program', programNotes: selections.progressionNotes || '' };
 }

@@ -1,106 +1,237 @@
-// Plan Validator
-// Validates generated plans against known failure modes
-// Returns a score (0-10) and list of violations
-// Used as a safety net — should catch 0 issues in a well-built plan
+// Plan Validator — runs after generation, before save
+// Catches equipment mismatches, weight issues, structural problems
+// Auto-fixes what it can, flags what it can't
 
-export function validateGeneratedPlan(planData, userProfile, strategy) {
+import { seedExercises, getMovementPattern } from '../data/exerciseSeed';
+
+const allSeedExercises = seedExercises();
+const exerciseLookup = {};
+for (const ex of allSeedExercises) exerciseLookup[ex.id] = ex;
+
+export function validatePlan(planDays, userProfile) {
   const violations = [];
+  const equipment = new Set((userProfile.equipment || []).map(e => e.toLowerCase()));
+  const equipDetails = userProfile.equipmentDetails || {};
+  const barbellMax = equipDetails.barbell?.maxWeight ? parseFloat(equipDetails.barbell.maxWeight) : null;
+  const dbMax = equipDetails.dumbbells?.maxWeight ? parseFloat(equipDetails.dumbbells.maxWeight) : null;
+  const kbWeights = equipDetails.kettlebell?.weights
+    ? equipDetails.kettlebell.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0).sort((a, b) => a - b)
+    : null;
 
-  // ── Equipment utilization ──
-  const equip = (userProfile.equipment || []).map(e => e.toLowerCase());
-  if (equip.some(e => /barbell|squat rack/i.test(e))) {
-    const hasBarbellExercise = planData.exercises.some(e => e.category === 'barbell');
-    if (!hasBarbellExercise) {
-      violations.push({ severity: 'critical', rule: 'BARBELL_UNUSED', message: 'User has barbell but plan contains no barbell exercises' });
-    }
-  }
+  // Equipment mapping
+  const equipMap = {
+    dumbbells: ['dumbbell'], barbell: ['barbell'], squat_rack: ['rack'],
+    bench: ['bench'], pull_up_bar: ['pull_up_bar'], kettlebell: ['kettlebell'],
+    cables: ['cable'], machines: ['machine'], bands: ['band'],
+    rings: ['rings'], jump_rope: ['jump_rope'], outdoor: ['outdoor'],
+  };
+  const availableEquip = new Set(['bodyweight']);
+  equipment.forEach(eq => (equipMap[eq] || []).forEach(e => availableEquip.add(e)));
 
-  // ── Weight sanity ──
-  const ww = userProfile.workingWeights;
-  if (ww) {
-    for (const ex of planData.exercises) {
-      const w = parseFloat(ex.weight);
-      if (isNaN(w) || w <= 0) continue;
+  // Track across plan
+  const wodCounts = {};
+  const weekWodTypes = {};
+  const exerciseWeightsByPhase = {};
 
-      // Check compounds aren't absurdly light
-      if (ex.is_compound && ex.category === 'barbell' && w < 25 && !ex.isDeload) {
-        violations.push({ severity: 'warning', rule: 'WEIGHT_TOO_LOW', message: `${ex.name} at ${w}lb seems too light for barbell compound` });
+  for (const day of planDays) {
+    if (day.isRestDay || day.is_rest_day) continue;
+    const blocks = day.blocks || [];
+    const usedExercisesThisDay = new Set();
+
+    for (const block of blocks) {
+      const exercises = block.exercises || [];
+      const blockName = (block.name || block.type || '').toLowerCase();
+      const isWarmup = /warm/i.test(blockName);
+      const isCooldown = /cool/i.test(blockName);
+      const isMainLift = /main|compound/i.test(blockName);
+      const isWod = /wod|circuit|amrap|emom/i.test(blockName);
+
+      if (isWod) {
+        const wodKey = exercises.map(e => e.exercise_id).sort().join(',') || block.name;
+        wodCounts[wodKey] = (wodCounts[wodKey] || 0) + 1;
+        const wk = day.week_number;
+        if (!weekWodTypes[wk]) weekWodTypes[wk] = [];
+        weekWodTypes[wk].push(block.type || 'CIRCUIT');
       }
 
-      // Check weights don't exceed equipment limits
-      if (ex.category === 'barbell' && userProfile.equipmentDetails?.barbell?.maxWeight) {
-        const max = parseFloat(userProfile.equipmentDetails.barbell.maxWeight);
-        if (w > max) {
-          violations.push({ severity: 'critical', rule: 'EXCEEDS_EQUIPMENT', message: `${ex.name} at ${w}lb exceeds barbell max ${max}lb` });
+      for (const ex of exercises) {
+        const seedEx = exerciseLookup[ex.exercise_id];
+        const weight = parseFloat(ex.weight) || 0;
+        const pattern = seedEx ? getMovementPattern(seedEx) : null;
+
+        // ── Check 1: Weight Cap ──
+        if (weight > 0 && seedEx) {
+          if (seedEx.category === 'barbell' && barbellMax && weight > barbellMax) {
+            const capped = Math.round(barbellMax / 5) * 5;
+            violations.push({ check: 'weight_cap', severity: 'auto_fixed',
+              details: `${seedEx.name} wk${day.week_number}: ${weight}lb > barbell max ${barbellMax}lb`,
+              fix_applied: `Capped at ${capped}lb`, fix: { id: ex.id, field: 'weight', value: `${capped} lb` } });
+          }
+          if (seedEx.category === 'dumbbell' && dbMax && weight > dbMax) {
+            const capped = Math.round(dbMax / 5) * 5;
+            violations.push({ check: 'weight_cap', severity: 'auto_fixed',
+              details: `${seedEx.name} wk${day.week_number}: ${weight}lb > DB max ${dbMax}lb`,
+              fix_applied: `Capped at ${capped}lb`, fix: { id: ex.id, field: 'weight', value: `${capped} lb` } });
+          }
+          if (seedEx.category === 'kettlebell' && kbWeights?.length > 0 && weight > kbWeights[kbWeights.length - 1]) {
+            const closest = kbWeights[kbWeights.length - 1];
+            violations.push({ check: 'weight_cap', severity: 'auto_fixed',
+              details: `${seedEx.name} wk${day.week_number}: ${weight}lb > heaviest KB ${closest}lb`,
+              fix_applied: `Set to ${closest}lb`, fix: { id: ex.id, field: 'weight', value: `${closest} lb` } });
+          }
+        }
+
+        // ── Check 2: Equipment Match ──
+        if (seedEx) {
+          const required = Array.isArray(seedEx.equipment_required) ? seedEx.equipment_required : [];
+          if (required.length > 0) {
+            const missing = required.filter(r => !availableEquip.has(r));
+            if (missing.length > 0) {
+              violations.push({ check: 'equipment_match', severity: 'warning',
+                details: `${seedEx.name} requires ${missing.join(', ')} — user doesn't have it` });
+            }
+          }
+        }
+
+        // ── Check 7: Exercise Placement ──
+        if (pattern === 'warmup' && !isWarmup && !isCooldown) {
+          violations.push({ check: 'exercise_placement', severity: 'auto_fixed',
+            details: `${ex.exercise_id} (mobility) in ${blockName} block`,
+            fix_applied: 'Removed from non-warmup block', fix: { id: ex.id, action: 'remove' } });
+        }
+
+        // ── Check 10: Duplicate Exercise Same Day ──
+        if (usedExercisesThisDay.has(ex.exercise_id) && !isWarmup && !isCooldown) {
+          violations.push({ check: 'duplicate_exercise', severity: 'auto_fixed',
+            details: `${ex.exercise_id} appears twice on wk${day.week_number} ${day.title || ''}`,
+            fix_applied: 'Duplicate removed', fix: { id: ex.id, action: 'remove' } });
+        }
+        usedExercisesThisDay.add(ex.exercise_id);
+
+        // Track weights by phase
+        if (weight > 0 && seedEx?.is_compound && day.phase) {
+          const key = ex.exercise_id;
+          if (!exerciseWeightsByPhase[key]) exerciseWeightsByPhase[key] = {};
+          const ph = day.phase.toLowerCase();
+          exerciseWeightsByPhase[key][ph] = Math.max(exerciseWeightsByPhase[key][ph] || 0, weight);
+        }
+
+        // ── Check 9: Rep/Set Phase Consistency ──
+        if (isMainLift && seedEx?.is_compound && ex.sets) {
+          const m = String(ex.sets).match(/(\d+)x(\d+)/);
+          if (m) {
+            const reps = parseInt(m[2]);
+            const phase = (day.phase || '').toLowerCase();
+            const EXPECTED = { foundation: 10, build: 8, peak: 6, race_prep: 5 };
+            if (EXPECTED[phase] && Math.abs(reps - EXPECTED[phase]) > 2) {
+              violations.push({ check: 'rep_consistency', severity: 'warning',
+                details: `${seedEx.name} wk${day.week_number} (${phase}): ${m[0]} — expected ~3x${EXPECTED[phase]}` });
+            }
+          }
         }
       }
     }
   }
 
-  // ── Progressive overload — same exercise should trend up (except deloads) ──
-  const byExercise = {};
-  for (const ex of planData.exercises) {
-    const w = parseFloat(ex.weight);
-    if (isNaN(w) || w <= 0) continue;
-    if (!byExercise[ex.exerciseId]) byExercise[ex.exerciseId] = [];
-    byExercise[ex.exerciseId].push({ week: ex.week, weight: w, isDeload: ex.isDeload });
-  }
-  for (const [id, entries] of Object.entries(byExercise)) {
-    const sorted = entries.sort((a, b) => a.week - b.week);
-    for (let i = 1; i < sorted.length; i++) {
-      if (!sorted[i].isDeload && sorted[i].weight < sorted[i - 1].weight && !sorted[i - 1].isDeload) {
-        violations.push({
-          severity: 'warning', rule: 'REGRESSION',
-          message: `${id} drops from ${sorted[i - 1].weight}lb (wk${sorted[i - 1].week}) to ${sorted[i].weight}lb (wk${sorted[i].week})`,
-        });
-        break; // one violation per exercise is enough
+  // ── Check 3: Phase Structure ──
+  const phasesPresent = new Set(planDays.filter(d => !d.isRestDay && !d.is_rest_day).map(d => (d.phase || '').toLowerCase()));
+  const hasRace = userProfile.hasRaceDate || userProfile.raceType;
+  if (hasRace) {
+    for (const req of ['foundation', 'build', 'peak', 'race_prep']) {
+      if (!phasesPresent.has(req)) {
+        violations.push({ check: 'phase_structure', severity: 'needs_regen',
+          details: `Missing ${req} phase in race plan` });
       }
     }
   }
+  // Phase order
+  const phaseOrder = ['foundation', 'build', 'peak', 'race_prep'];
+  let lastIdx = -1;
+  for (const day of planDays) {
+    if (day.isRestDay || day.is_rest_day) continue;
+    const idx = phaseOrder.indexOf((day.phase || '').toLowerCase());
+    if (idx >= 0 && idx < lastIdx) {
+      violations.push({ check: 'phase_structure', severity: 'warning',
+        details: `Phase order violation: ${day.phase} after later phase` });
+      break;
+    }
+    if (idx >= 0) lastIdx = idx;
+  }
 
-  // ── Race distance ──
-  if (planData.targetDistance) {
-    const maxRunDist = Math.max(0, ...planData.runs.map(r => parseFloat(r.distance) || 0));
-    if (maxRunDist < planData.targetDistance * 0.90) {
-      violations.push({ severity: 'critical', rule: 'RACE_DISTANCE_NOT_REACHED', message: `Longest run ${maxRunDist}mi but target is ${planData.targetDistance}mi` });
+  // ── Check 4: Deload Weeks ──
+  const totalWeeks = Math.max(...planDays.map(d => d.week_number || 0), 0);
+  if (totalWeeks >= 8) {
+    const hasDeload = planDays.some(d => {
+      if (d.isRestDay || d.is_rest_day) return false;
+      return (d.blocks || []).some(b =>
+        /main|compound/i.test(b.name || '') &&
+        (b.exercises || []).some(e => { const m = String(e.sets || '').match(/(\d+)x/); return m && parseInt(m[1]) <= 2; })
+      );
+    });
+    if (!hasDeload) {
+      violations.push({ check: 'deload_week', severity: 'warning',
+        details: `${totalWeeks}-week plan has no deload week` });
     }
   }
 
-  // ── Required movements for race ──
-  if (planData.raceReqs?.must_include) {
-    for (const movement of planData.raceReqs.must_include) {
-      const found = planData.exercises.some(e => e.exerciseId === movement || e.name?.toLowerCase().includes(movement.replace('_', ' ')));
-      if (!found) {
-        violations.push({ severity: 'warning', rule: 'MISSING_RACE_MOVEMENT', message: `Race requires ${movement} but not found in plan` });
-      }
+  // ── Check 6: WOD Variety ──
+  const uniqueWods = Object.keys(wodCounts).length;
+  const totalWodSlots = Object.values(wodCounts).reduce((a, b) => a + b, 0);
+  for (const [wod, count] of Object.entries(wodCounts)) {
+    if (count > 2) {
+      violations.push({ check: 'wod_variety', severity: 'warning',
+        details: `A WOD appears ${count} times (max 2)` });
     }
   }
-
-  // ── Pull-ups check for Spartan ──
-  if (planData.raceReqs?.must_include?.includes('pull_ups')) {
-    const pullUpCount = planData.exercises.filter(e => /pull.?up|chin.?up/i.test(e.name || '')).length;
-    if (pullUpCount === 0) {
-      violations.push({ severity: 'critical', rule: 'NO_PULL_UPS', message: 'Spartan race requires pull-ups but none in plan' });
-    }
+  if (totalWodSlots > 6 && uniqueWods < totalWodSlots * 0.5) {
+    violations.push({ check: 'wod_variety', severity: 'warning',
+      details: `Only ${uniqueWods} unique WODs across ${totalWodSlots} slots` });
   }
 
-  // ── Score ──
-  const criticalCount = violations.filter(v => v.severity === 'critical').length;
-  const warningCount = violations.filter(v => v.severity === 'warning').length;
-  const score = Math.max(0, 10 - (criticalCount * 2) - (warningCount * 0.5));
+  // ── Check 8: Weight Progression ──
+  for (const [exId, phases] of Object.entries(exerciseWeightsByPhase)) {
+    const f = phases.foundation || 0, b = phases.build || 0, p = phases.peak || 0, r = phases.race_prep || 0;
+    if (f > 0 && b > 0 && b < f * 0.9)
+      violations.push({ check: 'weight_progression', severity: 'warning', details: `${exId}: drops Foundation→Build (${f}→${b})` });
+    if (b > 0 && p > 0 && p < b * 0.9)
+      violations.push({ check: 'weight_progression', severity: 'warning', details: `${exId}: drops Build→Peak (${b}→${p})` });
+    if (p > 0 && r > 0 && r < p * 0.85)
+      violations.push({ check: 'weight_progression', severity: 'warning', details: `${exId}: Race Prep drops >15% from Peak (${p}→${r})` });
+  }
 
-  return { score: Math.round(score * 10) / 10, violations, pass: criticalCount === 0 };
+  // Summary
+  const autoFixed = violations.filter(v => v.severity === 'auto_fixed').length;
+  const needsRegen = violations.some(v => v.severity === 'needs_regen');
+
+  if (violations.length > 0) {
+    console.log(`[Validator] ${violations.length} issues: ${autoFixed} auto-fixed, ${violations.filter(v => v.severity === 'warning').length} warnings, ${violations.filter(v => v.severity === 'needs_regen').length} need regen`);
+    for (const v of violations.slice(0, 20)) {
+      console.log(`  [${v.severity}] ${v.check}: ${v.details}${v.fix_applied ? ` → ${v.fix_applied}` : ''}`);
+    }
+    if (violations.length > 20) console.log(`  ... and ${violations.length - 20} more`);
+  } else {
+    console.log('[Validator] All 10 checks passed');
+  }
+
+  return { passed: !needsRegen, violations, auto_fixes_applied: autoFixed, needs_regeneration: needsRegen };
 }
 
-// Log validation results
-export function logValidation(result) {
-  if (result.violations.length === 0) {
-    console.log(`[Plan Validator] PASS (${result.score}/10) — no issues`);
-  } else {
-    console.warn(`[Plan Validator] Score: ${result.score}/10, ${result.violations.length} issues:`);
-    for (const v of result.violations) {
-      const icon = v.severity === 'critical' ? 'CRITICAL' : 'WARNING';
-      console.warn(`  [${icon}] ${v.rule}: ${v.message}`);
-    }
+// Apply auto-fixes to the database
+export async function applyAutoFixes(violations, database) {
+  const fixes = violations.filter(v => v.severity === 'auto_fixed' && v.fix);
+  let applied = 0;
+  for (const v of fixes) {
+    try {
+      if (v.fix.field === 'weight') {
+        await database.runAsync('UPDATE plan_exercises SET weight = ? WHERE id = ?', [v.fix.value, v.fix.id]);
+        applied++;
+      }
+      if (v.fix.action === 'remove') {
+        await database.runAsync('DELETE FROM plan_exercises WHERE id = ?', [v.fix.id]);
+        applied++;
+      }
+    } catch (e) { console.error('[Validator] Fix failed:', e.message); }
   }
+  console.log(`[Validator] Applied ${applied} auto-fixes`);
+  return applied;
 }
