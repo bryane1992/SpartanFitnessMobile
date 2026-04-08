@@ -568,9 +568,10 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           let movArr = w.movements;
           if (typeof movArr === 'string') { try { movArr = JSON.parse(movArr); } catch { movArr = []; } }
           const movText = (Array.isArray(movArr) ? movArr.join(' ') : '').toLowerCase();
-          if (/handstand push.?up/i.test(movText) && !userEquipForWods.has('rings')) return false;
-          if (/pistol squat/i.test(movText)) return false; // requires elite skill, not just equipment
+          if (/handstand push.?up|hspu/i.test(movText) && !userEquipForWods.has('rings')) return false;
+          if (/pistol squat/i.test(movText)) return false;
           if (/muscle.?up/i.test(movText) && !userEquipForWods.has('rings')) return false;
+          if (/rope climb/i.test(movText) && !userEquipForWods.has('rope')) return false;
           return true;
         });
         if (eligibleWods.length === 0) {
