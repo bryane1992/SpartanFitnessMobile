@@ -45,6 +45,8 @@ export function validatePlan(planDays, userProfile) {
       const isWarmup = /warm/i.test(blockName);
       const isCooldown = /cool/i.test(blockName);
       const isMainLift = /main|compound/i.test(blockName);
+      const isAccessory = /accessor/i.test(blockName);
+      const isArmBlaster = /arm/i.test(blockName) && !/warm/i.test(blockName);
       const isWod = /wod|circuit|amrap|emom/i.test(blockName);
 
       if (isWod) {
