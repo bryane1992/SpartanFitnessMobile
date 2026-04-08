@@ -222,13 +222,17 @@ export async function initDatabase() {
   // without duplicating existing ones
   await seedExerciseData(database);
 
-  // Seed WODs — use SugarWOD verified data, old seed as fallback
+  // Seed WODs — use SugarWOD verified data, replace old seed if present
+  const sugarWods = getSugarWods();
   const wodCount = await database.getFirstAsync('SELECT COUNT(*) as count FROM wods');
-  if (!wodCount || wodCount.count === 0) {
-    const sugarWods = getSugarWods();
+  const hasSugarWodData = await database.getFirstAsync("SELECT COUNT(*) as count FROM wods WHERE id LIKE 'sw_%' OR category = 'girls' OR category = 'heroes'");
+  if (!hasSugarWodData || hasSugarWodData.count < 200) {
+    // Old seed data or missing — replace with SugarWOD verified data
     if (sugarWods && sugarWods.length > 0) {
+      await database.runAsync('DELETE FROM wods');
       await seedSugarWodData(database, sugarWods);
-    } else {
+      console.log('[DB] Replaced old WOD seed with SugarWOD verified data');
+    } else if (!wodCount || wodCount.count === 0) {
       await seedWodData(database);
     }
   }

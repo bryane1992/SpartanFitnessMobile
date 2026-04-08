@@ -127,7 +127,9 @@ export function validatePlan(planDays, userProfile) {
         }
 
         // ── Check 10: Duplicate Exercise Same Day ──
-        if (usedExercisesThisDay.has(ex.exercise_id) && !isWarmup && !isCooldown) {
+        // Skip dedup for warmup, cooldown, and WOD blocks — WODs are self-contained
+        // and commonly repeat warmup exercises (air squats in warmup + Cindy is normal)
+        if (usedExercisesThisDay.has(ex.exercise_id) && !isWarmup && !isCooldown && !isWod) {
           violations.push({ check: 'duplicate_exercise', severity: 'auto_fixed',
             details: `${ex.exercise_id} appears twice on wk${day.week_number} ${day.title || ''}`,
             fix_applied: 'Duplicate removed', fix: { id: ex.id, action: 'remove' } });
