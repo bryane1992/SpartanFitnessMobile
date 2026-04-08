@@ -221,8 +221,11 @@ export async function initDatabase() {
   // without duplicating existing ones
   await seedExerciseData(database);
 
-  // Seed WODs — INSERT OR IGNORE ensures new WODs are added without duplicating
-  await seedWodData(database);
+  // Seed WODs — only if no SugarWOD data exists yet (old seed is fallback)
+  const wodCount = await database.getFirstAsync('SELECT COUNT(*) as count FROM wods');
+  if (!wodCount || wodCount.count === 0) {
+    await seedWodData(database);
+  }
 
   // Schema migrations (idempotent — try each, ignore if already exists)
   const migrations = [

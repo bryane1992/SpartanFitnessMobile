@@ -164,6 +164,11 @@ export async function syncSugarWodBenchmarks(onProgress) {
   const database = await getDatabase();
   let totalSynced = 0;
 
+  // Wipe all old WODs — SugarWOD is now the single source of truth
+  if (onProgress) onProgress('Clearing old WOD data...');
+  await database.runAsync('DELETE FROM wods');
+  console.log('[SugarWOD] Cleared old WOD table');
+
   // Fetch Girls + Heroes (most useful for plan generation)
   for (const category of ['girls', 'heroes']) {
     if (onProgress) onProgress(`Fetching ${category}...`);
