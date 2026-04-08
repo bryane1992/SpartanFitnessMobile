@@ -44,6 +44,7 @@ const EQUIP_ICONS = {
   dumbbells: 'DB', barbell: 'BB', squat_rack: 'RK', bench: 'BN',
   pull_up_bar: 'PU', kettlebell: 'KB', cables: 'CB', machines: 'MC',
   bands: 'BD', cardio_machines: 'CM', outdoor: 'OD', rings: 'RG', jump_rope: 'JR',
+  tire: 'TR', sled: 'SL',
 };
 
 const EQUIPMENT_LIST = [
@@ -60,6 +61,8 @@ const EQUIPMENT_LIST = [
   { id: 'outdoor', label: 'Outdoor Space' },
   { id: 'rings', label: 'Gymnastics Rings' },
   { id: 'jump_rope', label: 'Jump Rope' },
+  { id: 'tire', label: 'Tire' },
+  { id: 'sled', label: 'Sled' },
 ];
 
 export default function Settings({ navigation }) {

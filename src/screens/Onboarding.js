@@ -43,6 +43,8 @@ const EQUIPMENT = [
   { id: 'outdoor', label: 'Outdoor Space', icon: '', desc: 'Park, yard, trail access' },
   { id: 'rings', label: 'Gymnastics Rings', icon: '', desc: 'Hanging rings for dips, muscle-ups' },
   { id: 'jump_rope', label: 'Jump Rope', icon: '', desc: 'Speed rope or weighted rope' },
+  { id: 'tire', label: 'Tire', icon: '', desc: 'For tire flips' },
+  { id: 'sled', label: 'Sled', icon: '', desc: 'Push/pull sled' },
 ];
 
 const EXPERIENCE = [

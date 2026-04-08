@@ -547,8 +547,13 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           const meta = getWodMetadata(w);
           if (!effectiveTiers.includes(meta.phaseTier)) return false;
           // Duration cap: WODs on days with other blocks max 20 min
-          // DB uses snake_case (estimated_time, time_cap), seed uses camelCase (estimatedTime, timeCap)
-          const estTime = parseInt(w.estimated_time || w.estimatedTime) || parseInt(w.time_cap || w.timeCap) || 10;
+          // Check all possible field names (DB snake_case vs seed camelCase)
+          const timeFields = [w.estimated_time, w.estimatedTime, w.time_cap, w.timeCap].filter(Boolean);
+          let estTime = 10;
+          for (const tf of timeFields) {
+            const parsed = parseInt(String(tf));
+            if (!isNaN(parsed) && parsed > estTime) estTime = parsed;
+          }
           if (estTime > 20) return false; // skip 30-min WODs like Chelsea/Murph
           // Must have 2+ distinct movements (no single-exercise WODs like Grace, Isabel)
           let wMov = w.movements;
