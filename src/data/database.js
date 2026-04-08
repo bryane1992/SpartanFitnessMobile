@@ -374,7 +374,7 @@ async function seedSugarWodData(database, wods) {
   for (const w of wods) {
     try {
       await database.runAsync(
-        `INSERT OR IGNORE INTO wods (id, name, category, type, description, movements, scheme, time_cap, rx_weight, difficulty, estimated_time, equipment, tips)
+        `INSERT OR REPLACE INTO wods (id, name, category, type, description, movements, scheme, time_cap, rx_weight, difficulty, estimated_time, equipment, tips)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [w.id, w.name, w.category, w.type, w.description || '',
          JSON.stringify(w.movements), w.scheme || '', w.timeCap || '',
