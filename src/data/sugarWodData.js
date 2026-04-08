@@ -1,6 +1,6 @@
-// Auto-generated from SugarWOD API — 266 verified WODs
-// Generated: 2026-04-08T15:05:08.177Z
-// Cleaned: instructions stripped, durations calibrated, difficulties fixed
+// Auto-generated from SugarWOD API — 261 verified WODs
+// Generated: 2026-04-08T15:31:03.216Z
+// Cleaned: instructions stripped, durations calibrated, running-only removed
 
 export function getSugarWods() {
   return [
@@ -869,26 +869,6 @@ export function getSugarWods() {
     "tips": null
   },
   {
-    "id": "griff",
-    "name": "GRIFF",
-    "category": "heroes",
-    "type": "FOR TIME",
-    "description": "For time:",
-    "movements": [
-      "Run 800 meters",
-      "Run 400 meters backwards",
-      "Run 800 meters",
-      "Run 400 meters backwards"
-    ],
-    "scheme": "",
-    "timeCap": null,
-    "rxWeight": null,
-    "difficulty": "beginner",
-    "estimatedTime": "18-25 min",
-    "equipment": [],
-    "tips": null
-  },
-  {
     "id": "jt",
     "name": "JT",
     "category": "heroes",
@@ -1351,27 +1331,6 @@ export function getSugarWods() {
       "pull_up_bar",
       "jump_rope",
       "box"
-    ],
-    "tips": null
-  },
-  {
-    "id": "jerry",
-    "name": "JERRY",
-    "category": "heroes",
-    "type": "FOR TIME",
-    "description": "•Run 1 mile",
-    "movements": [
-      "Run 1 mile",
-      "Row 2K",
-      "Run 1 mile"
-    ],
-    "scheme": "",
-    "timeCap": null,
-    "rxWeight": null,
-    "difficulty": "beginner",
-    "estimatedTime": "25-35 min",
-    "equipment": [
-      "cardio_machines"
     ],
     "tips": null
   },
@@ -1893,29 +1852,6 @@ export function getSugarWods() {
     "equipment": [
       "barbell",
       "box"
-    ],
-    "tips": null
-  },
-  {
-    "id": "weston",
-    "name": "WESTON",
-    "category": "heroes",
-    "type": "FOR TIME",
-    "description": "Five rounds of: ",
-    "movements": [
-      "Row 1000 meters",
-      "200 meter Farmer carry, 45 pound dumbbells",
-      "45 pound dumbbell Waiter walk, 50 meters, Right arm",
-      "45 pound dumbbell Waiter walk, 50 meters, Left arm"
-    ],
-    "scheme": "",
-    "timeCap": null,
-    "rxWeight": null,
-    "difficulty": "beginner",
-    "estimatedTime": "20-30 min",
-    "equipment": [
-      "cardio_machines",
-      "dumbbell"
     ],
     "tips": null
   },
@@ -3815,23 +3751,6 @@ export function getSugarWods() {
     "tips": null
   },
   {
-    "id": "shawn",
-    "name": "SHAWN",
-    "category": "heroes",
-    "type": "FOR TIME",
-    "description": "For time:",
-    "movements": [
-      "Run 5 miles"
-    ],
-    "scheme": "",
-    "timeCap": null,
-    "rxWeight": null,
-    "difficulty": "beginner",
-    "estimatedTime": "4-9 min",
-    "equipment": [],
-    "tips": null
-  },
-  {
     "id": "foo",
     "name": "FOO",
     "category": "heroes",
@@ -5314,26 +5233,6 @@ export function getSugarWods() {
     "difficulty": "beginner",
     "estimatedTime": "30-45 min",
     "equipment": [],
-    "tips": null
-  },
-  {
-    "id": "wade",
-    "name": "WADE",
-    "category": "heroes",
-    "type": "FOR TIME",
-    "description": "For time, wearing a 20-lb. vest or body armor:",
-    "movements": [
-      "Run 1,200 meters",
-      "Then, run 1,200 meters"
-    ],
-    "scheme": "4 rounds",
-    "timeCap": null,
-    "rxWeight": null,
-    "difficulty": "advanced",
-    "estimatedTime": "13-21 min",
-    "equipment": [
-      "pull_up_bar"
-    ],
     "tips": null
   },
   {

@@ -223,11 +223,12 @@ export async function initDatabase() {
   await seedExerciseData(database);
 
   // Seed WODs — always use SugarWOD verified data
-  // Force reseed every launch to ensure latest data (INSERT OR REPLACE is idempotent)
   const sugarWods = getSugarWods();
   const wodCount = await database.getFirstAsync('SELECT COUNT(*) as count FROM wods');
-  // Reseed if: no WODs, or old seed detected (old seed had ~168 WODs, SugarWOD has 266)
-  if (!wodCount || wodCount.count < 250) {
+  // Check for old seed by looking for known old-seed IDs that don't exist in SugarWOD
+  const hasOldSeed = await database.getFirstAsync("SELECT COUNT(*) as count FROM wods WHERE id IN ('griff', 'chipper_grunt', 'ft_thruster_burpee', 'ft_double_under_hell', 'sprint_couplet')");
+  const needsReseed = !wodCount || wodCount.count === 0 || (hasOldSeed && hasOldSeed.count > 0);
+  if (needsReseed) {
     // Old seed data or missing — replace with SugarWOD verified data
     if (sugarWods && sugarWods.length > 0) {
       await database.runAsync('DELETE FROM wods');

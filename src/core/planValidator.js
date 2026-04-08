@@ -37,7 +37,7 @@ export function validatePlan(planDays, userProfile) {
   for (const day of planDays) {
     if (day.isRestDay || day.is_rest_day) continue;
     const blocks = day.blocks || [];
-    const usedExercisesThisDay = new Set();
+    const usedMainAccessoryExercises = new Set();
 
     for (const block of blocks) {
       const exercises = block.exercises || [];
@@ -127,14 +127,15 @@ export function validatePlan(planDays, userProfile) {
         }
 
         // ── Check 10: Duplicate Exercise Same Day ──
-        // Skip dedup for warmup, cooldown, and WOD blocks — WODs are self-contained
-        // and commonly repeat warmup exercises (air squats in warmup + Cindy is normal)
-        if (usedExercisesThisDay.has(ex.exercise_id) && !isWarmup && !isCooldown && !isWod) {
+        // Only flag duplicates within main lift + accessory blocks (same tier)
+        // Warmup, cooldown, WOD, core blocks can repeat exercises from other blocks
+        const isMainOrAccessory = isMainLift || isAccessory || isArmBlaster;
+        if (usedMainAccessoryExercises.has(ex.exercise_id) && isMainOrAccessory) {
           violations.push({ check: 'duplicate_exercise', severity: 'auto_fixed',
             details: `${ex.exercise_id} appears twice on wk${day.week_number} ${day.title || ''}`,
             fix_applied: 'Duplicate removed', fix: { id: ex.id, action: 'remove' } });
         }
-        usedExercisesThisDay.add(ex.exercise_id);
+        if (isMainOrAccessory) usedMainAccessoryExercises.add(ex.exercise_id);
 
         // Track weights by phase
         if (weight > 0 && seedEx?.is_compound && day.phase) {
