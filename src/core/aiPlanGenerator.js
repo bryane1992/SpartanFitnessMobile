@@ -481,6 +481,13 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         if (pattern === 'warmup' || pattern === 'cardio') return false;
         // Compounds must match this day's movement patterns — no squats on pull day
         if (allowedDayPatterns.size > 0 && !allowedDayPatterns.has(pattern)) return false;
+        // On pull days (has horizontal_pull or pull_up), only allow pulling hinge exercises
+        // Deadlift/RDL are pulls; hip thrust, glute bridge, leg curl are NOT
+        const isPullDay = allowedDayPatterns.has('horizontal_pull') || allowedDayPatterns.has('pull_up');
+        if (isPullDay && pattern === 'hinge') {
+          const PULL_HINGES = new Set(['deadlift', 'romanian_deadlift', 'sumo_deadlift', 'trap_bar_deadlift', 'db_romanian_deadlift', 'db_single_leg_deadlift', 'good_morning', 'db_good_morning', 'back_extension']);
+          if (!PULL_HINGES.has(id)) return false;
+        }
         return true;
       });
       const compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, bt.mainLiftCount, weeklyExerciseCount);
@@ -1088,9 +1095,13 @@ function parseWodMovement(movement, scheme, index) {
   const distMatch = movement.match(/^(\d+\s*m)\s+(.+)$/i);
   if (distMatch) return { name: distMatch[2].trim(), reps: distMatch[1], weight: null };
 
-  // Format: "Run 800 meters" (name first, distance at end)
-  const nameDistMatch = movement.match(/^(.+?)\s+(\d+)\s*(?:meters?|yards?|feet|ft)$/i);
+  // Format: "Run 800 meters" or "Run 800m" (name first, distance at end)
+  const nameDistMatch = movement.match(/^(.+?)\s+(\d+)\s*(?:meters?|yards?|feet|ft|m)$/i);
   if (nameDistMatch) return { name: nameDistMatch[1].trim(), reps: nameDistMatch[2] + 'm', weight: null };
+
+  // Format: "Run 800m" with no space between number and m
+  const compactDistMatch = movement.match(/^(.+?)\s+(\d+)(m|mi|km)\b/i);
+  if (compactDistMatch) return { name: compactDistMatch[1].trim(), reps: compactDistMatch[2] + compactDistMatch[3], weight: null };
 
   // Fallback: exercise name only, reps from scheme
   const nameOnly = movement.replace(/\s*\([^)]+\)/, '').replace(/\s*\d+\/\d+#?\s*$/, '').trim();
