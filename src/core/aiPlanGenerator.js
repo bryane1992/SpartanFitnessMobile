@@ -431,8 +431,13 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       const primaryPatterns = (dayConfig.primary_patterns || []).slice(0, 2);
       const patternLabel = primaryPatterns.map(p => PATTERN_NAMES[p] || p.toUpperCase()).join(' & ');
       const suffix = FUN_SUFFIXES[(week * dayConfigs.length + tdi) % FUN_SUFFIXES.length];
-      const title = patternLabel ? `${patternLabel} ${suffix}` : (daySelection.title || 'TRAINING');
-      const focusLabel = displayPhase === 'race_prep'
+      const deload = isDeloadWeek(week);
+      const title = deload
+        ? `${patternLabel || 'RECOVERY'} DELOAD`
+        : (patternLabel ? `${patternLabel} ${suffix}` : (daySelection.title || 'TRAINING'));
+      const focusLabel = deload
+        ? `DELOAD WEEK \u2022 2 sets \u2022 70% weight \u2022 Week ${week}`
+        : displayPhase === 'race_prep'
         ? `TAPER \u2022 RACE PREP \u2022 Week ${week}`
         : `${mesoPhase.label} \u2022 ${stimulus.label} \u2022 Week ${week}`;
 
