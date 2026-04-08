@@ -1044,18 +1044,36 @@ function buildWodExercises(wod, equipmentDetails) {
 }
 
 function parseWodMovement(movement, scheme, index) {
+  // Format: "155/105 pound Deadlift, 12 reps" (weight first, reps at end)
+  const weightFirstMatch = movement.match(/^(\d+\/?\d*)\s*(?:pound|lb|#)\s+(.+?)(?:,\s*(\d+)\s*reps?)?$/i);
+  if (weightFirstMatch) {
+    const weight = weightFirstMatch[1] + ' lb';
+    const name = weightFirstMatch[2].replace(/,\s*$/, '').trim();
+    const reps = weightFirstMatch[3] || '10';
+    return { name, reps, weight };
+  }
+
+  // Format: "12 Deadlifts (225 lb)"
   const repNameMatch = movement.match(/^(\d+)\s+(.+)$/);
   if (repNameMatch) {
     const name = repNameMatch[2].replace(/\s*\([^)]+\)/, '').trim();
     const weightMatch = movement.match(/\(([^)]+)\)/);
     return { name, reps: repNameMatch[1], weight: weightMatch ? weightMatch[1] : null };
   }
+
+  // Format: "400m Run"
   const distMatch = movement.match(/^(\d+\s*m)\s+(.+)$/i);
   if (distMatch) return { name: distMatch[2].trim(), reps: distMatch[1], weight: null };
-  const nameOnly = movement.replace(/\s*\([^)]+\)/, '').trim();
-  const weightMatch = movement.match(/\(([^)]+)\)/);
+
+  // Format: "Run 800 meters" (name first, distance at end)
+  const nameDistMatch = movement.match(/^(.+?)\s+(\d+)\s*(?:meters?|yards?|feet|ft)$/i);
+  if (nameDistMatch) return { name: nameDistMatch[1].trim(), reps: nameDistMatch[2] + 'm', weight: null };
+
+  // Fallback: exercise name only, reps from scheme
+  const nameOnly = movement.replace(/\s*\([^)]+\)/, '').replace(/\s*\d+\/\d+#?\s*$/, '').trim();
+  const weightMatch = movement.match(/(\d+\/\d+)\s*(?:#|lb)/i) || movement.match(/\(([^)]+)\)/);
   const schemeNums = (scheme || '').match(/\d+/g);
-  return { name: nameOnly, reps: schemeNums ? schemeNums.join('-') : '10', weight: weightMatch ? weightMatch[1] : null };
+  return { name: nameOnly, reps: schemeNums ? schemeNums.join('-') : '10', weight: weightMatch ? weightMatch[1] + ' lb' : null };
 }
 
 function fuzzyMatchWodMovement(name) {

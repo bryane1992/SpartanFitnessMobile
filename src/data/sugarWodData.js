@@ -1,6 +1,6 @@
 // Auto-generated from SugarWOD API — 266 verified WODs
-// Generated: 2026-04-08T14:58:26.311Z
-// Cleaned: instructions stripped, durations calibrated
+// Generated: 2026-04-08T15:05:08.177Z
+// Cleaned: instructions stripped, durations calibrated, difficulties fixed
 
 export function getSugarWods() {
   return [
@@ -99,7 +99,7 @@ export function getSugarWods() {
     "scheme": "5 rounds",
     "timeCap": null,
     "rxWeight": null,
-    "difficulty": "beginner",
+    "difficulty": "advanced",
     "estimatedTime": "20-30 min",
     "equipment": [
       "wall_ball",
@@ -121,7 +121,7 @@ export function getSugarWods() {
     "scheme": "5 rounds",
     "timeCap": null,
     "rxWeight": null,
-    "difficulty": "beginner",
+    "difficulty": "advanced",
     "estimatedTime": "25-35 min",
     "equipment": [
       "kettlebell",
@@ -162,7 +162,7 @@ export function getSugarWods() {
     "scheme": "5 rounds",
     "timeCap": null,
     "rxWeight": "95/65 lb",
-    "difficulty": "beginner",
+    "difficulty": "intermediate",
     "estimatedTime": "15-20 min",
     "equipment": [
       "barbell"
@@ -204,7 +204,7 @@ export function getSugarWods() {
     "scheme": "3-2-1",
     "timeCap": null,
     "rxWeight": null,
-    "difficulty": "intermediate",
+    "difficulty": "advanced",
     "estimatedTime": "20-35 min",
     "equipment": [
       "barbell"
@@ -244,7 +244,7 @@ export function getSugarWods() {
     "scheme": "",
     "timeCap": null,
     "rxWeight": "45/35 lb",
-    "difficulty": "beginner",
+    "difficulty": "intermediate",
     "estimatedTime": "8-12 min",
     "equipment": [
       "barbell",
@@ -286,7 +286,7 @@ export function getSugarWods() {
     "scheme": "3 rounds",
     "timeCap": null,
     "rxWeight": null,
-    "difficulty": "beginner",
+    "difficulty": "intermediate",
     "estimatedTime": "10-15 min",
     "equipment": [
       "kettlebell",
@@ -326,7 +326,7 @@ export function getSugarWods() {
     "scheme": "21-15-9",
     "timeCap": null,
     "rxWeight": "95/65 lb",
-    "difficulty": "beginner",
+    "difficulty": "advanced",
     "estimatedTime": "3-8 min",
     "equipment": [
       "barbell",
@@ -368,7 +368,7 @@ export function getSugarWods() {
     "scheme": "21-15-9",
     "timeCap": null,
     "rxWeight": "225/155 lb",
-    "difficulty": "intermediate",
+    "difficulty": "advanced",
     "estimatedTime": "5-10 min",
     "equipment": [
       "barbell"
@@ -410,7 +410,7 @@ export function getSugarWods() {
     "scheme": "EMOM 30",
     "timeCap": "30 min",
     "rxWeight": null,
-    "difficulty": "beginner",
+    "difficulty": "intermediate",
     "estimatedTime": "30 min",
     "equipment": [
       "pull_up_bar"
@@ -432,7 +432,7 @@ export function getSugarWods() {
     "scheme": "5 rounds",
     "timeCap": null,
     "rxWeight": null,
-    "difficulty": "beginner",
+    "difficulty": "intermediate",
     "estimatedTime": "20-30 min",
     "equipment": [
       "pull_up_bar"
@@ -454,7 +454,7 @@ export function getSugarWods() {
     "scheme": "",
     "timeCap": null,
     "rxWeight": null,
-    "difficulty": "beginner",
+    "difficulty": "advanced",
     "estimatedTime": "15-25 min",
     "equipment": [
       "pull_up_bar"
@@ -497,7 +497,7 @@ export function getSugarWods() {
     "scheme": "5 rounds",
     "timeCap": null,
     "rxWeight": null,
-    "difficulty": "beginner",
+    "difficulty": "advanced",
     "estimatedTime": "20-30 min",
     "equipment": [
       "pull_up_bar"
@@ -861,7 +861,7 @@ export function getSugarWods() {
     "scheme": "",
     "timeCap": null,
     "rxWeight": null,
-    "difficulty": "intermediate",
+    "difficulty": "advanced",
     "estimatedTime": "8-15 min",
     "equipment": [
       "barbell"
@@ -961,7 +961,7 @@ export function getSugarWods() {
     "scheme": "",
     "timeCap": null,
     "rxWeight": null,
-    "difficulty": "beginner",
+    "difficulty": "advanced",
     "estimatedTime": "40-60 min",
     "equipment": [
       "pull_up_bar"
