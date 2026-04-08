@@ -552,7 +552,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           // Must have 2+ distinct movements (no single-exercise WODs like Grace, Isabel)
           let wMov = w.movements;
           if (typeof wMov === 'string') { try { wMov = JSON.parse(wMov); } catch { wMov = []; } }
-          if (!Array.isArray(wMov) || wMov.length < 2) return false;
+          if (!Array.isArray(wMov) || wMov.length === 0) return false;
           // Running-only WODs (Griff, Jerry) excluded for everyone — run days cover running
           // Mixed WODs with some running (Helen, Nancy) allowed for racers only
           const allRunning = wMov.every(m => /run|mile|meter|sprint|jog|swim|row|bike/i.test(m));
