@@ -519,6 +519,23 @@ export default function Settings({ navigation }) {
 
           <TouchableOpacity style={styles.actionButton} onPress={async () => {
             try {
+              Alert.alert('Syncing...', 'Fetching verified WODs from SugarWOD...');
+              const { syncSugarWodBenchmarks } = require('../data/syncSugarWod');
+              const count = await syncSugarWodBenchmarks((status) => console.log('[SugarWOD]', status));
+              Alert.alert('Done', `Synced ${count} verified WODs (Girls + Heroes). Your WOD library is now backed by real CrossFit data.`);
+            } catch (e) {
+              console.error('SugarWOD sync error:', e);
+              Alert.alert('Error', e.message);
+            }
+          }}>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionLabel}>Sync SugarWOD Library</Text>
+              <Text style={styles.actionDesc}>Import verified Girls + Hero WODs from SugarWOD</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.actionButton} onPress={async () => {
+            try {
               Alert.alert('Seeding...', 'Creating 8 weeks of workout history...');
               const { seedTestWorkoutData } = require('../core/seedTestData');
               await seedTestWorkoutData();

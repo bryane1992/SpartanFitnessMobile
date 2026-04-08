@@ -63,6 +63,7 @@ export default {
       },
       exerciseDbApiKey: process.env.EXERCISE_DB_KEY,
       claudeApiKey: process.env.CLAUDE_TOKEN,
+      wodApiKey: process.env.WOD_TOKEN,
     },
   },
 };
