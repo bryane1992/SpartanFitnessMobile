@@ -148,7 +148,9 @@ export function validatePlan(planDays, userProfile) {
         }
 
         // ── Check 9: Rep/Set Phase Consistency ──
-        if (isMainLift && seedEx?.is_compound && ex.sets) {
+        // Skip carries — they use distance (50yd, 100yd) not strength reps
+        const isCarry = pattern === 'carry' || /carry|walk|farmer/i.test(ex.exercise_id || '');
+        if (isMainLift && seedEx?.is_compound && ex.sets && !isCarry) {
           const m = String(ex.sets).match(/(\d+)x(\d+)/);
           if (m) {
             const reps = parseInt(m[2]);
