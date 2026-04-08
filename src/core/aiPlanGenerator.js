@@ -633,7 +633,14 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         const niche = getMovementNiche(id);
         if (niche) usedNiches.add(niche);
       }
-      const accPool = bt.accessoryCount > 0 ? expandPool(daySelection.accessories || [], exerciseMenu, dayConfig, archetype, week) : [];
+      // Filter Claude's accessory picks to match day's patterns (no squats on pull day)
+      const filteredAccPicks = (daySelection.accessories || []).filter(id => {
+        const ex = exerciseById[id];
+        if (!ex) return true;
+        const p = getMovementPattern(ex);
+        return !allowedDayPatterns.size || allowedDayPatterns.has(p) || p === 'core';
+      });
+      const accPool = bt.accessoryCount > 0 ? expandPool(filteredAccPicks, exerciseMenu, dayConfig, archetype, week) : [];
       // Filter out accessories that duplicate a compound's movement niche
       const dedupedAccPool = accPool.filter(id => {
         const niche = getMovementNiche(id);
