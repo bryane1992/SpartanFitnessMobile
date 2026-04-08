@@ -1,5 +1,6 @@
 // Auto-generated from SugarWOD API — 266 verified WODs
-// Generated: 2026-04-08T14:07:02.774Z
+// Generated: 2026-04-08T14:41:13.596Z
+// Header lines stripped from movements array
 
 export function getSugarWods() {
   return [
@@ -10,7 +11,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "9/7/5 reps of:",
     "movements": [
-      "9/7/5 reps of:",
       "Muscle-Ups",
       "Snatch 135/95#"
     ],
@@ -72,7 +72,6 @@ export function getSugarWods() {
     "type": "FOR REPS",
     "description": "5 rounds for reps of",
     "movements": [
-      "5 rounds for reps of",
       "Benchpress bodyweight (max reps)",
       "Pull-ups (max reps)"
     ],
@@ -94,7 +93,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time of:",
     "movements": [
-      "5 rounds for time of:",
       "400m run",
       "30 Box Jumps 24/20\"",
       "30 Wall Balls"
@@ -117,7 +115,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time of:",
     "movements": [
-      "5 rounds for time of:",
       "800m run",
       "30 Kettlebell Swing 2 pood",
       "30 pull-ups"
@@ -140,7 +137,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "50-40-30-20-10 reps for time of:",
     "movements": [
-      "50-40-30-20-10 reps for time of:",
       "Double-Unders",
       "Sit-ups"
     ],
@@ -161,7 +157,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time of:",
     "movements": [
-      "5 rounds for time of:",
       "400m run",
       "15 Overhead squat 95/65#"
     ],
@@ -203,7 +198,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "10-9-8-7-6-5-4-3-2-1 reps for time of:",
     "movements": [
-      "10-9-8-7-6-5-4-3-2-1 reps for time of:",
       "Deadlift 1.5x bodyweight",
       "Benchpress 1x bodyweight",
       "Clean 3/4x bodyweight"
@@ -267,7 +261,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "30 reps for time of:",
     "movements": [
-      "30 reps for time of:",
       "Snatch 135/95#"
     ],
     "scheme": "",
@@ -287,7 +280,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "3 rounds for time of:",
     "movements": [
-      "3 rounds for time of:",
       "400m run",
       "21 Kettlebell Swings 1.5/1 pood",
       "12 Pull-ups"
@@ -310,7 +302,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "30 reps for time of:",
     "movements": [
-      "30 reps for time of:",
       "Clean & Jerk 135/95#"
     ],
     "scheme": "",
@@ -330,7 +321,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "21-15-9 reps for time of:",
     "movements": [
-      "21-15-9 reps for time of:",
       "Thruster 95/65#",
       "Pull-ups"
     ],
@@ -352,7 +342,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "21-15-9 reps for time of:",
     "movements": [
-      "21-15-9 reps for time of:",
       "Clean 135/95#",
       "Ring dips"
     ],
@@ -374,7 +363,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "21-15-9 reps for time of:",
     "movements": [
-      "21-15-9 reps for time of:",
       "Deadlift 225/155#",
       "HSPU"
     ],
@@ -416,7 +404,6 @@ export function getSugarWods() {
     "type": "EMOM",
     "description": "Each minute on the minute for 30 minutes:",
     "movements": [
-      "Each minute on the minute for 30 minutes:",
       "5 pull-ups",
       "10 push-ups",
       "15 squats"
@@ -438,7 +425,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time:",
     "movements": [
-      "5 rounds for time:",
       "20 pull-up",
       "30 push-ups",
       "40 sit-ups",
@@ -483,7 +469,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "21-15-9 reps for time of:",
     "movements": [
-      "21-15-9 reps for time of:",
       "Burpees",
       "KB Swings (53/35)",
       "Double-Unders"
@@ -506,7 +491,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time of:",
     "movements": [
-      "5 rounds for time of:",
       "20 pull-ups",
       "40 push-ups",
       "60 squats"
@@ -528,7 +512,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time of:",
     "movements": [
-      "5 rounds for time of:",
       "20 handstand push-ups",
       "40 pull-ups",
       "60 single-leg squats, alternating legs"
@@ -550,7 +533,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "3 rounds for time of:",
     "movements": [
-      "3 rounds for time of:",
       "20 burpees",
       "21 dumbbell snatches",
       "12 dumbbell thrusters",
@@ -598,7 +580,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "10 rounds for time of:",
     "movements": [
-      "10 rounds for time of:",
       "3 clean and jerks",
       "3 burpees over the bar",
       "♀ 95 lb. ♂ 135 lb."
@@ -620,7 +601,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "10 rounds for time of:",
     "movements": [
-      "10 rounds for time of:",
       "3 snatches",
       "3 burpees over the bar",
       "♀ 95 lb. ♂ 135 lb."
@@ -642,7 +622,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds, each for time, of:",
     "movements": [
-      "5 rounds, each for time, of:",
       "20 handstand push-ups",
       "30 deadlifts (95/135 lb.)",
       "40 sit-ups",
@@ -666,7 +645,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "10-9-8-7-6-5-4-3-2-1 reps for time of:",
     "movements": [
-      "10-9-8-7-6-5-4-3-2-1 reps for time of:",
       "Muscle-ups",
       "Bodyweight clean and jerks"
     ],
@@ -688,7 +666,6 @@ export function getSugarWods() {
     "type": "FOR REPS",
     "description": "5 rounds for max reps of:",
     "movements": [
-      "5 rounds for max reps of:",
       "¾ bodyweight hang power snatches",
       "Handstand push-ups"
     ],
@@ -709,7 +686,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "3 rounds for time:",
     "movements": [
-      "3 rounds for time:",
       "500 meter Row",
       "12 Deadlifts (Bodyweight)",
       "21 Box Jumps (24/20 in)"
@@ -733,7 +709,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "3 rounds for time of:",
     "movements": [
-      "3 rounds for time of:",
       "Run 800 meters",
       "50 Back Extensions",
       "50 Sit-ups"
@@ -792,7 +767,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "3 rounds for time of:",
     "movements": [
-      "3 rounds for time of:",
       "30 Squat Clean, 95/65 lb.",
       "30 Pull-ups",
       "Run 800m"
@@ -836,7 +810,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Three rounds for time of:",
     "movements": [
-      "Three rounds for time of:",
       "Row 1000 meters",
       "50 Push-ups",
       "Run 1000 meters",
@@ -860,7 +833,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Three rounds for time of:",
     "movements": [
-      "Three rounds for time of:",
       "30 Wall ball shots, 20 pound ball",
       "75/55 pound Sumo deadlift high-pull, 30 reps",
       "30 Box jump, 20\"\" box",
@@ -889,7 +861,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds of:",
     "movements": [
-      "Five rounds of:",
       "155/105 pound Deadlift, 12 reps",
       "155/105 pound Hang power clean, 9 reps",
       "155/105 pound Push jerk, 6 reps"
@@ -931,7 +902,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "21-15-9 reps of:",
     "movements": [
-      "21-15-9 reps of:",
       "Handstand push-ups",
       "Ring dips",
       "Push-ups"
@@ -1012,7 +982,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Seven rounds of:",
     "movements": [
-      "Seven rounds of:",
       "7 Handstand push-ups",
       "135/95 pound Thruster, 7 reps",
       "7 Knees to elbows",
@@ -1071,7 +1040,6 @@ export function getSugarWods() {
     "description": "Run 800 meters",
     "movements": [
       "Run 800 meters",
-      "Then two rounds of:",
       "50 Burpees",
       "40 Pull-ups",
       "30 One-legged squats",
@@ -1136,7 +1104,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Ten rounds for time of:",
     "movements": [
-      "Ten rounds for time of:",
       "11 Chest to bar pull-ups",
       "75/55 pound Front squat, 22 reps"
     ],
@@ -1157,7 +1124,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Six rounds of:",
     "movements": [
-      "Six rounds of:",
       "50 Squats",
       "25 Ring dips"
     ],
@@ -1178,7 +1144,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Three rounds of:",
     "movements": [
-      "Three rounds of:",
       "25 Muscle-ups",
       "100 Squats",
       "35 GHD Sit-ups"
@@ -1200,7 +1165,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Ten rounds:",
     "movements": [
-      "Ten rounds:",
       "95/65 pound Thruster, 10 reps",
       "10 Ring push-ups"
     ],
@@ -1222,7 +1186,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Three rounds of:",
     "movements": [
-      "Three rounds of:",
       "20 L-pull-ups",
       "30 Toes to bar",
       "40 Burpees",
@@ -1245,7 +1208,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "10 rounds for time of:",
     "movements": [
-      "10 rounds for time of:",
       "Sprint 100 meters",
       "10 Pull-ups",
       "Sprint 100 meters",
@@ -1268,7 +1230,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "10 rounds for time of:",
     "movements": [
-      "10 rounds for time of:",
       "3 Handstand push-ups",
       "6 Deadlift, 225/155 lb.",
       "12 Pull-ups",
@@ -1293,7 +1254,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds for time of:",
     "movements": [
-      "Five rounds for time of:",
       "12 Deadlifts, 225/155 lb.",
       "20 Pull-ups",
       "12 Clean & Jerk, 135/95 lb.",
@@ -1339,7 +1299,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Four rounds of: ",
     "movements": [
-      "Four rounds of:",
       "27 Box jumps, 24\" box",
       "20 Burpees",
       "11 Squat cleans, 145/100 pounds"
@@ -1362,7 +1321,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Twelve rounds of: ",
     "movements": [
-      "Twelve rounds of:",
       "45 pound Dumbbell hang squat clean, 10 reps",
       "6 Handstand push-ups on dumbbells"
     ],
@@ -1502,7 +1460,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "21-18-15-12-9-6-3 reps of:",
     "movements": [
-      "21-18-15-12-9-6-3 reps of:",
       "95/65 pound Squat clean",
       "Double-unders",
       "185/125 pound Deadlift",
@@ -1528,7 +1485,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds of:",
     "movements": [
-      "Five rounds of:",
       "Run 800 meters",
       "15 ft Rope Climb, 5 ascents",
       "50 Push-ups"
@@ -1548,7 +1504,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Ten rounds, each for time:",
     "movements": [
-      "Ten rounds, each for time:",
       "115/80 pound Thruster, 5 reps",
       "10 Pull-ups",
       "100 meter Sprint"
@@ -1571,7 +1526,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Seven rounds for time of:",
     "movements": [
-      "Seven rounds for time of:",
       "3 Forward rolls",
       "5 Wall climbs",
       "7 Toes to bar",
@@ -1595,7 +1549,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 Rounds of:",
     "movements": [
-      "5 Rounds of:",
       "Run 400 meters",
       "10 Burpee box jumps, 24\"\" box",
       "95/65 pound Sumo-deadlift high-pull, 10 reps",
@@ -1619,7 +1572,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "50-40-30-20 and 10 rep rounds for time of: ",
     "movements": [
-      "50-40-30-20 and 10 rep rounds for time of:",
       "Wall ball shots, 20 pound ball",
       "Box jump, 24 inch box",
       "Kettlebell swings, 1.5 pood"
@@ -1643,7 +1595,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds of:",
     "movements": [
-      "Five rounds of:",
       "7 Muscle-ups",
       "21 Burpees",
       "Each burpee terminates with a jump one foot above max standing reach."
@@ -1665,7 +1616,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Two rounds of: ",
     "movements": [
-      "Two rounds of:",
       "200 Double-unders",
       "135/95 pound Overhead squat, 50 reps",
       "50 Pull-ups",
@@ -1689,7 +1639,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "With a single 2 pood kettlebell:",
     "movements": [
-      "With a single 2 pood kettlebell:",
       "21 Turkish get-ups, Right arm",
       "50 Swings",
       "21 Overhead squats, Left arm",
@@ -1741,7 +1690,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds:",
     "movements": [
-      "Five rounds:",
       "30 reps, 2 pood Kettlebell swing",
       "30 Burpees",
       "30 GHD Sit-ups"
@@ -1763,7 +1711,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Thirty rounds of: ",
     "movements": [
-      "Thirty rounds of:",
       "5 Wall ball shots, 20 pound ball",
       "3 Handstand push-ups",
       "225/155 pound Power clean, 1 rep"
@@ -1786,7 +1733,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds of: ",
     "movements": [
-      "Five rounds of:",
       "15' Rope climb, 3 ascents",
       "10 Toes to bar",
       "21 Walking lunge steps with 45lb plate held overhead",
@@ -1835,7 +1781,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Four rounds of: ",
     "movements": [
-      "Four rounds of:",
       "250 pound Deadlift, 8 reps",
       "16 Burpees",
       "15 foot Rope climb, 3 ascents",
@@ -1858,7 +1803,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Seven rounds for time of:",
     "movements": [
-      "Seven rounds for time of:",
       "40 pound dumbbell Hang split snatch, 10 reps Right arm",
       "15 ft Rope Climb, 1 ascent",
       "40 pound dumbbell Hang split snatch, 10 reps Left arm",
@@ -1883,7 +1827,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds of: ",
     "movements": [
-      "Five rounds of:",
       "135/95 pound Power clean, 5 reps",
       "135/95 pound Front squat, 10 reps",
       "135/95 pound Jerk, 5 reps",
@@ -1907,7 +1850,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds of:",
     "movements": [
-      "Five rounds of:",
       "40 pound Dumbbells split clean, 15 reps",
       "21 Pull-ups"
     ],
@@ -1930,7 +1872,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds of: ",
     "movements": [
-      "Five rounds of:",
       "50 Double unders",
       "35 Knees to elbows",
       "185/125 pound Overhead walk, 20 yards"
@@ -1974,7 +1915,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds of: ",
     "movements": [
-      "Five rounds of:",
       "Row 1000 meters",
       "200 meter Farmer carry, 45 pound dumbbells",
       "45 pound dumbbell Waiter walk, 50 meters, Right arm",
@@ -1998,7 +1938,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Seven rounds of: ",
     "movements": [
-      "Seven rounds of:",
       "1.5 pood Kettlebell swing, 15 reps",
       "95/65 pound Power clean, 15 reps",
       "15 Box jumps, 24\" box"
@@ -2067,7 +2006,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Four rounds of: ",
     "movements": [
-      "Four rounds of:",
       "Run 800 meters",
       "40 Pull-ups",
       "70 Push-ups"
@@ -2089,7 +2027,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds for time of: ",
     "movements": [
-      "Five rounds for time of:",
       "Bear crawl 100 feet",
       "Standing broad-jump, 100 feet",
       "Do three Burpees after every five broad-jumps. If you've got a twenty pound vest or body armor, wear it."
@@ -2109,7 +2046,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "30-25-20-15-10-5 rep rounds of:",
     "movements": [
-      "30-25-20-15-10-5 rep rounds of:",
       "GHD sit-up",
       "Back extension",
       "Knees to elbow",
@@ -2154,7 +2090,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "As many rounds as possible in 20 minutes:",
     "movements": [
-      "As many rounds as possible in 20 minutes:",
       "2 Muscle-ups",
       "4 Handstand Push-ups",
       "8 2-Pood Kettlebell swings"
@@ -2177,7 +2112,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Three rounds of:",
     "movements": [
-      "Three rounds of:",
       "9 Muscle-ups",
       "15 Burpee pull-ups",
       "21 Pull-ups",
@@ -2201,7 +2135,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Three rounds of: ",
     "movements": [
-      "Three rounds of:",
       "165 pound Front squat, 5 reps",
       "18 Pull-ups",
       "225/155 pound Deadlift, 5 reps",
@@ -2251,7 +2184,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Seven rounds of:",
     "movements": [
-      "Seven rounds of:",
       "35 pound Dumbbell hang squat clean, 18 reps",
       "18 Pull-ups",
       "135/95 pound Power clean, 10 reps",
@@ -2322,7 +2254,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Six rounds for time of:",
     "movements": [
-      "Six rounds for time of:",
       "24 Squats",
       "24 Push-ups",
       "24 Walking lunge steps",
@@ -2343,7 +2274,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Eight rounds of: ",
     "movements": [
-      "Eight rounds of:",
       "Run 200 meters",
       "11 Dumbbell burpee deadlifts, 60 pound dumbbells"
     ],
@@ -2387,7 +2317,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Eight rounds of: ",
     "movements": [
-      "Eight rounds of:",
       "600 meter Run",
       "1.5 pood Weighted pull-up, 11 reps",
       "11 Walking lunge steps, carrying 1.5 pood kettlebells",
@@ -2412,7 +2341,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds of:",
     "movements": [
-      "Five rounds of:",
       "22 Kettlebell swings, 2 pood",
       "22 Box jump, 24 inch box",
       "Run 400 meters",
@@ -2438,7 +2366,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Three rounds of:",
     "movements": [
-      "Three rounds of:",
       "Row 1000 meters",
       "50 Burpees",
       "50 Box jumps, 24\"\" box",
@@ -2485,7 +2412,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Three rounds of: ",
     "movements": [
-      "Three rounds of:",
       "Run 800 meters",
       "30 reps, 50 pound dumbbell squat cleans",
       "30 Burpees"
@@ -2532,7 +2458,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Two rounds for time of:",
     "movements": [
-      "Two rounds for time of:",
       "295 pound Deadlift, 24 reps",
       "24 Box jumps, 24 inch box",
       "24 Wallball shots, 20 pound ball",
@@ -2559,7 +2484,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Four rounds for time of:",
     "movements": [
-      "Four rounds for time of:",
       "100 foot Walking lunge with 45lb plate held overhead",
       "30 Box jump, 24 inch box",
       "20 Wallball shots, 20 pound ball",
@@ -2582,7 +2506,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Seven rounds of:",
     "movements": [
-      "Seven rounds of:",
       "Run 400 meters",
       "135/95 pound Back squat, 29 reps"
     ],
@@ -2624,7 +2547,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Eight rounds for time of: ",
     "movements": [
-      "Eight rounds for time of:",
       "185/125 pound Front squat, 5 reps",
       "26 Ring push-ups"
     ],
@@ -2672,7 +2594,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "9 Rounds For Time",
     "movements": [
-      "9 Rounds For Time",
       "7 Squat Cleans (185/135 lb)",
       "8 Burpee Box Jumps (36/30 in)"
     ],
@@ -2694,7 +2615,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "10 rounds of: ",
     "movements": [
-      "10 rounds of:",
       "15 ft Rope Climb, 1 ascent",
       "95/65 pound Back squat, 29 reps",
       "135/95 pound barbells Farmer carry, 10 meters",
@@ -2717,7 +2637,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds for time:",
     "movements": [
-      "Five rounds for time:",
       "225/155 pound Deadlift, 15 reps",
       "20 Box jumps, 24 inch box",
       "25 Pull-ups"
@@ -2741,7 +2660,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Three rounds of: ",
     "movements": [
-      "Three rounds of:",
       "155/105 pound Squat cleans, 1 minute",
       "20' Shuttle sprints (20' forward + 20' backwards = 1 rep), 1 minute",
       "245/165 pound Deadlifts, 1 minute",
@@ -2765,7 +2683,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Three rounds of: ",
     "movements": [
-      "Three rounds of:",
       "Run 800 meters with a 45 pound barbell",
       "15 foot Rope climb, 3 ascents",
       "135/95 pound Thruster, 12 reps"
@@ -2787,7 +2704,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Three rounds for time of: ",
     "movements": [
-      "Three rounds for time of:",
       "15 foot Rope climb, 5 ascents",
       "185/125 pound Back squat, 25 reps"
     ],
@@ -2806,7 +2722,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Wearing a 20 pound vest, three rounds of:",
     "movements": [
-      "Wearing a 20 pound vest, three rounds of:",
       "Run 1K",
       "10 Muscle-ups",
       "100 Squats"
@@ -2828,7 +2743,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Ten rounds for time of: ",
     "movements": [
-      "Ten rounds for time of:",
       "Run 150 meters",
       "7 Chest to bar pull-ups",
       "135/95 pound Front squat, 7 reps",
@@ -2875,7 +2789,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Three rounds of:",
     "movements": [
-      "Three rounds of:",
       "75 Squats",
       "25 Ring handstand push-ups",
       "25 L-pull-ups"
@@ -2944,7 +2857,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds:",
     "movements": [
-      "Five rounds:",
       "7 Muscle-ups",
       "21 reps 95/65 pound Sumo-deadlift high-pull"
     ],
@@ -2966,7 +2878,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Four rounds of:",
     "movements": [
-      "Four rounds of:",
       "10 L-pull-ups",
       "15 Push-ups",
       "15 Chest to bar Pull-ups",
@@ -2991,7 +2902,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Four rounds of: ",
     "movements": [
-      "Four rounds of:",
       "Swim 200 meters",
       "40 pound Dumbbell squat cleans, 23 reps"
     ],
@@ -3013,7 +2923,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "3 rounds of:",
     "movements": [
-      "3 rounds of:",
       "40 pound Dumbbell snatch, 21 reps, right arm",
       "21 L Pull-ups",
       "40 pound Dumbbell snatch, 21 reps, left arm",
@@ -3039,7 +2948,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds of:",
     "movements": [
-      "Five rounds of:",
       "Run 400 meters",
       "30 Glute-ham sit-ups",
       "250 pound Deadlift, 15 reps"
@@ -3061,7 +2969,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Six rounds of:",
     "movements": [
-      "Six rounds of:",
       "Carry 50 pound sandbag 400 meters",
       "115/80 pound Push press, 12 reps",
       "12 Box jumps, 24 inch box",
@@ -3177,7 +3084,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Four rounds for time of:",
     "movements": [
-      "Four rounds for time of:",
       "Run 400 meters",
       "185/125 pound Back squat, 24 reps",
       "135/95 pound Jerk, 24 reps"
@@ -3220,7 +3126,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "21-15-9-9-15-21 reps for time of:",
     "movements": [
-      "21-15-9-9-15-21 reps for time of:",
       "225/155 pound Deadlift",
       "Burpee"
     ],
@@ -3241,7 +3146,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Seven rounds for time of:",
     "movements": [
-      "Seven rounds for time of:",
       "8 Muscle-ups",
       "22 yard Farmer carry, 50 pound dumbbells"
     ],
@@ -3263,7 +3167,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Four rounds for time of:",
     "movements": [
-      "Four rounds for time of:",
       "Run 200 meters",
       "135/95 pound Thruster, 11 reps",
       "Run 200 meters",
@@ -3343,7 +3246,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Four rounds for time of:",
     "movements": [
-      "Four rounds for time of:",
       "22 Burpee pull-ups",
       "185/125 pound Back squat, 22 reps",
       "Run 200 meters with a 45 pound plate overhead"
@@ -3365,7 +3267,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Five rounds for time of:",
     "movements": [
-      "Five rounds for time of:",
       "Run 400 meters",
       "345/235 pound Deadlift, 1 rep",
       "185/125 pound Squat clean, 3 reps",
@@ -3391,7 +3292,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Three rounds for time of:",
     "movements": [
-      "Three rounds for time of:",
       "Run 800 meters",
       "225/155 pound Front squat, 5 reps",
       "Run 200 meters",
@@ -3493,7 +3393,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "4 rounds for time of:",
     "movements": [
-      "4 rounds for time of:",
       "Run 400 meters",
       "5 burpee muscle-ups",
       "If you've got a 20-lb. vest or body armor, wear it."
@@ -3515,7 +3414,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "30-20-10 reps for time of:",
     "movements": [
-      "30-20-10 reps for time of:",
       "Body-weight back squats",
       "Body-weight bench presses",
       "Strict pull-ups"
@@ -3538,13 +3436,10 @@ export function getSugarWods() {
     "type": "FOR REPS",
     "description": "8 minutes to complete:",
     "movements": [
-      "8 minutes to complete:",
       "1-mile run",
       "315205 lb. deadlifts, max reps",
-      "Then, 10 minutes to complete:",
       "1-mile run",
       "225/155 lb. power cleans, max reps",
-      "Then, 12 minutes to complete:",
       "1-mile run",
       "135/95 lb. overhead squats, max reps",
       "Do not rest between rounds. Post run times and reps completed for each exercise."
@@ -3566,7 +3461,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time of:",
     "movements": [
-      "5 rounds for time of:",
       "11 back squats, 185/125 lb.",
       "7 strict burpee pull-ups",
       "400-meter run",
@@ -3591,7 +3485,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time of:",
     "movements": [
-      "5 rounds for time of:",
       "31 back squats, 135/95 lb.",
       "12 power cleans, 185/125 lb."
     ],
@@ -3612,7 +3505,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time:",
     "movements": [
-      "5 rounds for time:",
       "225/155 lb. front squats, 5 reps",
       "15-foot rope climbs, 5 ascents",
       "Run 400 meters with a 45-lb. plate"
@@ -3634,7 +3526,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "3 rounds for time of:",
     "movements": [
-      "3 rounds for time of:",
       "185/125 lb. deadlifts, 21 reps",
       "15 pull-ups",
       "185/125 lb. front squats, 9 reps/"
@@ -3702,7 +3593,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "3 rounds for time of:",
     "movements": [
-      "3 rounds for time of:",
       "185/125 lb. deadlifts, 32 reps",
       "32 hanging hip touches, alternating arms",
       "800-meter running farmer carry, 15-lb. dumbbells"
@@ -3799,7 +3689,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "7 rounds for time of:",
     "movements": [
-      "7 rounds for time of:",
       "11 body-weight back squats",
       "1,000-meter row"
     ],
@@ -3820,7 +3709,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "7 rounds for time of:",
     "movements": [
-      "7 rounds for time of:",
       "11 body-weight deadlifts",
       "100-meter sprint"
     ],
@@ -3841,7 +3729,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "7 rounds for time of:",
     "movements": [
-      "7 rounds for time of:",
       "11 deficit handstand push-ups",
       "1,000-meter run"
     ],
@@ -3999,7 +3886,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "3 rounds for time of:",
     "movements": [
-      "3 rounds for time of:",
       "Run 800 meters",
       "275/185 lb. deadlifts, 7 reps",
       "10 burpee pull-ups",
@@ -4026,7 +3912,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "2 rounds for time of:",
     "movements": [
-      "2 rounds for time of:",
       "34 push-ups",
       "50-yard sprint",
       "34 deadlifts, 135/95 lb.",
@@ -4061,7 +3946,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time:",
     "movements": [
-      "5 rounds for time:",
       "35 kettlebell swings, 1.5 pood",
       "30 push-ups",
       "25 pull-ups",
@@ -4087,7 +3971,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "2 rounds for time:",
     "movements": [
-      "2 rounds for time:",
       "12 Burpees",
       "12 Thruster 115/75#",
       "12 Burpees",
@@ -4140,7 +4023,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time of:",
     "movements": [
-      "5 rounds for time of:",
       "225/155 lb. cleans, 3 reps",
       "200-meter sprint",
       "20 kettlebell snatches, 1.5 pood, 10 each arm"
@@ -4164,7 +4046,6 @@ export function getSugarWods() {
     "description": "For time:",
     "movements": [
       "Run 1.5 miles",
-      "Then, 8 rounds of:",
       "19 pull-ups",
       "19 push-ups",
       "19 burpees",
@@ -4190,7 +4071,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time of:",
     "movements": [
-      "5 rounds for time of:",
       "225/155 lb. Back Squats, 10 reps",
       "275/155 lb. Deadlifts, 10 reps",
       "400-meter Sprint"
@@ -4212,7 +4092,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "3 rounds for time of:",
     "movements": [
-      "3 rounds for time of:",
       "21 Pull-ups",
       "15 Hand Stand Push-Ups",
       "9 Thrusters, 135/95 lb."
@@ -4235,7 +4114,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "7 Rounds for Time of:",
     "movements": [
-      "7 Rounds for Time of:",
       "7 Deadlifts @ 315/220",
       "200m Sprint",
       "15 Pull-Ups",
@@ -4259,7 +4137,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "7 rounds for time of:",
     "movements": [
-      "7 rounds for time of:",
       "Run 400 meters",
       "21 walking lunges",
       "15 pull-ups",
@@ -4283,7 +4160,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 Rounds for Time of:",
     "movements": [
-      "5 Rounds for Time of:",
       "75/55 lb Thrusters, 20 reps",
       "10 Strict Ring Dips",
       "20 Push-ups",
@@ -4308,7 +4184,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "7 rounds for time of:",
     "movements": [
-      "7 rounds for time of:",
       "11 back squats, 185/125 lb.",
       "10 jerks, 135/95 lb."
     ],
@@ -4352,7 +4227,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "9 rounds for time with a partner of:",
     "movements": [
-      "9 rounds for time with a partner of:",
       "9 bar muscle-ups",
       "11 clean and jerks, 155/105 lb.",
       "50-yard buddy carry",
@@ -4377,7 +4251,6 @@ export function getSugarWods() {
     "type": "AMRAP",
     "description": "On a 35-minute clock with a partner:",
     "movements": [
-      "On a 35-minute clock with a partner:",
       "30 double-unders",
       "15 pull-ups",
       "15 push-ups",
@@ -4463,7 +4336,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "15-12-9-6-3 reps for time of:",
     "movements": [
-      "15-12-9-6-3 reps for time of:",
       "135/95 lb. power cleans",
       "Pull-ups",
       "135/95 lb. front squats",
@@ -4553,7 +4425,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time of:",
     "movements": [
-      "5 rounds for time of:",
       "6 deadlifts, 315/205 lb.",
       "6 burpees",
       "5 cleans, 225/155 lb.",
@@ -4580,7 +4451,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "3 rounds, each for time of:",
     "movements": [
-      "3 rounds, each for time of:",
       "4 jerks, 185/125 lb.",
       "5 front squats, 185/125 lb.",
       "6 power cleans, 185/125 lb.",
@@ -4606,7 +4476,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "4 rounds for time of:",
     "movements": [
-      "4 rounds for time of:",
       "Run 800 meters",
       "49 push-ups",
       "49 sit-ups",
@@ -4721,7 +4590,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time of:",
     "movements": [
-      "5 rounds for time of:",
       "50 step-ups with 45-lb. barbell, 20-in. box",
       "135/95 lb. cleans, 15 reps",
       "50 step-ups with 45-lb. barbell, 20-in. box",
@@ -4773,15 +4641,12 @@ export function getSugarWods() {
     "description": "For time:",
     "movements": [
       "Run 1 mile with a 20-lb. medicine ball",
-      "Then, 8 rounds of:",
       "10 wall-ball shots",
       "1 rope ascent",
       "Run 800 meters with a 20-lb. medicine ball",
-      "Then, 4 rounds of:",
       "10 wall-ball shots",
       "1 rope ascent",
       "Run 400 meters with a 20-lb. medicine ball",
-      "Then, 2 rounds of:",
       "10 wall-ball shots",
       "1 rope ascent"
     ],
@@ -4800,7 +4665,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "With a 55-lb. and 35-lb. dumbbell, 10 rounds for time of:",
     "movements": [
-      "With a 55-lb. and 35-lb. dumbbell, 10 rounds for time of:",
       "200-meter farmers carry with both dumbbells",
       "35-lb. weighted pull-ups, 10 reps",
       "55-lb. dumbbell power snatches, 20 reps, alternating arms"
@@ -4896,7 +4760,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds of:",
     "movements": [
-      "5 rounds of:",
       "3 minutes of rope climbs",
       "2 minutes of squats",
       "2 minutes of push-ups",
@@ -4920,7 +4783,6 @@ export function getSugarWods() {
     "movements": [
       "On a 25-minute clock,",
       "Run 1.5 miles",
-      "Then perform as many rounds as possible of:",
       "11 chest-to-bar pull-ups",
       "7 hang squat cleans, 155/105 lb.",
       "7 push presses, 155/105 lb."
@@ -4943,7 +4805,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "7 rounds, each for time of:",
     "movements": [
-      "7 rounds, each for time of:",
       "100-meter sprint",
       "19 kettlebell swings, 2 pood",
       "10 burpee box jumps, 24-inch"
@@ -5015,7 +4876,6 @@ export function getSugarWods() {
     "description": "Run 800 meters with a 25-lb. plate",
     "movements": [
       "Run 800 meters with a 25-lb. plate",
-      "Then, 14 rounds of:",
       "5 strict pull-ups",
       "4 burpee box jumps, 24-in. box",
       "3 cleans, 185/125 lb.",
@@ -5040,7 +4900,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time of:",
     "movements": [
-      "5 rounds for time of:",
       "800-meter run",
       "23 back squats, ¾ body weight",
       "13 deadlifts, 1 ½ body weight"
@@ -5062,7 +4921,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Wearing a 20-lb. vest, 6 rounds for time:",
     "movements": [
-      "Wearing a 20-lb. vest, 6 rounds for time:",
       "25 pull-ups",
       "50-ft. front-rack lunge, 75/55 lb.",
       "25 push-ups",
@@ -5108,7 +4966,6 @@ export function getSugarWods() {
     "description": "•13 squat snatches, 155/105 lb.",
     "movements": [
       "13 squat snatches, 155/105 lb.",
-      "Then, 10 rounds of:",
       "• 10 pull-ups",
       "•100-meter sprint",
       "Then,",
@@ -5132,17 +4989,12 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 minutes of:",
     "movements": [
-      "5 minutes of:",
       "•Burpees",
-      "Then, 5 minutes of:",
       "•7 deadlifts, 155/105 lb.",
       "•7 box jumps, 24-in. box",
-      "Then, 5 minutes of:",
       "•Turkish get-ups, 40-lb. dumbbell",
-      "Then, 5 minutes of:",
       "•7 snatches, 75/55 lb.",
       "•7 push-ups",
-      "Then, 5 minutes of:",
       "•Rowing (calories)",
       "Log total reps from all 5 stations. Athletes can note reps for each station in their notes."
     ],
@@ -5189,7 +5041,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "With a partner, complete as many rounds as possible in 26 minutes of:",
     "movements": [
-      "With a partner, complete as many rounds as possible in 26 minutes of:",
       "6 deadlifts, 315/205 lb. each",
       "9 bar-facing burpees, synchronized",
       "9 bar muscle-ups, each",
@@ -5213,7 +5064,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "10 rounds for time of:",
     "movements": [
-      "10 rounds for time of:",
       "30 double-unders",
       "15 pull-ups",
       "30 squats",
@@ -5287,7 +5137,6 @@ export function getSugarWods() {
     "description": "Hang from a pull-up bar for 6 minutes",
     "movements": [
       "Hang from a pull-up bar for 6 minutes",
-      "Each time you drop from the bar, perform:",
       "800-m run",
       "30 push-ups"
     ],
@@ -5308,7 +5157,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds, each for time of:",
     "movements": [
-      "5 rounds, each for time of:",
       "165-lb. squat cleans, 7 reps",
       "165-lb. shoulder-to-overheads, 7 reps",
       "7 burpee chest-to-bar pull-ups",
@@ -5332,7 +5180,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 rounds for time of:",
     "movements": [
-      "5 rounds for time of:",
       "100-meter sprint",
       "10 squat clean thrusters",
       "15 kettlebell swings",
@@ -5430,7 +5277,6 @@ export function getSugarWods() {
     "description": "For time, wearing a 20-lb. vest:",
     "movements": [
       "1-mile run",
-      "Then, 3 rounds of:",
       "30 burpees",
       "4 power cleans",
       "6 front squats",
@@ -5477,7 +5323,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "6 rounds for time of:",
     "movements": [
-      "6 rounds for time of:",
       "60 double-unders",
       "30 kettlebell swings",
       "15 burpees"
@@ -5530,7 +5375,6 @@ export function getSugarWods() {
     "description": "For time, wearing a 20-lb. vest or body armor:",
     "movements": [
       "Run 1,200 meters",
-      "Then, 4 rounds of:",
       "• 12 strict pull-ups",
       "• 9 strict dips",
       "• 6 strict handstand push-ups",
@@ -5602,14 +5446,11 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "For Time",
     "movements": [
-      "Buy-In:",
       "250 meter Run",
-      "Then, 5 Rounds of:",
       "10 Lunges",
       "10 Air Squats",
       "10 Sit-Ups",
       "8 Burpees",
-      "Cash-Out:",
       "250 meter Run",
       "With a running clock, as fast as possible perform the prescribed work in the order written. Athlete must accomplish the buy-in of 250 meter Run before moving on to 5 rounds of 10 Lunges, 10 Air Squats, 10 Sit-Ups, and 8 Burpees. To complete the workout, athlete must complete the cash-out of 250 meter Run.",
       "Score is the time on the clock when the cash-out of 250 meter Run is completed."
@@ -5670,7 +5511,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "21-18-15-12-9-6-3 reps for time of:",
     "movements": [
-      "21-18-15-12-9-6-3 reps for time of:",
       "Front squats",
       "Bar-facing burpees",
       "200-m sandbag carry after each round",
@@ -5695,7 +5535,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "5 Rounds for Time:",
     "movements": [
-      "5 Rounds for Time:",
       "19 Chest-to-Bar Pull-Ups",
       "12 Box Jumps (30/24 in)",
       "8 Squat Cleans (75/45 kg)"
@@ -5751,7 +5590,6 @@ export function getSugarWods() {
     "description": "Cash-In: 1,000 meter Run",
     "movements": [
       "Cash-In: 1,000 meter Run",
-      "Directly into AMRAP in 22 minutes of:",
       "23 Air Squats",
       "7 Burpees",
       "14 Push-Ups",
@@ -5775,7 +5613,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "Six rounds for time of:",
     "movements": [
-      "Six rounds for time of:",
       "30 Squats",
       "135 pound Power clean, 19 reps",
       "7 Strict Pull-ups",
@@ -5801,7 +5638,6 @@ export function getSugarWods() {
     "movements": [
       "Run 1,000 meters",
       "Then,",
-      "5 rounds of:",
       "15 push-ups",
       "20 med-ball cleans",
       "21 burpees",
@@ -5825,7 +5661,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "21-15-9-9-15-21 reps for time of:",
     "movements": [
-      "21-15-9-9-15-21 reps for time of:",
       "225 pound Deadlift",
       "Burpee"
     ],
@@ -5846,7 +5681,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "With a partner, complete as many rounds as possible in 21 minutes of:",
     "movements": [
-      "With a partner, complete as many rounds as possible in 21 minutes of:",
       "30-cal. row",
       "20 burpees over the rower",
       "10 power cleans",
@@ -5870,7 +5704,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "With a weight vest, 13 rounds for time of:",
     "movements": [
-      "With a weight vest, 13 rounds for time of:",
       "8 strict pull-ups",
       "26 box step-ups",
       "21 burpees",
@@ -5926,7 +5759,6 @@ export function getSugarWods() {
     "movements": [
       "Run 1,000 meters",
       "Then,",
-      "5 rounds of:",
       "15 push-ups",
       "20 med-ball cleans",
       "21 burpees",
@@ -5952,11 +5784,9 @@ export function getSugarWods() {
     "movements": [
       "1 mile Run (together)",
       "31 Push-Ups (each)",
-      "Then, 20 Rounds (switch after each round) of:",
       "3 Deadlifts (135/95 lb)",
       "3 Clean-and-Jerks (135/95 lb)",
       "3 Front Squats (135/95 lb)",
-      "Then, perform:",
       "31 Push-Ups (each)",
       "1 mile Run (together)"
     ],
@@ -5977,9 +5807,7 @@ export function getSugarWods() {
     "type": "AMRAP",
     "description": "For Total Rounds & Reps",
     "movements": [
-      "For Total Rounds & Reps",
       "Buy-In: 1 mile Run",
-      "Then, AMRAP in 15 minutes of:",
       "12 Push-Ups",
       "10 Wall Ball Shots (20/14 lb., 10/9 ft.)",
       "28 Sit-Ups",
@@ -6003,7 +5831,6 @@ export function getSugarWods() {
     "description": "For time:",
     "movements": [
       "Buy In: 937m Row (4 min max)",
-      "TEN rounds of:",
       "10 Wall Balls (20/14)",
       "10 Russian Kettle Swings (70/53)",
       "10 Burpees",
@@ -6027,7 +5854,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "3 rounds for time:",
     "movements": [
-      "3 rounds for time:",
       "9 Muscle-Ups",
       "15 Burpee Pull-Ups",
       "21 Pull-Ups",
@@ -6078,7 +5904,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "27 rounds for time of:",
     "movements": [
-      "27 rounds for time of:",
       "5 hang power cleans",
       "5 burpees",
       "15 double-unders",
@@ -6126,7 +5951,6 @@ export function getSugarWods() {
     "description": "For Time",
     "movements": [
       "Buy-In: 26 Back Rack Box Step-Ups (95/65 lb, 24/20 in)",
-      "Then, 3 Rounds of:",
       "17 Power Cleans (95/65 lb)",
       "19 Sit-Ups",
       "21 Deadlifts (95/65 lb)",
@@ -6175,7 +5999,6 @@ export function getSugarWods() {
     "description": "For Time (with a Partner):",
     "movements": [
       "106 Deadlifts (135/95 lb)",
-      "Then, 7 rounds of:",
       "3 Rope Climbs (15 ft)",
       "15 Thrusters (135/95 lb)",
       "15 Kettlebell Swings (70/53 lb)",
@@ -6199,7 +6022,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "7 rounds for Time of:",
     "movements": [
-      "7 rounds for Time of:",
       "300 meter Jog",
       "10 Single-Arm Dumbbell Thrusters (Left) (30/20 lb)",
       "10 Single-Arm Dumbbell Thrusters (Right) (30/20 lb)",
@@ -6280,7 +6102,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "8 rounds for time of:",
     "movements": [
-      "8 rounds for time of:",
       "400-meter run",
       "15 burpee box jump-overs",
       "10-calorie bike",
