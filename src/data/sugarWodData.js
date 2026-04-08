@@ -1,6 +1,6 @@
 // Auto-generated from SugarWOD API — 266 verified WODs
-// Generated: 2026-04-08T14:41:13.596Z
-// Header lines stripped from movements array
+// Generated: 2026-04-08T14:48:32.549Z
+// Cleaned: instruction lines stripped, durations fixed
 
 export function getSugarWods() {
   return [
@@ -49,13 +49,12 @@ export function getSugarWods() {
     "id": "gwen",
     "name": "GWEN",
     "category": "girls",
-    "type": "FOR TIME",
-    "description": "Clean & Jerk 15-12- and 9 reps",
+    "type": "FOR LOAD",
+    "description": "Clean & Jerk 15-12-9 reps. Touch and go. Build weight each set.",
     "movements": [
-      "Clean & Jerk 15-12- and 9 reps",
-      "Touch and go at floor only. Even a re-grip off the floor is a foul. No dumping. Use same load for each set. Rest as needed between sets."
+      "Clean & Jerk"
     ],
-    "scheme": "",
+    "scheme": "15-12-9",
     "timeCap": null,
     "rxWeight": null,
     "difficulty": "intermediate",
@@ -536,8 +535,7 @@ export function getSugarWods() {
       "20 burpees",
       "21 dumbbell snatches",
       "12 dumbbell thrusters",
-      "Use a single dumbbell on the snatches and a pair for the thrusters.",
-      "♀ 35-lb. DBs ♂ 50-lb. DBs"
+      "Use a single dumbbell on the snatches and a pair for the thrusters."
     ],
     "scheme": "3 rounds",
     "timeCap": null,
@@ -560,8 +558,7 @@ export function getSugarWods() {
       "100 hang power snatches",
       "100 push presses",
       "100 sumo deadlift high pulls",
-      "100 front squats",
-      "♀ 45 lb. ♂ 65 lb."
+      "100 front squats"
     ],
     "scheme": "",
     "timeCap": null,
@@ -581,8 +578,7 @@ export function getSugarWods() {
     "description": "10 rounds for time of:",
     "movements": [
       "3 clean and jerks",
-      "3 burpees over the bar",
-      "♀ 95 lb. ♂ 135 lb."
+      "3 burpees over the bar"
     ],
     "scheme": "10 rounds",
     "timeCap": null,
@@ -602,8 +598,7 @@ export function getSugarWods() {
     "description": "10 rounds for time of:",
     "movements": [
       "3 snatches",
-      "3 burpees over the bar",
-      "♀ 95 lb. ♂ 135 lb."
+      "3 burpees over the bar"
     ],
     "scheme": "10 rounds",
     "timeCap": null,
@@ -717,7 +712,7 @@ export function getSugarWods() {
     "timeCap": null,
     "rxWeight": null,
     "difficulty": "beginner",
-    "estimatedTime": "10 min",
+    "estimatedTime": "20-30 min",
     "equipment": [],
     "tips": null
   },
@@ -749,8 +744,7 @@ export function getSugarWods() {
     "movements": [
       "15 ft Rope Climb, 1 ascent",
       "Run 400 meters",
-      "Max rep Handstand push-ups",
-      "Log HSPUs completed for each round in your notes."
+      "Max rep Handstand push-ups"
     ],
     "scheme": "",
     "timeCap": null,
@@ -797,7 +791,7 @@ export function getSugarWods() {
     "timeCap": null,
     "rxWeight": null,
     "difficulty": "advanced",
-    "estimatedTime": "10 min",
+    "estimatedTime": "45 min",
     "equipment": [
       "rings"
     ],
@@ -819,7 +813,7 @@ export function getSugarWods() {
     "timeCap": null,
     "rxWeight": null,
     "difficulty": "beginner",
-    "estimatedTime": "10 min",
+    "estimatedTime": "40-60 min",
     "equipment": [
       "pull_up_bar",
       "cardio_machines"
@@ -942,7 +936,7 @@ export function getSugarWods() {
     "timeCap": null,
     "rxWeight": "275/185 lb",
     "difficulty": "intermediate",
-    "estimatedTime": "10 min",
+    "estimatedTime": "30-45 min",
     "equipment": [
       "barbell",
       "kettlebell",
@@ -969,7 +963,7 @@ export function getSugarWods() {
     "timeCap": null,
     "rxWeight": null,
     "difficulty": "beginner",
-    "estimatedTime": "10 min",
+    "estimatedTime": "40-60 min",
     "equipment": [
       "pull_up_bar"
     ],
@@ -1045,7 +1039,6 @@ export function getSugarWods() {
       "30 One-legged squats",
       "20 Kettlebell swings, 1.5 pood",
       "10 Handstand push-ups",
-      "Then,",
       "Run 800 meters"
     ],
     "scheme": "",
@@ -1195,7 +1188,7 @@ export function getSugarWods() {
     "timeCap": null,
     "rxWeight": null,
     "difficulty": "beginner",
-    "estimatedTime": "10 min",
+    "estimatedTime": "25-35 min",
     "equipment": [
       "pull_up_bar"
     ],
@@ -1279,8 +1272,7 @@ export function getSugarWods() {
     "movements": [
       "50 Strict Pull-ups",
       "100 Push-ups, release hands from floor at the bottom",
-      "Run 5K",
-      "If you've got a twenty pound vest or body armor, wear it."
+      "Run 5K"
     ],
     "scheme": "",
     "timeCap": null,
@@ -1378,7 +1370,7 @@ export function getSugarWods() {
     "timeCap": null,
     "rxWeight": null,
     "difficulty": "beginner",
-    "estimatedTime": "10 min",
+    "estimatedTime": "25-35 min",
     "equipment": [
       "cardio_machines"
     ],
@@ -1463,8 +1455,7 @@ export function getSugarWods() {
       "95/65 pound Squat clean",
       "Double-unders",
       "185/125 pound Deadlift",
-      "24/20\" Box jump",
-      "Begin each round with a 50 meter Bear crawl"
+      "24/20\" Box jump"
     ],
     "scheme": "9-6-3",
     "timeCap": null,
@@ -2573,8 +2564,7 @@ export function getSugarWods() {
       "20 Walking lunge steps with 45 lb. plate held overhead",
       "20 Box jump, 24\"\" box",
       "135/95 pound Squat clean, 20 reps",
-      "Run 2 miles",
-      "If you've got a twenty pound vest or body armor, wear it."
+      "Run 2 miles"
     ],
     "scheme": "",
     "timeCap": null,
@@ -2844,7 +2834,7 @@ export function getSugarWods() {
     "timeCap": null,
     "rxWeight": null,
     "difficulty": "beginner",
-    "estimatedTime": "10 min",
+    "estimatedTime": "60-90 min",
     "equipment": [
       "pull_up_bar"
     ],
@@ -3064,8 +3054,7 @@ export function getSugarWods() {
     "description": "For time:",
     "movements": [
       "Run 6k",
-      "60 Burpee pull-ups",
-      "If you've got body armor or a thirty pound vest, wear it."
+      "60 Burpee pull-ups"
     ],
     "scheme": "",
     "timeCap": null,
@@ -3394,8 +3383,7 @@ export function getSugarWods() {
     "description": "4 rounds for time of:",
     "movements": [
       "Run 400 meters",
-      "5 burpee muscle-ups",
-      "If you've got a 20-lb. vest or body armor, wear it."
+      "5 burpee muscle-ups"
     ],
     "scheme": "4 rounds",
     "timeCap": null,
@@ -3636,8 +3624,7 @@ export function getSugarWods() {
     "movements": [
       "Run 1.5 miles",
       "150 burpees",
-      "Run 1.5 miles",
-      "If you've got a weight vest or body armor, wear it."
+      "Run 1.5 miles"
     ],
     "scheme": "",
     "timeCap": null,
@@ -4049,7 +4036,6 @@ export function getSugarWods() {
       "19 pull-ups",
       "19 push-ups",
       "19 burpees",
-      "Then,",
       "400-meter sandbag carry (heavy)",
       "1-mile farmers carry with 45-lb. dumbbells"
     ],
@@ -4140,8 +4126,7 @@ export function getSugarWods() {
       "Run 400 meters",
       "21 walking lunges",
       "15 pull-ups",
-      "9 burpees",
-      "If you have a 20-lb. weight vest or body armor, wear it."
+      "9 burpees"
     ],
     "scheme": "7 rounds",
     "timeCap": null,
@@ -4229,8 +4214,7 @@ export function getSugarWods() {
     "movements": [
       "9 bar muscle-ups",
       "11 clean and jerks, 155/105 lb.",
-      "50-yard buddy carry",
-      "Share the work with your partner however you choose with only one person working at a time. If you can't find a partner, perform 5 reps of each exercise per round and find a heavy sandbag to carry."
+      "50-yard buddy carry"
     ],
     "scheme": "9 rounds",
     "timeCap": null,
@@ -4384,8 +4368,7 @@ export function getSugarWods() {
     "movements": [
       "15-ft rope climb, 1 ascent",
       "5 burpees",
-      "200-meter run",
-      "If you've got a 20-lb. vest or body armor, wear it."
+      "200-meter run"
     ],
     "scheme": "",
     "timeCap": null,
@@ -4500,8 +4483,7 @@ export function getSugarWods() {
       "75 thrusters, 45-lb. barbell",
       "50 pull-ups",
       "75 wall-ball shots, 20-lb. ball",
-      "100-calorie row",
-      "If you’ve got a 20-lb. vest or body armor, wear it."
+      "100-calorie row"
     ],
     "scheme": "",
     "timeCap": null,
@@ -4523,10 +4505,7 @@ export function getSugarWods() {
     "description": "Complete as many rounds as possible in 60 minutes of:",
     "movements": [
       "17 power cleans, 135/95 lb",
-      "75 squats",
-      "Unload the barbell and carry it 200 meters away.",
-      "Return to the plates and then carry one forward to the barbell.",
-      "Retrieve the second plate, carry it forward and reload the barbell for the next round."
+      "75 squats"
     ],
     "scheme": "",
     "timeCap": null,
@@ -4763,8 +4742,7 @@ export function getSugarWods() {
       "3 minutes of rope climbs",
       "2 minutes of squats",
       "2 minutes of push-ups",
-      "3 minutes to run 400 meters",
-      "Wear a weight vest or body armor. After the run, rest for the remainder of the 3 minutes before beginning the next round"
+      "3 minutes to run 400 meters"
     ],
     "scheme": "5 rounds",
     "timeCap": null,
@@ -4781,7 +4759,6 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "On a 25-minute clock,",
     "movements": [
-      "On a 25-minute clock,",
       "Run 1.5 miles",
       "11 chest-to-bar pull-ups",
       "7 hang squat cleans, 155/105 lb.",
@@ -4966,9 +4943,6 @@ export function getSugarWods() {
     "description": "•13 squat snatches, 155/105 lb.",
     "movements": [
       "13 squat snatches, 155/105 lb.",
-      "• 10 pull-ups",
-      "•100-meter sprint",
-      "Then,",
       "13 squat cleans, 155/105 lb."
     ],
     "scheme": "10 rounds",
@@ -4988,16 +4962,7 @@ export function getSugarWods() {
     "category": "heroes",
     "type": "FOR TIME",
     "description": "5 minutes of:",
-    "movements": [
-      "•Burpees",
-      "•7 deadlifts, 155/105 lb.",
-      "•7 box jumps, 24-in. box",
-      "•Turkish get-ups, 40-lb. dumbbell",
-      "•7 snatches, 75/55 lb.",
-      "•7 push-ups",
-      "•Rowing (calories)",
-      "Log total reps from all 5 stations. Athletes can note reps for each station in their notes."
-    ],
+    "movements": [],
     "scheme": "",
     "timeCap": null,
     "rxWeight": "155/105 lb",
@@ -5159,8 +5124,7 @@ export function getSugarWods() {
     "movements": [
       "165-lb. squat cleans, 7 reps",
       "165-lb. shoulder-to-overheads, 7 reps",
-      "7 burpee chest-to-bar pull-ups",
-      "Ideally, use a pull-up bar that is 6 inches above your max reach when standing."
+      "7 burpee chest-to-bar pull-ups"
     ],
     "scheme": "5 rounds",
     "timeCap": null,
@@ -5256,7 +5220,6 @@ export function getSugarWods() {
       "1 back squat, 1 shoulder press, 1 deadlift",
       "2 back squats, 2 shoulder presses, 2 deadlifts",
       "3 back squats, 3 shoulder presses, 3 deadlifts",
-      "Etc.",
       "Use 1½ body weight for the squats and deadlifts and ¾ body weight for the presses."
     ],
     "scheme": "",
@@ -5305,8 +5268,7 @@ export function getSugarWods() {
       "1-mile weighted run",
       "50 push-ups",
       "50 sit-ups",
-      "1-mile weighted run",
-      "Wear a weight vest, body armor, loaded pack or whatever is needed to load yourself with 50 lb. for the runs."
+      "1-mile weighted run"
     ],
     "scheme": "",
     "timeCap": null,
@@ -5375,9 +5337,6 @@ export function getSugarWods() {
     "description": "For time, wearing a 20-lb. vest or body armor:",
     "movements": [
       "Run 1,200 meters",
-      "• 12 strict pull-ups",
-      "• 9 strict dips",
-      "• 6 strict handstand push-ups",
       "Then, run 1,200 meters"
     ],
     "scheme": "4 rounds",
@@ -5426,8 +5385,7 @@ export function getSugarWods() {
     "description": "For time:",
     "movements": [
       "Run 6k",
-      "60 Burpee pull-ups",
-      "If you've got body armor or a thirty pound vest, wear it."
+      "60 Burpee pull-ups"
     ],
     "scheme": "",
     "timeCap": null,
@@ -5491,14 +5449,13 @@ export function getSugarWods() {
     "type": "FOR TIME",
     "description": "For Time:",
     "movements": [
-      "1,000 Box Step-Ups (20 in)",
-      "Wear a Ruck Pack (45/35 lb)"
+      "1,000 Box Step-Ups (20 in)"
     ],
     "scheme": "",
     "timeCap": null,
     "rxWeight": "45/35 lb",
     "difficulty": "beginner",
-    "estimatedTime": "10 min",
+    "estimatedTime": "45-60 min",
     "equipment": [
       "box"
     ],
@@ -5513,9 +5470,7 @@ export function getSugarWods() {
     "movements": [
       "Front squats",
       "Bar-facing burpees",
-      "200-m sandbag carry after each round",
-      "♀ 75-lb. squat, 50-lb. sandbag",
-      "♂ 115-lb. squat, 80-lb. sandbag"
+      "200-m sandbag carry after each round"
     ],
     "scheme": "9-6-3",
     "timeCap": null,
@@ -5593,8 +5548,7 @@ export function getSugarWods() {
       "23 Air Squats",
       "7 Burpees",
       "14 Push-Ups",
-      "Cash-Out: 1,000 meter Run",
-      "Scoring: Total number of rounds and repetitions completed within the 22-minute time cap."
+      "Cash-Out: 1,000 meter Run"
     ],
     "scheme": "AMRAP 22",
     "timeCap": "22 min",
@@ -5637,11 +5591,9 @@ export function getSugarWods() {
     "description": "For time:",
     "movements": [
       "Run 1,000 meters",
-      "Then,",
       "15 push-ups",
       "20 med-ball cleans",
       "21 burpees",
-      "Then,",
       "Run 1,000 meters"
     ],
     "scheme": "5 rounds",
@@ -5683,8 +5635,7 @@ export function getSugarWods() {
     "movements": [
       "30-cal. row",
       "20 burpees over the rower",
-      "10 power cleans",
-      "♀ 105 lb. ♂ 155 lb."
+      "10 power cleans"
     ],
     "scheme": "",
     "timeCap": null,
@@ -5706,9 +5657,7 @@ export function getSugarWods() {
     "movements": [
       "8 strict pull-ups",
       "26 box step-ups",
-      "21 burpees",
-      "♀ 14-lb. vest, 20-in. box",
-      "♂ 20-lb. vest, 24-in. box"
+      "21 burpees"
     ],
     "scheme": "13 rounds",
     "timeCap": null,
@@ -5758,11 +5707,9 @@ export function getSugarWods() {
     "description": "For time:",
     "movements": [
       "Run 1,000 meters",
-      "Then,",
       "15 push-ups",
       "20 med-ball cleans",
       "21 burpees",
-      "Then,",
       "Run 1,000 meters"
     ],
     "scheme": "5 rounds",
@@ -5810,8 +5757,7 @@ export function getSugarWods() {
       "Buy-In: 1 mile Run",
       "12 Push-Ups",
       "10 Wall Ball Shots (20/14 lb., 10/9 ft.)",
-      "28 Sit-Ups",
-      "Wear a Weight Vest (20/14 lb.)"
+      "28 Sit-Ups"
     ],
     "scheme": "AMRAP 15",
     "timeCap": "15 min",
@@ -5857,8 +5803,7 @@ export function getSugarWods() {
       "9 Muscle-Ups",
       "15 Burpee Pull-Ups",
       "21 Pull-Ups",
-      "800 meter Run",
-      "Wear a weight vest (20/14 lb)"
+      "800 meter Run"
     ],
     "scheme": "3 rounds",
     "timeCap": null,
@@ -5879,7 +5824,6 @@ export function getSugarWods() {
     "description": "13 bench press (170/125)",
     "movements": [
       "13 bench press (170/125)",
-      "Then,",
       "7 Chest-to-Bar Pull-Ups",
       "77 Double-Unders",
       "2 Squat Clean Thrusters (170/125 lb)",
@@ -5906,9 +5850,7 @@ export function getSugarWods() {
     "movements": [
       "5 hang power cleans",
       "5 burpees",
-      "15 double-unders",
-      "♀ 105 lb",
-      "♂ 185 lb"
+      "15 double-unders"
     ],
     "scheme": "27 rounds",
     "timeCap": null,
@@ -6026,8 +5968,7 @@ export function getSugarWods() {
       "10 Single-Arm Dumbbell Thrusters (Left) (30/20 lb)",
       "10 Single-Arm Dumbbell Thrusters (Right) (30/20 lb)",
       "7 Strict Pull-Ups",
-      "3 minute Rest",
-      "Wear a Weight Vest (14/10 lb)"
+      "3 minute Rest"
     ],
     "scheme": "7 rounds",
     "timeCap": null,
@@ -6105,9 +6046,7 @@ export function getSugarWods() {
       "400-meter run",
       "15 burpee box jump-overs",
       "10-calorie bike",
-      "6 alternating dumbbell snatches",
-      "♀ 20-inch box and 50-lb dumbbell",
-      "♂ 24-inch box and 75-lb dumbbell"
+      "6 alternating dumbbell snatches"
     ],
     "scheme": "8 rounds",
     "timeCap": null,
@@ -6130,9 +6069,7 @@ export function getSugarWods() {
     "movements": [
       "3 muscle-ups",
       "8 thrusters",
-      "17-calorie row",
-      "♀ 75-lb barbell",
-      "♂ 115-lb barbell"
+      "17-calorie row"
     ],
     "scheme": "",
     "timeCap": null,

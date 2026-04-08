@@ -1066,41 +1066,72 @@ function fuzzyMatchWodMovement(name) {
   const MAP = [
     // Gymnastics
     ['handstand push ups', 'handstand_push_ups'], ['handstand push up', 'handstand_push_ups'],
+    ['hspu', 'handstand_push_ups'], // acronym
     ['muscle ups', 'muscle_ups'], ['muscle up', 'muscle_ups'],
     ['pistol squats', 'pistol_squats'], ['pistol squat', 'pistol_squats'],
-    ['toes to bar', 'toes_to_bar'], ['knees to elbow', 'hanging_knee_raise'],
-    ['rope climb', 'rope_climb'], ['ring dip', 'dips'], ['bar muscle up', 'muscle_ups'],
+    ['one legged squat', 'pistol_squats'], ['single leg squat', 'pistol_squats'],
+    ['toes to bar', 'toes_to_bar'], ['toes through ring', 'toes_to_bar'],
+    ['knees to elbow', 'hanging_knee_raise'], ['knees to chest', 'hanging_knee_raise'],
+    ['rope climb', 'rope_climb'], ['rope ascent', 'rope_climb'],
+    ['ring dip', 'dips'], ['bar muscle up', 'muscle_ups'],
+    ['l pull up', 'pull_ups'], ['chest to bar', 'pull_ups'],
+    ['strict pull up', 'pull_ups'], ['weighted pull up', 'pull_ups'],
+    ['wall climb', 'wall_climb'],
     // Bodyweight
-    ['pull ups', 'pull_ups'], ['pullups', 'pull_ups'], ['chin ups', 'chin_ups'],
-    ['push ups', 'push_ups'], ['pushups', 'push_ups'],
+    ['pull ups', 'pull_ups'], ['pullups', 'pull_ups'], ['pull up', 'pull_ups'],
+    ['chin ups', 'chin_ups'],
+    ['push ups', 'push_ups'], ['pushups', 'push_ups'], ['push up', 'push_ups'],
     ['air squats', 'air_squats'], ['airsquats', 'air_squats'],
     ['burpees', 'burpees'], ['burpee', 'burpees'],
-    ['sit ups', 'sit_ups'], ['situps', 'sit_ups'],
+    ['sit ups', 'sit_ups'], ['situps', 'sit_ups'], ['ghd sit up', 'sit_ups'],
     ['box jumps', 'box_jumps'], ['box jump', 'box_jumps'],
-    ['double unders', 'jump_rope'], ['double under', 'jump_rope'],
+    ['box step', 'step_ups'],
+    ['double unders', 'jump_rope'], ['double under', 'jump_rope'], ['triple under', 'jump_rope'],
     ['dips', 'dips'], ['step ups', 'step_ups'],
+    ['bear crawl', 'bear_crawl'],
+    ['broad jump', 'broad_jump'], ['standing broad', 'broad_jump'],
+    ['forward roll', 'burpees'], // closest
+    ['walking lunge', 'db_walking_lunges'], ['lunge step', 'db_walking_lunges'], ['lunges', 'db_walking_lunges'],
+    ['back extension', 'back_extension'],
     // Barbell — specific before general
     ['clean and jerk', 'clean_and_jerk'], ['cleanand jerk', 'clean_and_jerk'],
-    ['hang power clean', 'hang_clean'], ['power clean', 'power_clean'],
+    ['hang power snatch', 'snatch'], ['hang power clean', 'hang_clean'],
+    ['power clean', 'power_clean'], ['power snatch', 'snatch'],
     ['hang clean', 'hang_clean'], ['squat clean', 'power_clean'],
-    ['bench press', 'bench_press'], ['overhead press', 'overhead_press'],
+    ['benchpress', 'bench_press'], ['bench press', 'bench_press'], // no-space variant
+    ['shoulder to overhead', 'overhead_press'], ['overhead press', 'overhead_press'],
     ['push press', 'push_press'], ['push jerk', 'push_jerk'],
+    ['jerk', 'push_jerk'], // generic jerk after specific
     ['front squat', 'front_squat'], ['back squat', 'back_squat'],
     ['overhead squat', 'front_squat'],
-    ['sumo deadlift', 'sumo_deadlift'], ['deadlift', 'deadlift'],
+    ['sumo deadlift high pull', 'sumo_deadlift'], ['sumo deadlift', 'sumo_deadlift'],
+    ['deadlift', 'deadlift'],
     ['thruster', 'barbell_thrusters'], ['snatch', 'snatch'],
     ['clean', 'power_clean'], // generic clean — after specific cleans
+    ['weighted lunge', 'db_walking_lunges'],
     // KB
-    ['kb swing', 'kb_swings'], ['kettlebell swing', 'kb_swings'],
-    ['kb snatch', 'kb_snatch'], ['turkish get up', 'turkish_getup'],
+    ['kb swing', 'kb_swings'], ['kettlebell swing', 'kb_swings'], ['kettle swing', 'kb_swings'],
+    ['russian kettle', 'kb_swings'], ['swings', 'kb_swings'],
+    ['kb snatch', 'kb_snatch'], ['kettlebell snatch', 'kb_snatch'],
+    ['turkish get up', 'turkish_getup'], ['turkish getup', 'turkish_getup'],
+    // DB
+    ['dumbbell snatch', 'snatch'], ['dumbbell thruster', 'db_thrusters'],
+    ['dumbbell walking lunge', 'db_walking_lunges'],
+    ['dumbbell waiter walk', 'farmer_walk'],
     // Other
-    ['wall ball', 'wall_balls'], ['ball slam', 'ball_slams'],
-    ['farmer walk', 'farmer_walk'], ['farmer carry', 'farmer_walk'],
+    ['wall ball', 'wall_balls'], ['wallball', 'wall_balls'],
+    ['ball slam', 'ball_slams'], ['med ball', 'wall_balls'],
+    ['farmer walk', 'farmer_walk'], ['farmer carry', 'farmer_walk'], ['farmers carry', 'farmer_walk'],
+    ['sandbag carry', 'sandbag_carry'], ['sandbag over', 'sandbag_carry'],
     ['battle rope', 'battle_ropes'],
+    ['hip touch', 'sit_ups'], ['hanging hip', 'sit_ups'],
+    ['inverted hang', 'pull_ups'], ['skin the cat', 'pull_ups'],
     ['squats', 'air_squats'], // generic "squats" → air squats
     // Cardio
-    ['mile run', 'easy_run'], ['run', 'easy_run'], ['row', 'rowing_machine'],
-    ['bike', 'assault_bike'], ['ski erg', 'rowing_machine'],
+    ['shuttle sprint', 'easy_run'], ['sprint', 'easy_run'],
+    ['mile run', 'easy_run'], ['meter run', 'easy_run'], ['run', 'easy_run'],
+    ['swim', 'easy_run'], ['jog', 'easy_run'],
+    ['row', 'rowing_machine'], ['bike', 'assault_bike'], ['ski erg', 'rowing_machine'],
   ];
 
   for (const [key, id] of MAP) { if (n.includes(key)) return id; }
