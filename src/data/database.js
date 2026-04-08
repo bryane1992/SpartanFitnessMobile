@@ -225,9 +225,8 @@ export async function initDatabase() {
   // Seed WODs — always use SugarWOD verified data
   const sugarWods = getSugarWods();
   const wodCount = await database.getFirstAsync('SELECT COUNT(*) as count FROM wods');
-  // Check for old seed by looking for known old-seed IDs that don't exist in SugarWOD
-  const hasOldSeed = await database.getFirstAsync("SELECT COUNT(*) as count FROM wods WHERE id IN ('griff', 'chipper_grunt', 'ft_thruster_burpee', 'ft_double_under_hell', 'sprint_couplet')");
-  const needsReseed = !wodCount || wodCount.count === 0 || (hasOldSeed && hasOldSeed.count > 0);
+  // Always reseed WODs from latest bundled SugarWOD data to ensure accuracy
+  const needsReseed = true;
   if (needsReseed) {
     // Old seed data or missing — replace with SugarWOD verified data
     if (sugarWods && sugarWods.length > 0) {

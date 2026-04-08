@@ -1095,9 +1095,12 @@ function parseWodMovement(movement, scheme, index) {
   const distMatch = movement.match(/^(\d+\s*m)\s+(.+)$/i);
   if (distMatch) return { name: distMatch[2].trim(), reps: distMatch[1], weight: null };
 
-  // Format: "Run 800 meters" or "Run 800m" (name first, distance at end)
-  const nameDistMatch = movement.match(/^(.+?)\s+(\d+)\s*(?:meters?|yards?|feet|ft|m)$/i);
-  if (nameDistMatch) return { name: nameDistMatch[1].trim(), reps: nameDistMatch[2] + 'm', weight: null };
+  // Format: "Run 800 meters" or "Run 800m" or "Run 6 miles" (name first, distance at end)
+  const nameDistMatch = movement.match(/^(.+?)\s+(\d+)\s*(?:meters?|yards?|feet|ft|miles?|m)$/i);
+  if (nameDistMatch) {
+    const unit = /mile/i.test(movement) ? 'mi' : 'm';
+    return { name: nameDistMatch[1].trim(), reps: nameDistMatch[2] + unit, weight: null };
+  }
 
   // Format: "Run 800m" with no space between number and m
   const compactDistMatch = movement.match(/^(.+?)\s+(\d+)(m|mi|km)\b/i);

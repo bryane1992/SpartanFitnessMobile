@@ -1,5 +1,5 @@
 // Auto-generated from SugarWOD API — 261 verified WODs
-// Generated: 2026-04-08T15:31:03.216Z
+// Generated: 2026-04-08T15:46:33.530Z
 // Cleaned: instructions stripped, durations calibrated, running-only removed
 
 export function getSugarWods() {
@@ -3690,8 +3690,8 @@ export function getSugarWods() {
     "scheme": "",
     "timeCap": null,
     "rxWeight": "135/95 lb",
-    "difficulty": "beginner",
-    "estimatedTime": "20-30 min",
+    "difficulty": "advanced",
+    "estimatedTime": "45-60 min",
     "equipment": [
       "barbell",
       "pull_up_bar"
