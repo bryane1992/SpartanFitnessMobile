@@ -222,8 +222,10 @@ export default function TodayWorkout({ navigation }) {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.blockName}>{String(block.name || '')}</Text>
                   <Text style={styles.blockType}>{
-                    isAmrap
+                    /amrap/i.test(block.type || '')
                       ? `AMRAP${block.time_cap ? ` ${block.time_cap}` : ''}`
+                      : /emom/i.test(block.type || '')
+                      ? `EMOM${block.time_cap ? ` ${block.time_cap}` : ''}`
                       : `${block.type || ''}${block.time_cap ? ` \u2022 ${block.time_cap}` : ''}`
                   }</Text>
                 </View>

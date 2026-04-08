@@ -1,6 +1,6 @@
 // Auto-generated from SugarWOD API — 261 verified WODs
-// Generated: 2026-04-08T15:46:33.530Z
-// Cleaned: instructions stripped, durations calibrated, running-only removed
+// Generated: 2026-04-08T16:06:39.562Z
+// Cleaned: rx weights extracted from movements
 
 export function getSugarWods() {
   return [
@@ -120,7 +120,7 @@ export function getSugarWods() {
     ],
     "scheme": "5 rounds",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "72 lb",
     "difficulty": "advanced",
     "estimatedTime": "25-35 min",
     "equipment": [
@@ -285,7 +285,7 @@ export function getSugarWods() {
     ],
     "scheme": "3 rounds",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "36 lb",
     "difficulty": "intermediate",
     "estimatedTime": "10-15 min",
     "equipment": [
@@ -836,7 +836,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "75/55 lb",
     "difficulty": "intermediate",
     "estimatedTime": "20-30 min",
     "equipment": [
@@ -860,7 +860,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "155/105 lb",
     "difficulty": "advanced",
     "estimatedTime": "8-15 min",
     "equipment": [
@@ -965,7 +965,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "135/95 lb",
     "difficulty": "advanced",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -1022,7 +1022,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "54 lb",
     "difficulty": "advanced",
     "estimatedTime": "12-20 min",
     "equipment": [
@@ -1061,7 +1061,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "185/125 lb",
     "difficulty": "advanced",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -1081,7 +1081,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "75/55 lb",
     "difficulty": "beginner",
     "estimatedTime": "2-7 min",
     "equipment": [
@@ -1142,7 +1142,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "95/65 lb",
     "difficulty": "beginner",
     "estimatedTime": "12-20 min",
     "equipment": [
@@ -1276,7 +1276,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "145/100 lb",
     "difficulty": "intermediate",
     "estimatedTime": "3-8 min",
     "equipment": [
@@ -1372,7 +1372,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "115/80 lb",
     "difficulty": "beginner",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -1393,7 +1393,7 @@ export function getSugarWods() {
     ],
     "scheme": "AMRAP 20",
     "timeCap": "20 min",
-    "rxWeight": null,
+    "rxWeight": "115/80 lb",
     "difficulty": "beginner",
     "estimatedTime": "20 min",
     "equipment": [
@@ -1417,7 +1417,7 @@ export function getSugarWods() {
     ],
     "scheme": "9-6-3",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "95/65 lb",
     "difficulty": "intermediate",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -1459,7 +1459,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "115/80 lb",
     "difficulty": "beginner",
     "estimatedTime": "20-30 min",
     "equipment": [
@@ -1505,7 +1505,7 @@ export function getSugarWods() {
     ],
     "scheme": "5 rounds",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "95/65 lb",
     "difficulty": "intermediate",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -1527,7 +1527,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "54 lb",
     "difficulty": "beginner",
     "estimatedTime": "2-7 min",
     "equipment": [
@@ -1571,7 +1571,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "135/95 lb",
     "difficulty": "beginner",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -1644,7 +1644,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "72 lb",
     "difficulty": "beginner",
     "estimatedTime": "2-7 min",
     "equipment": [
@@ -1665,7 +1665,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "225/155 lb",
     "difficulty": "advanced",
     "estimatedTime": "20-30 min",
     "equipment": [
@@ -1712,7 +1712,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "72 lb",
     "difficulty": "intermediate",
     "estimatedTime": "12-20 min",
     "equipment": [
@@ -1781,7 +1781,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "135/95 lb",
     "difficulty": "intermediate",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -1825,7 +1825,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "185/125 lb",
     "difficulty": "beginner",
     "estimatedTime": "20-30 min",
     "equipment": [
@@ -1846,7 +1846,7 @@ export function getSugarWods() {
     ],
     "scheme": "AMRAP 12",
     "timeCap": "12 min",
-    "rxWeight": null,
+    "rxWeight": "95/65 lb",
     "difficulty": "beginner",
     "estimatedTime": "12 min",
     "equipment": [
@@ -1868,7 +1868,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "95/65 lb",
     "difficulty": "intermediate",
     "estimatedTime": "12-20 min",
     "equipment": [
@@ -1893,7 +1893,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "135/95 lb",
     "difficulty": "intermediate",
     "estimatedTime": "20-30 min",
     "equipment": [
@@ -1914,7 +1914,7 @@ export function getSugarWods() {
     ],
     "scheme": "AMRAP 20",
     "timeCap": "20 min",
-    "rxWeight": null,
+    "rxWeight": "245/165 lb",
     "difficulty": "advanced",
     "estimatedTime": "20 min",
     "equipment": [
@@ -1976,7 +1976,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "95/65 lb",
     "difficulty": "intermediate",
     "estimatedTime": "12-20 min",
     "equipment": [
@@ -1997,7 +1997,7 @@ export function getSugarWods() {
     ],
     "scheme": "AMRAP 25",
     "timeCap": "25 min",
-    "rxWeight": null,
+    "rxWeight": "315/205 lb",
     "difficulty": "advanced",
     "estimatedTime": "25 min",
     "equipment": [
@@ -2067,7 +2067,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "225/155 lb",
     "difficulty": "intermediate",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -2113,7 +2113,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "135/95 lb",
     "difficulty": "advanced",
     "estimatedTime": "12-20 min",
     "equipment": [
@@ -2159,7 +2159,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "155/105 lb",
     "difficulty": "advanced",
     "estimatedTime": "12-20 min",
     "equipment": [
@@ -2223,7 +2223,7 @@ export function getSugarWods() {
     ],
     "scheme": "AMRAP 30",
     "timeCap": "30 min",
-    "rxWeight": null,
+    "rxWeight": "275/185 lb",
     "difficulty": "intermediate",
     "estimatedTime": "30 min",
     "equipment": [
@@ -2246,7 +2246,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "54 lb",
     "difficulty": "beginner",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -2271,7 +2271,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "72 lb",
     "difficulty": "beginner",
     "estimatedTime": "15-25 min",
     "equipment": [
@@ -2317,7 +2317,7 @@ export function getSugarWods() {
     ],
     "scheme": "AMRAP 20",
     "timeCap": "20 min",
-    "rxWeight": null,
+    "rxWeight": "135/95 lb",
     "difficulty": "intermediate",
     "estimatedTime": "20 min",
     "equipment": [
@@ -2363,7 +2363,7 @@ export function getSugarWods() {
     ],
     "scheme": "AMRAP 20",
     "timeCap": "20 min",
-    "rxWeight": null,
+    "rxWeight": "225/155 lb",
     "difficulty": "intermediate",
     "estimatedTime": "20 min",
     "equipment": [
@@ -2433,7 +2433,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "135/95 lb",
     "difficulty": "beginner",
     "estimatedTime": "12-20 min",
     "equipment": [],
@@ -2452,7 +2452,7 @@ export function getSugarWods() {
     ],
     "scheme": "AMRAP 20",
     "timeCap": "20 min",
-    "rxWeight": null,
+    "rxWeight": "115/80 lb",
     "difficulty": "beginner",
     "estimatedTime": "20 min",
     "equipment": [
@@ -2474,7 +2474,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "185/125 lb",
     "difficulty": "beginner",
     "estimatedTime": "20-30 min",
     "equipment": [
@@ -2499,7 +2499,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "135/95 lb",
     "difficulty": "intermediate",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -2543,7 +2543,7 @@ export function getSugarWods() {
     ],
     "scheme": "10 rounds",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "95/65 lb",
     "difficulty": "intermediate",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -2564,7 +2564,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "225/155 lb",
     "difficulty": "intermediate",
     "estimatedTime": "20-30 min",
     "equipment": [
@@ -2589,7 +2589,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "155/105 lb",
     "difficulty": "intermediate",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -2610,7 +2610,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "135/95 lb",
     "difficulty": "intermediate",
     "estimatedTime": "12-20 min",
     "equipment": [
@@ -2630,7 +2630,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "185/125 lb",
     "difficulty": "beginner",
     "estimatedTime": "12-20 min",
     "equipment": [],
@@ -2671,7 +2671,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "135/95 lb",
     "difficulty": "advanced",
     "estimatedTime": "12-20 min",
     "equipment": [
@@ -2695,7 +2695,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "95/65 lb",
     "difficulty": "beginner",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -2742,7 +2742,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "95/65 lb",
     "difficulty": "beginner",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -2783,7 +2783,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "95/65 lb",
     "difficulty": "advanced",
     "estimatedTime": "3-8 min",
     "equipment": [
@@ -2897,7 +2897,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "115/80 lb",
     "difficulty": "intermediate",
     "estimatedTime": "20-30 min",
     "equipment": [
@@ -2945,7 +2945,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "95/65 lb",
     "difficulty": "intermediate",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -3010,7 +3010,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "185/125 lb",
     "difficulty": "beginner",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -3051,7 +3051,7 @@ export function getSugarWods() {
     ],
     "scheme": "9-15-21",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "225/155 lb",
     "difficulty": "intermediate",
     "estimatedTime": "20-30 min",
     "equipment": [
@@ -3096,7 +3096,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "135/95 lb",
     "difficulty": "beginner",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -3124,7 +3124,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "54 lb",
     "difficulty": "intermediate",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -3172,7 +3172,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "185/125 lb",
     "difficulty": "beginner",
     "estimatedTime": "20-30 min",
     "equipment": [
@@ -3196,7 +3196,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "345/235 lb",
     "difficulty": "advanced",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -3221,7 +3221,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "225/155 lb",
     "difficulty": "beginner",
     "estimatedTime": "20-30 min",
     "equipment": [
@@ -3251,7 +3251,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "135/95 lb",
     "difficulty": "advanced",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -3296,7 +3296,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "72 lb",
     "difficulty": "beginner",
     "estimatedTime": "2-7 min",
     "equipment": [
@@ -3851,7 +3851,7 @@ export function getSugarWods() {
     ],
     "scheme": "5 rounds",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "54 lb",
     "difficulty": "beginner",
     "estimatedTime": "30-45 min",
     "equipment": [
@@ -4105,7 +4105,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "54 lb",
     "difficulty": "beginner",
     "estimatedTime": "2-7 min",
     "equipment": [
@@ -4438,7 +4438,7 @@ export function getSugarWods() {
     ],
     "scheme": "",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "275/185 lb",
     "difficulty": "advanced",
     "estimatedTime": "20-30 min",
     "equipment": [
@@ -4695,7 +4695,7 @@ export function getSugarWods() {
     ],
     "scheme": "7 rounds",
     "timeCap": null,
-    "rxWeight": null,
+    "rxWeight": "72 lb",
     "difficulty": "beginner",
     "estimatedTime": "30-45 min",
     "equipment": [

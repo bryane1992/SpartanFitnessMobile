@@ -633,7 +633,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           const isTimedWod = /amrap|for time|emom/i.test(wodBlockType);
           const wodTimeCap = selectedWod.time_cap || selectedWod.timeCap || (isAmrap ? '10 min' : null);
           const wodBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: selectedWod.name || 'WOD', type: wodBlockType, timeCap: wodTimeCap || '10 min', isAmrap: isTimedWod ? 1 : 0, hasGps: false });
-          const wodExercises = buildWodExercises(selectedWod, sanitizedProfile.equipmentDetails);
+          const wodExercises = buildWodExercises(selectedWod, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights);
           for (let i = 0; i < wodExercises.length; i++) {
             await savePlanExercise({ planBlockId: wodBlockId, exerciseId: wodExercises[i].id, sortOrder: i, sets: wodExercises[i].sets, reps: wodExercises[i].reps, weight: wodExercises[i].weight, rest: null, notes: wodExercises[i].notes });
           }
@@ -1024,7 +1024,7 @@ function expandPool(claudePicks, exerciseMenu, dayConfig, archetype, week) {
 // WOD exercise builder — from seed data
 // ═══════════════════════════════════════════════════════════════
 
-function buildWodExercises(wod, equipmentDetails) {
+function buildWodExercises(wod, equipmentDetails, workingWeights) {
   if (!wod) {
     return [
       { id: 'air_squats', sets: '1x15', reps: '15', weight: 'BW', notes: 'Bodyweight circuit' },
@@ -1066,7 +1066,7 @@ function buildWodExercises(wod, equipmentDetails) {
     let weight = parsed.weight || wod.rxWeight || 'BW';
     // Strip non-weight parentheticals like "(max reps)", "(each arm)", "(alternating)"
     if (weight && !/\d/.test(weight)) weight = 'BW';
-    weight = scaleWodWeight(weight, exerciseId, equipmentDetails);
+    weight = scaleWodWeight(weight, exerciseId, equipmentDetails, workingWeights);
     let reps = parsed.reps;
     if (/^\d+\s*m$/i.test(reps) && !/run|row|bike|ski|sprint/i.test(exerciseId)) {
       reps = `${Math.max(5, Math.round(parseInt(reps) / 10))}`;
@@ -1203,28 +1203,56 @@ function fuzzyMatchWodMovement(name) {
   return 'burpees';
 }
 
-function scaleWodWeight(weight, exerciseId, equipmentDetails) {
+function scaleWodWeight(weight, exerciseId, equipmentDetails, workingWeights) {
   if (!weight || weight === 'BW' || !equipmentDetails) return weight;
-  const match = weight.match(/(\d+)(?:\/(\d+))?\s*(?:lb|lbs)?/i);
+  const match = weight.match(/(\d+)(?:\/(\d+))?\s*(?:lb|lbs|#)?/i);
   if (!match) return weight;
   const rxWeight = parseInt(match[1]);
   if (!rxWeight) return weight;
+
   const isBarbell = /deadlift|squat|clean|snatch|jerk|press|thruster/i.test(exerciseId);
-  const isKB = /kb|swing|kettlebell/i.test(exerciseId) || /kb/i.test(weight.toLowerCase());
-  if (isBarbell && equipmentDetails.barbell?.maxWeight) {
-    const max = parseFloat(equipmentDetails.barbell.maxWeight);
-    if (rxWeight > max) return `${Math.round(max / 5) * 5} lb (scaled)`;
-    return `${rxWeight} lb`;
+  const isKB = /kb|swing|kettlebell/i.test(exerciseId) || /kb|pood/i.test(weight.toLowerCase());
+  const isDB = /dumbbell|db/i.test(exerciseId);
+
+  if (isBarbell) {
+    const max = equipmentDetails.barbell?.maxWeight ? parseFloat(equipmentDetails.barbell.maxWeight) : null;
+    // WOD weight should be ~50-65% of user's working weight for that pattern
+    // Never exceed rx, never exceed barbell max
+    let scaled = rxWeight;
+    if (workingWeights) {
+      // Map exercise to working weight
+      const ww = /deadlift/i.test(exerciseId) ? workingWeights.deadlift
+        : /squat|thruster/i.test(exerciseId) ? workingWeights.squat
+        : /clean|snatch|jerk/i.test(exerciseId) ? workingWeights.squat
+        : /press/i.test(exerciseId) ? workingWeights.overhead_press
+        : null;
+      if (ww) {
+        const userMax = parseFloat(ww) * 1.3; // est 1RM
+        const wodTarget = Math.round(userMax * 0.55 / 5) * 5; // 55% of 1RM for conditioning
+        scaled = Math.min(rxWeight, wodTarget);
+      }
+    }
+    if (max && scaled > max) scaled = Math.round(max / 5) * 5;
+    const isScaled = scaled !== rxWeight;
+    return `${scaled} lb${isScaled ? ' (scaled)' : ' (Rx)'}`;
   }
+
   if (isKB && equipmentDetails.kettlebell?.weights) {
     const kbWeights = equipmentDetails.kettlebell.weights.split(',').map(w => parseFloat(w.trim())).filter(w => w > 0).sort((a, b) => b - a);
     if (kbWeights.length > 0) {
       const available = kbWeights.filter(w => w <= rxWeight);
       const bestKB = available.length > 0 ? available[0] : kbWeights[kbWeights.length - 1];
-      return bestKB !== rxWeight ? `${bestKB} lb KB (scaled)` : `${bestKB} lb KB`;
+      return bestKB === rxWeight ? `${bestKB} lb KB (Rx)` : `${bestKB} lb KB (scaled)`;
     }
   }
-  return match[2] ? `${rxWeight} lb` : weight;
+
+  if (isDB && equipmentDetails.dumbbells?.maxWeight) {
+    const dbMax = parseFloat(equipmentDetails.dumbbells.maxWeight);
+    if (rxWeight > dbMax) return `${Math.round(dbMax / 5) * 5} lb (scaled)`;
+    return `${rxWeight} lb (Rx)`;
+  }
+
+  return `${rxWeight} lb`;
 }
 
 // ═══════════════════════════════════════════════════════════════
