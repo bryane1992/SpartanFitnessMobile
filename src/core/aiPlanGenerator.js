@@ -485,7 +485,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         // Deadlift/RDL are pulls; hip thrust, glute bridge, leg curl are NOT
         const isPullDay = allowedDayPatterns.has('horizontal_pull') || allowedDayPatterns.has('pull_up');
         if (isPullDay && pattern === 'hinge') {
-          const PULL_HINGES = new Set(['deadlift', 'romanian_deadlift', 'sumo_deadlift', 'trap_bar_deadlift', 'db_romanian_deadlift', 'db_single_leg_deadlift', 'good_morning', 'db_good_morning', 'back_extension']);
+          const PULL_HINGES = new Set(['deadlift', 'romanian_deadlift', 'db_romanian_deadlift', 'db_single_leg_deadlift', 'back_extension']);
           if (!PULL_HINGES.has(id)) return false;
         }
         return true;
