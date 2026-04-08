@@ -606,7 +606,9 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           console.log(`[PlanV5] WOD assigned: ${selectedWod.name} (${selectedMeta.phaseTier}) on ${dayConfig.type} week ${week}`);
           const wodBlockType = selectedWod.type || dayConfig.wod.type || 'CIRCUIT';
           const isAmrap = /amrap/i.test(wodBlockType);
-          const wodBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: selectedWod.name || 'WOD', type: wodBlockType, timeCap: selectedWod.time_cap || '10 min', isAmrap: isAmrap ? 1 : 0, hasGps: false });
+          const isTimedWod = /amrap|for time|emom/i.test(wodBlockType);
+          const wodTimeCap = selectedWod.time_cap || selectedWod.timeCap || (isAmrap ? '10 min' : null);
+          const wodBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: selectedWod.name || 'WOD', type: wodBlockType, timeCap: wodTimeCap || '10 min', isAmrap: isTimedWod ? 1 : 0, hasGps: false });
           const wodExercises = buildWodExercises(selectedWod, sanitizedProfile.equipmentDetails);
           for (let i = 0; i < wodExercises.length; i++) {
             await savePlanExercise({ planBlockId: wodBlockId, exerciseId: wodExercises[i].id, sortOrder: i, sets: wodExercises[i].sets, reps: wodExercises[i].reps, weight: wodExercises[i].weight, rest: null, notes: wodExercises[i].notes });
@@ -1009,6 +1011,14 @@ function buildWodExercises(wod, equipmentDetails) {
     return [{ id: 'burpees', sets: '1x10', reps: '10', weight: 'BW', notes: `${wod.name} — movements not found` }];
   }
 
+  // Extract rounds from scheme
+  const scheme = (wod.scheme || '').toLowerCase();
+  let rounds = '';
+  const roundMatch = scheme.match(/(\d+)\s*round/i);
+  if (roundMatch) rounds = `${roundMatch[1]} rounds`;
+  else if (/amrap/i.test(scheme)) rounds = scheme.toUpperCase();
+  else if (/^\d+[-\/]/.test(scheme)) rounds = scheme; // "21-15-9"
+
   const exercises = [];
   const usedIds = new Set();
   for (let i = 0; i < movements.length; i++) {
@@ -1024,9 +1034,10 @@ function buildWodExercises(wod, equipmentDetails) {
     if (/^\d+\s*m$/i.test(reps) && !/run|row|bike|ski|sprint/i.test(exerciseId)) {
       reps = `${Math.max(5, Math.round(parseInt(reps) / 10))}`;
     }
+    // WOD format: no "1x" prefix — just reps. Rounds shown in block header.
     exercises.push({
-      id: exerciseId, sets: `1x${reps}`, reps, weight,
-      notes: i === 0 ? `${wod.name} \u2014 ${wod.type}${wod.timeCap ? ` (${wod.timeCap})` : ''}: ${wod.description}` : null,
+      id: exerciseId, sets: reps, reps, weight,
+      notes: i === 0 ? `${wod.name} \u2014 ${wod.type}${rounds ? ` \u2022 ${rounds}` : ''}${wod.timeCap ? ` (${wod.timeCap})` : ''}` : null,
     });
   }
   return exercises;
