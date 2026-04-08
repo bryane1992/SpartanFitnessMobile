@@ -31,13 +31,16 @@ const SEED_TO_EXDB_ID = {
   db_reverse_fly: '0383', preacher_curl: '0372', db_push_press: '1700',
   db_romanian_deadlift: '1459', db_single_leg_deadlift: '1757',
   split_squat: '0097',
+  // Barbell extra
+  barbell_thrusters: '3305', back_extension: '0573',
+  straight_arm_pulldown: '0237',
   // Bodyweight
   push_ups: '0662', pull_ups: '0652', chin_ups: '1326', dips: '0251',
   mountain_climbers: '0630', sit_ups: '0001', russian_twists: '0687',
   inverted_row: '1412', bench_dips: '0129', pike_push_ups: '0471',
   burpees: '1160', dead_bug: '0276', v_ups: '0507',
   glute_bridge: '3013', bear_crawl: '3360', jump_squats: '0514',
-  muscle_ups: '0631', jump_rope: '2612',
+  muscle_ups: '0631', jump_rope: '2612', air_squats: '3533',
   // Cable/Machine
   lat_pulldown: '2330', cable_tricep_pushdown: '0201', cable_bicep_curl: '0200',
   leg_press: '0739', leg_extension: '0585', leg_curl: '0599',
