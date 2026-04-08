@@ -472,13 +472,15 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       // ── COMPOUNDS — expand pool, filter out non-compound exercises ──
       const NEVER_MAIN_LIFT = /plank|dead.?bug|bird.?dog|v.?up|sit.?up|mountain.?climb|russian.?twist|cable.?wood|pallof|wall.?ball|ball.?slam|battle.?rope|lunge.?matrix|cossack|dead.?hang|farmer.?walk|cat.?cow|child.?pose|cobra|superman|stretch|circles|clam|hydrant|wall.?angel|pull.?apart/i;
       const rawCompoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig, archetype, week);
+      const allowedDayPatterns = new Set([...(dayConfig.primary_patterns || []), ...(dayConfig.secondary_patterns || [])]);
       const compoundPool = rawCompoundPool.filter(id => {
         const ex = exerciseById[id];
         if (!ex) return false;
         if (NEVER_MAIN_LIFT.test(ex.name)) return false;
-        // Also block by movement pattern — warmup exercises should never be main lifts
         const pattern = getMovementPattern(ex);
         if (pattern === 'warmup' || pattern === 'cardio') return false;
+        // Compounds must match this day's movement patterns — no squats on pull day
+        if (allowedDayPatterns.size > 0 && !allowedDayPatterns.has(pattern)) return false;
         return true;
       });
       const compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, bt.mainLiftCount, weeklyExerciseCount);
@@ -1034,6 +1036,8 @@ function buildWodExercises(wod, equipmentDetails) {
     if (usedIds.has(exerciseId)) continue;
     usedIds.add(exerciseId);
     let weight = parsed.weight || wod.rxWeight || 'BW';
+    // Strip non-weight parentheticals like "(max reps)", "(each arm)", "(alternating)"
+    if (weight && !/\d/.test(weight)) weight = 'BW';
     weight = scaleWodWeight(weight, exerciseId, equipmentDetails);
     let reps = parsed.reps;
     if (/^\d+\s*m$/i.test(reps) && !/run|row|bike|ski|sprint/i.test(exerciseId)) {
