@@ -406,7 +406,7 @@ const NO_GIF_IDS = new Set([
   // Cable/other without match
   'cable_woodchop', 'cable_crunch', 'cable_fly', 'pallof_press', 'ab_wheel',
   'close_grip_lat_pulldown', 'chest_supported_row', 'single_arm_cable_row',
-  'incline_machine_press', 'machine_chest_press', 'machine_dip',
+  'incline_machine_press', 'machine_chest_press',
   'band_assisted_pull_ups',
   // DB exercises without match
   'db_thrusters', 'db_snatches', 'db_clean_press', 'db_hang_clean',
@@ -420,10 +420,10 @@ const NO_GIF_IDS = new Set([
   'easy_run', 'interval_run', 'sprint_intervals', 'tempo_run', 'long_run',
   'fartlek', 'run_400m',
   // Other
-  'tire_flip', 'sled_push', 'sled_pull', 'toes_to_bar', 'hanging_knee_raise',
+  'tire_flip', 'sled_push', 'sled_pull', 'toes_to_bar',
   'pistol_squats', 'floor_press',
   // Rehab without GIF
-  'tibialis_raise', 'toe_walks', 'heel_walks', 'calf_raise_bodyweight',
+  'tibialis_raise', 'toe_walks', 'heel_walks',
   'quad_stretch', 'knee_circles', 'wall_sit', 'terminal_knee_ext', 'banded_lateral_walk',
   'hip_90_90', 'clam_shells', 'fire_hydrants', 'adductor_stretch',
   'band_pull_apart', 'shoulder_int_rotation', 'wall_angels', 'arm_circles', 'chest_doorway_stretch',

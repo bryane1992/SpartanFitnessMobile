@@ -52,6 +52,9 @@ const SEED_TO_EXDB_ID = {
   // Kettlebell
   kb_swing: '0549', kb_swings: '0549', kb_goblet_squat: '0534',
   farmer_walk: '2133', turkish_getup: '0551', kb_thruster: '0550',
+  // Extra
+  box_jumps: '1374', machine_dip: '0009',
+  calf_raise_bodyweight: '0417', hanging_knee_raise: '0010',
   // Rehab/Prehab
   calf_stretch_wall: '1377', seated_calf_stretch: '1390', ankle_circles: '1368',
   glute_stretch_seated: '1424', wrist_circles: '1428', neck_stretch: '0716',
