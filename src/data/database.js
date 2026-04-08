@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import { seedExercises, seedAlternatives } from './exerciseSeed';
 import { getWods } from './wodSeed';
+import { getSugarWods } from './sugarWodData';
 import { fetchAllExercises, fetchPagedExercises } from './exerciseApi';
 import { mapExerciseDbToLocal } from './taxonomyMap';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -221,10 +222,15 @@ export async function initDatabase() {
   // without duplicating existing ones
   await seedExerciseData(database);
 
-  // Seed WODs — only if no SugarWOD data exists yet (old seed is fallback)
+  // Seed WODs — use SugarWOD verified data, old seed as fallback
   const wodCount = await database.getFirstAsync('SELECT COUNT(*) as count FROM wods');
   if (!wodCount || wodCount.count === 0) {
-    await seedWodData(database);
+    const sugarWods = getSugarWods();
+    if (sugarWods && sugarWods.length > 0) {
+      await seedSugarWodData(database, sugarWods);
+    } else {
+      await seedWodData(database);
+    }
   }
 
   // Schema migrations (idempotent — try each, ignore if already exists)
@@ -357,6 +363,22 @@ async function seedExerciseData(database) {
       [alt[1], alt[0]]
     );
   }
+}
+
+async function seedSugarWodData(database, wods) {
+  for (const w of wods) {
+    try {
+      await database.runAsync(
+        `INSERT OR IGNORE INTO wods (id, name, category, type, description, movements, scheme, time_cap, rx_weight, difficulty, estimated_time, equipment, tips)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [w.id, w.name, w.category, w.type, w.description || '',
+         JSON.stringify(w.movements), w.scheme || '', w.timeCap || '',
+         w.rxWeight || '', w.difficulty || 'intermediate',
+         w.estimatedTime || '', JSON.stringify(w.equipment || []), w.tips || '']
+      );
+    } catch { /* skip duplicates */ }
+  }
+  console.log(`[DB] Seeded ${wods.length} SugarWOD verified WODs`);
 }
 
 async function seedWodData(database) {

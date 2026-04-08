@@ -519,18 +519,34 @@ export default function Settings({ navigation }) {
 
           <TouchableOpacity style={styles.actionButton} onPress={async () => {
             try {
-              Alert.alert('Syncing...', 'Fetching verified WODs from SugarWOD...');
-              const { syncSugarWodBenchmarks } = require('../data/syncSugarWod');
-              const count = await syncSugarWodBenchmarks((status) => console.log('[SugarWOD]', status));
-              Alert.alert('Done', `Synced ${count} verified WODs (Girls + Heroes). Your WOD library is now backed by real CrossFit data.`);
+              const { getSugarWods } = require('../data/sugarWodData');
+              const { getDatabase: getDb } = require('../data/database');
+              const db = await getDb();
+              await db.runAsync('DELETE FROM wods');
+              const wods = getSugarWods();
+              let count = 0;
+              for (const w of wods) {
+                try {
+                  await db.runAsync(
+                    `INSERT OR IGNORE INTO wods (id, name, category, type, description, movements, scheme, time_cap, rx_weight, difficulty, estimated_time, equipment, tips)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [w.id, w.name, w.category, w.type, w.description || '',
+                     JSON.stringify(w.movements), w.scheme || '', w.timeCap || '',
+                     w.rxWeight || '', w.difficulty || 'intermediate',
+                     w.estimatedTime || '', JSON.stringify(w.equipment || []), w.tips || '']
+                  );
+                  count++;
+                } catch { /* skip */ }
+              }
+              Alert.alert('Done', `Loaded ${count} verified WODs (Girls + Heroes) from SugarWOD data.`);
             } catch (e) {
-              console.error('SugarWOD sync error:', e);
+              console.error('WOD reseed error:', e);
               Alert.alert('Error', e.message);
             }
           }}>
             <View style={styles.actionContent}>
-              <Text style={styles.actionLabel}>Sync SugarWOD Library</Text>
-              <Text style={styles.actionDesc}>Import verified Girls + Hero WODs from SugarWOD</Text>
+              <Text style={styles.actionLabel}>Reset WOD Library</Text>
+              <Text style={styles.actionDesc}>Replace WODs with 266 verified SugarWOD benchmarks</Text>
             </View>
           </TouchableOpacity>
 
