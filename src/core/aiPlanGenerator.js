@@ -426,7 +426,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
       // Day name — generate from actual selected exercises, not Claude's static week 1 title
       // Claude's title was for week 1 exercises, but rotation changes exercises each week
-      const PATTERN_NAMES = { squat: 'LEGS', hinge: 'POSTERIOR', horizontal_push: 'CHEST', horizontal_pull: 'BACK', vertical_push: 'SHOULDERS', vertical_pull: 'PULL', carry: 'CARRY', core: 'CORE' };
+      const PATTERN_NAMES = { squat: 'LEGS', hinge: 'POSTERIOR', horizontal_push: 'CHEST', horizontal_pull: 'BACK', vertical_push: 'SHOULDERS', vertical_pull: 'PULL', pull_up: 'PULL', carry: 'CARRY', core: 'CORE', arm_push: 'ARMS', arm_pull: 'ARMS', elbow_flexion: 'ARMS', elbow_extension: 'ARMS', olympic: 'POWER', plyometric: 'EXPLOSIVE', warmup: 'MOBILITY', cardio: 'CARDIO' };
       const FUN_SUFFIXES = ['FORGE', 'GRIND', 'POWER', 'BLITZ', 'FIRE', 'IRON', 'THUNDER', 'FURY', 'SPARK', 'RUSH', 'WAVE', 'STEEL', 'GRIT', 'RISE', 'BURN'];
       const primaryPatterns = (dayConfig.primary_patterns || []).slice(0, 2);
       const patternLabel = primaryPatterns.map(p => PATTERN_NAMES[p] || p.toUpperCase()).join(' & ');
