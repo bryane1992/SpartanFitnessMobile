@@ -586,9 +586,13 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           if (eligibleWods.length === 0) eligibleWods = wodPool.filter(id => (wodUsageCount[id] || 0) < MAX_WOD_REPEATS);
         }
 
-        // Select WOD
-        const wodRotationIdx = ((week - 1) * dayConfigs.length + tdi) % Math.max(1, eligibleWods.length);
-        const wodId = eligibleWods[wodRotationIdx] || eligibleWods[0];
+        // Select WOD — pick least-used from eligible pool for maximum variety
+        eligibleWods.sort((a, b) => (wodUsageCount[a] || 0) - (wodUsageCount[b] || 0));
+        // Among least-used, add some rotation variety
+        const minUsage = wodUsageCount[eligibleWods[0]] || 0;
+        const leastUsed = eligibleWods.filter(id => (wodUsageCount[id] || 0) === minUsage);
+        const rotIdx = ((week - 1) * dayConfigs.length + tdi) % Math.max(1, leastUsed.length);
+        const wodId = leastUsed[rotIdx] || eligibleWods[0];
         const selectedWod = wodById[wodId];
         if (selectedWod) {
           wodUsageCount[wodId] = (wodUsageCount[wodId] || 0) + 1;
