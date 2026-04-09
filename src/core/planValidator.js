@@ -232,6 +232,43 @@ export function validatePlan(planDays, userProfile) {
       violations.push({ check: 'weight_progression', severity: 'warning', details: `${exId}: Race Prep drops >15% from Peak (${p}→${r})` });
   }
 
+  // ── Check 11: Exercise-to-Day-Role Check ──
+  for (const day of planDays) {
+    if (day.isRestDay || day.is_rest_day) continue;
+    const title = (day.title || '').toLowerCase();
+    const blocks = day.blocks || [];
+    for (const block of blocks) {
+      const blockName = (block.name || '').toLowerCase();
+      if (!/main|compound|accessor/i.test(blockName)) continue;
+      for (const ex of (block.exercises || [])) {
+        const seedEx = exerciseLookup[ex.exercise_id];
+        if (!seedEx) continue;
+        const pattern = getMovementPattern(seedEx);
+        // Push day shouldn't have pulling exercises as main lifts
+        if (/chest|push|shoulder/i.test(title) && /main|compound/i.test(blockName)) {
+          if (['horizontal_pull', 'vertical_pull', 'pull_up', 'arm_pull'].includes(pattern)) {
+            violations.push({ check: 'day_role_mismatch', severity: 'warning',
+              details: `${seedEx.name} (${pattern}) on push day "${day.title}" wk${day.week_number}` });
+          }
+        }
+        // Pull day shouldn't have pressing exercises as main lifts
+        if (/pull|back/i.test(title) && !/push/i.test(title) && /main|compound/i.test(blockName)) {
+          if (['horizontal_push', 'vertical_push', 'squat'].includes(pattern)) {
+            violations.push({ check: 'day_role_mismatch', severity: 'warning',
+              details: `${seedEx.name} (${pattern}) on pull day "${day.title}" wk${day.week_number}` });
+          }
+        }
+        // Leg day shouldn't have upper body pressing/pulling as main lifts
+        if (/leg|quad|posterior|thunder/i.test(title) && /main|compound/i.test(blockName)) {
+          if (['horizontal_push', 'horizontal_pull', 'vertical_push', 'vertical_pull'].includes(pattern)) {
+            violations.push({ check: 'day_role_mismatch', severity: 'warning',
+              details: `${seedEx.name} (${pattern}) on leg day "${day.title}" wk${day.week_number}` });
+          }
+        }
+      }
+    }
+  }
+
   // Summary
   const autoFixed = violations.filter(v => v.severity === 'auto_fixed').length;
   const needsRegen = violations.some(v => v.severity === 'needs_regen');
