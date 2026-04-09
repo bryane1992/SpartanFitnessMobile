@@ -933,13 +933,14 @@ function calculateBlockTimes(sessionMinutes, dayConfig, archetypeKey) {
     bt.mainLiftCount = Math.min(bt.mainLiftCount, 2);
     bt.armBlaster = 0; bt.accessories = 0; bt.accessoryCount = 0;
     bt.rest = '30-60s';
-  } else if (sessionMinutes >= 75) {
-    bt.sets = 4; bt.rest = '60-90s';
-    if (!hasWod && !hasRun) { bt.mainLiftCount = 3; bt.accessoryCount = 3; bt.accessories = 12; }
   } else if (sessionMinutes >= 90) {
     bt.sets = 4; bt.rest = '90-120s';
     bt.warmup = 10; bt.warmupCount = 4;
-    if (!hasWod && !hasRun) { bt.mainLiftCount = 4; bt.accessoryCount = 4; bt.accessories = 15; }
+    if (!hasWod && !hasRun) { bt.mainLiftCount = 3; bt.accessoryCount = 2; bt.accessories = 10; }
+    bt.core = 6; bt.coreCount = 2; // 2 core exercises, not 3-4
+  } else if (sessionMinutes >= 75) {
+    bt.sets = 4; bt.rest = '60-90s';
+    if (!hasWod && !hasRun) { bt.mainLiftCount = 3; bt.accessoryCount = 2; bt.accessories = 10; }
   }
 
   return enforceSessionTime(bt, sessionMinutes);

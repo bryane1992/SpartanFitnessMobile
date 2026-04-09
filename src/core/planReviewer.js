@@ -23,7 +23,9 @@ IMPORTANT CONTEXT:
 - KEY LIFT PROGRESSION shows start → mid → end weights for main lifts. Evaluate progression from these numbers.
 - Dumbbell exercises may be capped at the athlete's stated DB max — if an exercise stays at the same weight, check if that weight equals the DB max before calling it "no progression."
 - WODs are optional. If the athlete doesn't want cardio/conditioning, scoring WOD quality as 0 is WRONG. Score N/A or skip it. Only score WODs if the athlete has conditioning goals.
-- Deload weeks intentionally reduce weight by 25% and sets to 2. This is by design, not a flaw.
+- Deload weeks intentionally reduce weight by 25% and sets to 2. This is by design, not a flaw. The FINAL WEEK is often a deload — evaluate peak performance from the week BEFORE the last deload, not the deload itself.
+- For bodybuilding splits, 2 back days (one width-focused, one thickness-focused) is standard and intentional — not "excessive back."
+- When evaluating weight progression, compare peak phase weights (not deload weights) to starting weights.
 
 EVALUATION CRITERIA (rate 0-10 each):
 
