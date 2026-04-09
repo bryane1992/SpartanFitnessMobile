@@ -924,9 +924,8 @@ function calculateBlockTimes(sessionMinutes, dayConfig, archetypeKey) {
     bt = { warmup: 8, mainLifts: 15, wod: 0, accessories: 0, armBlaster: 0, core: 5, cooldown: 5,
       sets: 3, mainLiftCount: 2, accessoryCount: 0, coreCount: 2, warmupCount: 3, rest: '45-60s' };
   } else if (hasWod) {
-    // WOD day: 2 main lifts + WOD + arms if time, no accessories (WOD IS the volume)
-    const armTime = wantArms ? 8 : 0;
-    bt = { warmup: 6, mainLifts: 15, wod: 10, accessories: 0, armBlaster: armTime, core: 5, cooldown: 5,
+    // WOD day: 2 main lifts + WOD, no accessories, no arms (WOD IS the volume)
+    bt = { warmup: 6, mainLifts: 15, wod: 10, accessories: 0, armBlaster: 0, core: 5, cooldown: 5,
       sets: 3, mainLiftCount: 2, accessoryCount: 0, coreCount: 2, warmupCount: 3, rest: '45-60s' };
   } else {
     // Pure lifting day (no WOD, no run): 3 main lifts + accessories + core + arms
