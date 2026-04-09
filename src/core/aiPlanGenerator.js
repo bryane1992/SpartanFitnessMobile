@@ -529,7 +529,10 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         // They belong on conditioning/sprint days only
         const isPushDay = allowedDayPatterns.has('horizontal_push');
         if ((isPushDay || isPullDay) && ['olympic', 'plyometric'].includes(pattern)) return false;
-        if ((isPushDay || isPullDay) && /push_jerk|snatch|clean_and_jerk|power_clean|hang_clean/.test(id)) return false;
+        if ((isPushDay || isPullDay) && /push_jerk|snatch|clean_and_jerk|power_clean|hang_clean|db_thrusters|thrusters|db_clean_press|kb_clean_press/.test(id)) {
+          console.log(`[PlanV5] Blocked ${id} from ${isPushDay ? 'push' : 'pull'} day`);
+          return false;
+        }
         return true;
       });
       const compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, bt.mainLiftCount, weeklyExerciseCount);
@@ -717,13 +720,22 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       }
 
       // ── ARM FINISHER — only if time budget allows ──
-      // Filter Claude's arm picks: must be arm isolation (arm_pull/arm_push), not compounds like clean & press
+      // Filter Claude's arm picks: must be arm isolation, cap at 2 per session (1 pull + 1 push)
       let armIds = (daySelection.arms || []).filter(id => {
         const ex = exerciseById[id];
         if (!ex) return false;
         const pattern = getMovementPattern(ex);
         return pattern === 'arm_pull' || pattern === 'arm_push';
       });
+      // Cap at 2 exercises: 1 bicep + 1 tricep (rotate across weeks for variety)
+      if (armIds.length > 2) {
+        const pulls = armIds.filter(id => getMovementPattern(exerciseById[id]) === 'arm_pull');
+        const pushes = armIds.filter(id => getMovementPattern(exerciseById[id]) === 'arm_push');
+        armIds = [
+          pulls[week % pulls.length] || pulls[0],
+          pushes[week % pushes.length] || pushes[0],
+        ].filter(Boolean);
+      }
       if (armIds.length === 0 && dayConfig.arm_finisher && bt.armBlaster > 0) {
         const armPullOptions = exerciseMenu.filter(e => e.pattern === 'arm_pull').map(e => e.id);
         const armPushOptions = exerciseMenu.filter(e => e.pattern === 'arm_push').map(e => e.id);
