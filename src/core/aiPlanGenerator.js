@@ -352,7 +352,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
   const planId = generateUUID();
   const startDate = getNextMonday();
   const eventDate = userProfile.eventDate || addWeeks(startDate, 16);
-  const { totalWeeks, phases } = calculatePhases(startDate, eventDate);
+  const hasRace = !!(userProfile.hasRaceDate || userProfile.raceType);
+  const { totalWeeks, phases } = calculatePhases(startDate, eventDate, hasRace);
   const trainingDays = userProfile.trainingDays || Array.from({ length: userProfile.trainingDaysPerWeek || 5 }, (_, i) => i);
   const sessionMinutes = parseInt(userProfile.sessionDuration) || 60;
 

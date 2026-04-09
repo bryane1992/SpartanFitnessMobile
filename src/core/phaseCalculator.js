@@ -15,7 +15,7 @@ const PHASE_NAMES = {
   race_prep: 'RACE PREP',
 };
 
-export function calculatePhases(startDate, eventDate) {
+export function calculatePhases(startDate, eventDate, hasRace = true) {
   const start = new Date(startDate);
   const end = new Date(eventDate);
   const totalDays = Math.floor((end - start) / (1000 * 60 * 60 * 24));
@@ -24,23 +24,32 @@ export function calculatePhases(startDate, eventDate) {
   let phases;
 
   if (totalWeeks >= 12) {
-    // Full 4-phase: Foundation → Build → Peak → Race Prep
-    // Never skip Peak. Compress Foundation or Build first.
-    const racePrep = Math.min(3, Math.max(2, Math.round(totalWeeks * 0.15)));
-    const peak = Math.min(4, Math.max(3, Math.round(totalWeeks * 0.20)));
-    const remaining = totalWeeks - peak - racePrep;
-    const foundation = Math.min(4, Math.max(3, Math.round(remaining * 0.35)));
-    const build = Math.min(5, remaining - foundation); // cap build at 5 weeks
-    // Redistribute excess to peak
-    const excess = remaining - foundation - build;
-    const finalPeak = peak + excess;
-
-    phases = [
-      { phase: 'foundation', weeks: foundation },
-      { phase: 'build', weeks: Math.max(2, build) },
-      { phase: 'peak', weeks: Math.max(3, finalPeak) },
-      { phase: 'race_prep', weeks: racePrep },
-    ];
+    if (hasRace) {
+      // Race plan: Foundation → Build → Peak → Race Prep
+      const racePrep = Math.min(3, Math.max(2, Math.round(totalWeeks * 0.15)));
+      const peak = Math.min(4, Math.max(3, Math.round(totalWeeks * 0.20)));
+      const remaining = totalWeeks - peak - racePrep;
+      const foundation = Math.min(4, Math.max(3, Math.round(remaining * 0.35)));
+      const build = Math.min(5, remaining - foundation);
+      const excess = remaining - foundation - build;
+      const finalPeak = peak + excess;
+      phases = [
+        { phase: 'foundation', weeks: foundation },
+        { phase: 'build', weeks: Math.max(2, build) },
+        { phase: 'peak', weeks: Math.max(3, finalPeak) },
+        { phase: 'race_prep', weeks: racePrep },
+      ];
+    } else {
+      // No race: Foundation → Build → Peak (no taper, cycle ends at peak)
+      const foundation = Math.min(4, Math.max(3, Math.round(totalWeeks * 0.25)));
+      const build = Math.min(5, Math.max(3, Math.round(totalWeeks * 0.35)));
+      const peak = totalWeeks - foundation - build;
+      phases = [
+        { phase: 'foundation', weeks: foundation },
+        { phase: 'build', weeks: build },
+        { phase: 'peak', weeks: Math.max(3, peak) },
+      ];
+    }
   } else if (totalWeeks >= 8) {
     // 8-11 weeks: still include Peak — compress Foundation
     const racePrep = 2;
