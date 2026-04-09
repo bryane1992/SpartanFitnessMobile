@@ -9,9 +9,9 @@ const ARCHETYPES = {
     equipmentPreference: ['machine', 'cable', 'dumbbell', 'kettlebell', 'barbell', 'bodyweight'],
     exerciseComplexity: 'simple', // goblet squats, machine rows, no Olympic lifts
     periodization: 'fat_loss',
-    conditioningStyle: 'circuit', // simple circuits, not CrossFit WODs
+    conditioningStyle: 'none', // no CrossFit WODs — conditioning via walking/cardio outside plan
     hasTaper: false,
-    maxWodDifficulty: 1,
+    maxWodDifficulty: 0,
     bodyweightPullAllowed: false, // no raw pull-ups/dips
     repRange: { compound: [10, 15], isolation: [12, 15] },
     restSeconds: '45-60s',

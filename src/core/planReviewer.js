@@ -111,9 +111,12 @@ function buildPlanSummary(planDays, profile) {
       .filter(b => /main|compound/i.test(b.name || ''))
       .flatMap(b => (b.exercises || []).map(e => e.name || e.exercise_id));
 
-    if (/chest|push|shoulder|press/i.test(title) || mainExercises.some(e => /bench|press|dip|fly/i.test(e))) muscleGroups.push++;
-    if (/pull|back|row/i.test(title) || mainExercises.some(e => /row|pull.up|chin|deadlift|lat/i.test(e))) muscleGroups.pull++;
-    if (/leg|squat|posterior|quad|ham/i.test(title) || mainExercises.some(e => /squat|leg|hip|lunge/i.test(e))) muscleGroups.legs++;
+    // Push: chest press, bench, OHP, dips — but NOT leg press, lat pulldown
+    if (/chest|push|shoulder/i.test(title) || mainExercises.some(e => /bench|dip|fly/i.test(e) || (/press/i.test(e) && !/leg.?press/i.test(e)))) muscleGroups.push++;
+    // Pull: rows, pull-ups, lat pulldowns — deadlift is a hinge (legs), not a pull
+    if (/pull|back|row/i.test(title) || mainExercises.some(e => /row|pull.?up|chin|lat.?pull|pulldown/i.test(e))) muscleGroups.pull++;
+    // Legs: squats, leg press, lunges, hip thrusts — but NOT bench press, shoulder press
+    if (/leg|squat|posterior|quad|ham|lower/i.test(title) || mainExercises.some(e => /squat|leg.?press|leg.?curl|leg.?ext|hip|lunge|rdl|romanian/i.test(e))) muscleGroups.legs++;
     if (/sprint|conditioning|interval/i.test(title)) muscleGroups.conditioning++;
     if (/carry|endurance/i.test(title)) muscleGroups.carry++;
 

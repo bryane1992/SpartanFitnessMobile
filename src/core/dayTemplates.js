@@ -247,14 +247,26 @@ export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanG
   if (splitModel === 'full_body_3x') {
     const condStyle = archetype?.conditioningStyle || 'circuit';
     const wod = condStyle === 'none' ? null : { type: condStyle === 'circuit' ? 'CIRCUIT' : 'AMRAP' };
-    const base = [
-      { type: 'full_body_a', primary_patterns: ['squat', 'horizontal_push'], secondary_patterns: ['horizontal_pull'], arm_finisher: wantArms, wod },
-      { type: 'full_body_b', primary_patterns: ['hinge', 'vertical_push'], secondary_patterns: ['vertical_pull'], arm_finisher: wantArms, core_block: true },
-      { type: 'full_body_c', primary_patterns: ['squat', 'horizontal_pull'], secondary_patterns: ['horizontal_push'], wod: { type: 'CIRCUIT' } },
-    ];
+
     if (daysPerWeek >= 4) {
-      base.push({ type: 'full_body_d', primary_patterns: ['hinge', 'horizontal_push'], secondary_patterns: ['core'], arm_finisher: wantArms, wod });
+      // 4 days: clean upper/lower split — each day has a single identity
+      // Lower days: 2 main lifts + 1 leg accessory (3 leg exercises total)
+      // Upper days: 2 main lifts (1 push + 1 pull), NO push/pull accessories to keep ratio balanced
+      // Result: Legs 2x (high volume), Push 2x, Pull 2x — perfectly balanced
+      return [
+        { type: 'lower_a', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat'], core_block: true, wod },
+        { type: 'upper_a', primary_patterns: ['horizontal_push', 'horizontal_pull'], secondary_patterns: [], arm_finisher: wantArms, core_block: true },
+        { type: 'lower_b', primary_patterns: ['hinge', 'squat'], secondary_patterns: ['hinge'], core_block: true, wod },
+        { type: 'upper_b', primary_patterns: ['vertical_push', 'vertical_pull'], secondary_patterns: [], arm_finisher: wantArms, core_block: true },
+      ];
     }
+
+    // 3 days: full body each day
+    const base = [
+      { type: 'full_body_a', primary_patterns: ['squat', 'horizontal_push'], secondary_patterns: ['horizontal_pull'], arm_finisher: wantArms, core_block: true, wod },
+      { type: 'full_body_b', primary_patterns: ['hinge', 'horizontal_pull'], secondary_patterns: ['vertical_push'], arm_finisher: wantArms, core_block: true },
+      { type: 'full_body_c', primary_patterns: ['horizontal_push', 'vertical_pull'], secondary_patterns: ['core'], core_block: true, wod },
+    ];
     return base.slice(0, daysPerWeek);
   }
 

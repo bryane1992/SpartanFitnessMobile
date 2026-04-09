@@ -63,10 +63,11 @@ export function buildExerciseMenu(userProfile, archetype) {
     if (pattern === 'olympic' && excludes.has('olympic_lift')) return false;
     if (pattern === 'olympic' && userProfile.experience === 'beginner') return false;
 
-    // For overweight_beginner WITH machine/cable access: exclude barbell compounds
-    // If they only have barbell, keep it — better than nothing
+    // For overweight_beginner WITH machine/cable access: exclude complex barbell exercises
+    // Keep foundational barbell lifts (squat, bench, deadlift, OHP, row) — they're essential patterns
     const hasMachineAccess = userEquip.has('machines') || userEquip.has('cables');
-    if (archetype?.exerciseComplexity === 'simple' && ex.category === 'barbell' && hasMachineAccess) return false;
+    const BASIC_BARBELL = /^(back_squat|bench_press|deadlift|overhead_press|barbell_row)$/;
+    if (archetype?.exerciseComplexity === 'simple' && ex.category === 'barbell' && hasMachineAccess && !BASIC_BARBELL.test(ex.id)) return false;
 
     // Exclude technical/Olympic movements for beginners
     if (archetype?.exerciseComplexity === 'simple' && /push_press|push_jerk|snatch|clean_and_jerk|handstand|pistol|muscle_up/i.test(ex.id)) return false;

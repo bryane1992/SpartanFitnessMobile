@@ -411,6 +411,32 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
     }
   }
 
+  // Pre-filter WOD pool for beginners — remove dangerous WODs before the weekly loop
+  // This prevents fallback code from ever selecting them
+  const isBeginnerProfile = archetype?.exerciseComplexity === 'simple';
+  if (isBeginnerProfile) {
+    const beforeCount = wodPool.length;
+    wodPool = wodPool.filter(id => {
+      const w = wodById[id];
+      if (!w) return false;
+      // Duration cap: no 20+ min WODs for beginners
+      const timeFields = [w.estimated_time, w.estimatedTime, w.time_cap, w.timeCap].filter(Boolean);
+      let estTime = 10;
+      for (const tf of timeFields) { const parsed = parseInt(String(tf)); if (!isNaN(parsed) && parsed > estTime) estTime = parsed; }
+      if (estTime > 20) return false;
+      // Movement safety: no Olympic, gymnastics, or heavy barbell
+      let movArr = w.movements;
+      if (typeof movArr === 'string') { try { movArr = JSON.parse(movArr); } catch { movArr = []; } }
+      const movText = (Array.isArray(movArr) ? movArr.join(' ') : '').toLowerCase();
+      if (/clean|snatch|jerk|thruster|power.?clean|hang.?clean/i.test(movText)) return false;
+      if (/deadlift.*\d+|deadlift.*lb|deadlift.*kg|\d+.*deadlift/i.test(movText)) return false;
+      if (/handstand|muscle.?up|ring.?dip|toes.?to.?bar|chest.?to.?bar|kipping|rope.?climb/i.test(movText)) return false;
+      if (/pistol.?squat/i.test(movText)) return false;
+      return true;
+    });
+    console.log(`[PlanV5] Beginner WOD pre-filter: ${beforeCount} → ${wodPool.length} WODs`);
+  }
+
   // Shuffle for variety
   wodPool = wodPool.sort(() => Math.random() - 0.5);
 
@@ -466,11 +492,13 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       // Day name — generate from actual selected exercises, not Claude's static week 1 title
       // Claude's title was for week 1 exercises, but rotation changes exercises each week
       const PATTERN_NAMES = { squat: 'LEGS', hinge: 'POSTERIOR', horizontal_push: 'CHEST', horizontal_pull: 'BACK', vertical_push: 'SHOULDERS', vertical_pull: 'PULL', pull_up: 'PULL', carry: 'CARRY', core: 'CORE', arm_push: 'ARMS', arm_pull: 'ARMS', elbow_flexion: 'ARMS', elbow_extension: 'ARMS', olympic: 'POWER', plyometric: 'EXPLOSIVE', warmup: 'MOBILITY', cardio: 'CARDIO' };
+      // Clean labels for upper/lower splits
+      const DAY_TYPE_LABELS = { lower_a: 'LOWER BODY', lower_b: 'LOWER BODY', upper_a: 'UPPER BODY', upper_b: 'UPPER BODY' };
       const FUN_SUFFIXES = ['FORGE', 'GRIND', 'POWER', 'BLITZ', 'FIRE', 'IRON', 'THUNDER', 'FURY', 'SPARK', 'RUSH', 'WAVE', 'STEEL', 'GRIT', 'RISE', 'BURN'];
       const primaryPatterns = (dayConfig.primary_patterns || []).slice(0, 2);
-      const patternLabel = primaryPatterns.map(p => PATTERN_NAMES[p] || p.toUpperCase()).join(' & ');
+      const patternLabel = DAY_TYPE_LABELS[dayConfig.type] || primaryPatterns.map(p => PATTERN_NAMES[p] || p.toUpperCase()).join(' & ');
       const suffix = FUN_SUFFIXES[(week * dayConfigs.length + tdi) % FUN_SUFFIXES.length];
-      const deload = isDeloadWeek(week);
+      const deload = isDeloadWeek(week, totalWeeks);
       const title = deload
         ? `${patternLabel || 'RECOVERY'} DELOAD`
         : (patternLabel ? `${patternLabel} ${suffix}` : (daySelection.title || 'TRAINING'));
@@ -510,12 +538,16 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
       // ── COMPOUNDS — expand pool, filter out non-compound exercises ──
       const NEVER_MAIN_LIFT = /plank|dead.?bug|bird.?dog|v.?up|sit.?up|mountain.?climb|russian.?twist|cable.?wood|pallof|wall.?ball|ball.?slam|battle.?rope|lunge.?matrix|cossack|dead.?hang|farmer.?walk|cat.?cow|child.?pose|cobra|superman|stretch|circles|clam|hydrant|wall.?angel|pull.?apart|face.?pull|lateral.?raise|reverse.?fly|cable.?fly|chest.?fly|curl|tricep|pushdown|kickback|extension/i;
+      // BW exercises shouldn't be main lifts when the user has real equipment (machines/barbell/DB)
+      const hasRealEquip = (userProfile.equipment || []).some(e => /machine|barbell|dumbbell|squat.?rack|cable/i.test(e));
+      const BW_NOT_MAIN = hasRealEquip ? /air.?squat|pike.?push|push.?up|burpee|high.?knee|jump.?jack|jumping.?jack/i : null;
       const rawCompoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig, archetype, week);
       const allowedDayPatterns = new Set([...(dayConfig.primary_patterns || []), ...(dayConfig.secondary_patterns || [])]);
       const compoundPool = rawCompoundPool.filter(id => {
         const ex = exerciseById[id];
         if (!ex) return false;
         if (NEVER_MAIN_LIFT.test(ex.name)) return false;
+        if (BW_NOT_MAIN && BW_NOT_MAIN.test(ex.name)) return false;
         const pattern = getMovementPattern(ex);
         if (pattern === 'warmup' || pattern === 'cardio') return false;
         // Compounds must match this day's movement patterns — no squats on pull day
@@ -537,11 +569,56 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
         return true;
       });
-      // Always include the first compound (anchor lift — bench on push, squat on legs, etc.)
-      // Then rotate the remaining slots for variety
+      // Pattern-balanced compound selection: ensure each primary pattern gets at least 1 exercise
+      // Without this, a day with [h_push, v_pull] could get 2 push exercises and 0 pull
       let compoundIds;
-      if (compoundPool.length > 0 && bt.mainLiftCount > 1) {
-        const anchor = compoundPool[0]; // Claude's #1 pick is the anchor
+      const dayPrimaryPatterns = dayConfig.primary_patterns || [];
+      if (compoundPool.length > 0 && bt.mainLiftCount >= 2 && dayPrimaryPatterns.length >= 2) {
+        // Group pool by pattern
+        const byPattern = {};
+        for (const id of compoundPool) {
+          const ex = exerciseById[id];
+          if (!ex) continue;
+          const p = getMovementPattern(ex);
+          if (!byPattern[p]) byPattern[p] = [];
+          byPattern[p].push(id);
+        }
+        // Fallback patterns when a primary pattern has zero available exercises
+        const PATTERN_FALLBACKS = {
+          vertical_pull: 'horizontal_pull', horizontal_pull: 'vertical_pull',
+          vertical_push: 'horizontal_push', horizontal_push: 'vertical_push',
+          squat: 'hinge', hinge: 'squat',
+        };
+        // Pick 1 from each primary pattern
+        // First pattern = anchor (same exercise every week for visible weight progression)
+        // Second pattern = rotates for variety (different exercise each week)
+        const picks = [];
+        for (let pi = 0; pi < dayPrimaryPatterns.length; pi++) {
+          if (picks.length >= bt.mainLiftCount) break;
+          const pattern = dayPrimaryPatterns[pi];
+          let group = byPattern[pattern] || [];
+          // Fallback: if no exercises for this pattern, try a related pattern
+          if (group.length === 0 && PATTERN_FALLBACKS[pattern]) {
+            const fallback = PATTERN_FALLBACKS[pattern];
+            group = (byPattern[fallback] || []).filter(id => !picks.includes(id));
+            if (group.length > 0) console.log(`[PlanV5] Pattern fallback: ${pattern} → ${fallback} (no ${pattern} exercises available)`);
+          }
+          if (group.length > 0) {
+            const pick = pi === 0 ? group[0] : group[(week - 1) % group.length];
+            picks.push(pick);
+            usedToday.add(pick);
+          }
+        }
+        // If we still need more (rare), fill from the full pool
+        if (picks.length < bt.mainLiftCount) {
+          const remaining = compoundPool.filter(id => !picks.includes(id));
+          const extra = rotateExercises(remaining, week, recentlyUsed, usedToday, bt.mainLiftCount - picks.length, weeklyExerciseCount);
+          picks.push(...extra);
+        }
+        compoundIds = picks;
+      } else if (compoundPool.length > 0 && bt.mainLiftCount > 1) {
+        // Single-pattern day: anchor + rotate
+        const anchor = compoundPool[0];
         const remaining = compoundPool.slice(1);
         const rotated = rotateExercises(remaining, week, recentlyUsed, usedToday, bt.mainLiftCount - 1, weeklyExerciseCount);
         compoundIds = [anchor, ...rotated];
@@ -555,12 +632,17 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           const ex = exerciseById[compoundIds[i]];
           if (!ex) continue;
           const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets);
-          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights);
+          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights, userProfile.sex);
           const rest = getRestForPhase(displayPhase, true);
           // Near-cap strategy: if weight is close to equipment max, add tempo/AMRAP notes
-          const equipMax = sanitizedProfile.equipmentDetails?.barbell?.maxWeight;
+          // Check equipment ceiling: barbell max for barbell exercises, DB max for dumbbell exercises
+          const isBarbellEx = ex.category === 'barbell';
+          const isDBEx = ex.category === 'dumbbell';
+          const equipMax = isBarbellEx ? sanitizedProfile.equipmentDetails?.barbell?.maxWeight
+            : isDBEx ? sanitizedProfile.equipmentDetails?.dumbbells?.maxWeight
+            : null;
           const weightNum = parseFloat(weight) || 0;
-          const capStrategy = equipMax ? getNearCapStrategy(weightNum, equipMax) : null;
+          const capStrategy = equipMax ? getNearCapStrategy(weightNum, parseFloat(equipMax)) : null;
           const notes = capStrategy ? capStrategy.notes : null;
           await savePlanExercise({ planBlockId: compBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest, notes });
           usedToday.add(ex.id); recentlyUsed.add(ex.id);
@@ -592,7 +674,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           race_prep: isBeginner ? ['standard'] : ['standard', 'intermediate'],
         };
         const allowedTiers = PHASE_ALLOWED_TIERS[displayPhase] || ['standard', 'intermediate'];
-        const isDeload = isDeloadWeek(week);
+        const isDeload = isDeloadWeek(week, totalWeeks);
         const effectiveTiers = isDeload ? ['standard'] : allowedTiers;
 
         // Filter pool: tier + repeat cap + recency + no same WOD twice in one week + equipment + duration
@@ -633,8 +715,9 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           if (/rope climb/i.test(movText) && !userEquipForWods.has('rope')) return false;
           // Beginners: no WODs with Olympic lifts, heavy barbell, or advanced gymnastics
           if (isBeginner) {
-            if (/clean|snatch|jerk|thruster.*lb|deadlift.*\d+.*lb/i.test(movText)) return false;
-            if (/handstand|muscle.?up|ring dip|toes.?to.?bar/i.test(movText)) return false;
+            if (/clean|snatch|jerk|thruster|power.?clean|hang.?clean/i.test(movText)) return false;
+            if (/deadlift.*\d+|deadlift.*lb|deadlift.*kg|\d+.*deadlift/i.test(movText)) return false;
+            if (/handstand|muscle.?up|ring.?dip|toes.?to.?bar|chest.?to.?bar|kipping/i.test(movText)) return false;
           }
           return true;
         });
@@ -650,10 +733,28 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           });
         }
         if (eligibleWods.length === 0) {
-          // Last resort: allow any WOD not used this week
-          eligibleWods = wodPool.filter(id => !weekWodIdsUsed.includes(id));
+          // Last resort: allow any WOD not used this week, but STILL enforce beginner safety + duration
+          eligibleWods = wodPool.filter(id => {
+            if (weekWodIdsUsed.includes(id)) return false;
+            const w = wodById[id];
+            if (!w) return false;
+            // Always enforce duration cap
+            const timeFields = [w.estimated_time, w.estimatedTime, w.time_cap, w.timeCap].filter(Boolean);
+            let estTime = 10;
+            for (const tf of timeFields) { const parsed = parseInt(String(tf)); if (!isNaN(parsed) && parsed > estTime) estTime = parsed; }
+            if (estTime > 20) return false;
+            // Always enforce beginner safety
+            if (isBeginner) {
+              let movArr = w.movements;
+              if (typeof movArr === 'string') { try { movArr = JSON.parse(movArr); } catch { movArr = []; } }
+              const movText = (Array.isArray(movArr) ? movArr.join(' ') : '').toLowerCase();
+              if (/clean|snatch|jerk|thruster|power.?clean|hang.?clean/i.test(movText)) return false;
+              if (/handstand|muscle.?up|ring.?dip|toes.?to.?bar|chest.?to.?bar|kipping|rope.?climb/i.test(movText)) return false;
+            }
+            return true;
+          });
         }
-        if (eligibleWods.length === 0) eligibleWods = [...wodPool];
+        if (eligibleWods.length === 0) eligibleWods = [...wodPool]; // absolute last resort
 
         // Type diversity within the week
         if (weekWodTypesUsed.length > 0) {
@@ -705,6 +806,9 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       }
 
       // ── ACCESSORIES — expand pool, dedup movement niches vs compounds ──
+      // Skip accessories on beginner finisher days to stay within session time
+      const willHaveFinisher = isBeginnerProfile && archetype?.periodization === 'fat_loss' && tdi % 2 === 0 && !isDeloadWeek(week, totalWeeks) && bt.wod === 0;
+      if (willHaveFinisher) { bt.accessoryCount = 0; bt.accessories = 0; }
       // Track which movement niches are already covered by compounds
       const usedNiches = new Set();
       for (const id of compoundIds) {
@@ -732,7 +836,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           const ex = exerciseById[accIds[i]];
           if (!ex) continue;
           const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets);
-          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights);
+          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights, userProfile.sex);
           await savePlanExercise({ planBlockId: accBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: '45-60s', notes: null });
           usedToday.add(ex.id); recentlyUsed.add(ex.id);
         }
@@ -767,7 +871,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           const ex = exerciseById[armIds[i]];
           if (!ex) continue;
           const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets);
-          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights);
+          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights, userProfile.sex);
           await savePlanExercise({ planBlockId: armBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: '30-45s', notes: null });
         }
       }
@@ -792,13 +896,14 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       const corePair = corePairs[tdi % corePairs.length];
       // Filter Claude's core picks: must be actual core exercises, not carries/compounds
       const VALID_CORE_IDS = new Set(Object.values(CORE_CATEGORIES).flat());
+      const maxCoreExercises = sessionMinutes >= 75 ? 3 : 2;
       let coreIds = (daySelection.core || []).filter(id => {
         if (VALID_CORE_IDS.has(id)) return true;
         const ex = exerciseById[id];
         if (!ex) return false;
         const pattern = getMovementPattern(ex);
         return pattern === 'core' && ex.muscle_group === 'core';
-      });
+      }).slice(0, maxCoreExercises); // Cap Claude's picks to session-appropriate count
       if (coreIds.length === 0) {
         // Auto-select from category rotation
         for (const cat of corePair) {
@@ -809,24 +914,68 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
             usedToday.add(pick);
           }
         }
-        // Add a third from remaining categories
-        const usedCats = new Set(corePair);
-        const remaining = Object.keys(CORE_CATEGORIES).filter(c => !usedCats.has(c));
-        if (remaining.length > 0) {
-          const extraCat = remaining[week % remaining.length];
-          const extraPool = CORE_CATEGORIES[extraCat].filter(id => exerciseById[id] && !coreIds.includes(id));
-          if (extraPool.length > 0) coreIds.push(extraPool[week % extraPool.length]);
+        // Add a third from remaining categories (only for 75+ min sessions — 2 exercises is enough for ≤60 min)
+        if (sessionMinutes >= 75) {
+          const usedCats = new Set(corePair);
+          const remaining = Object.keys(CORE_CATEGORIES).filter(c => !usedCats.has(c));
+          if (remaining.length > 0) {
+            const extraCat = remaining[week % remaining.length];
+            const extraPool = CORE_CATEGORIES[extraCat].filter(id => exerciseById[id] && !coreIds.includes(id));
+            if (extraPool.length > 0) coreIds.push(extraPool[week % extraPool.length]);
+          }
         }
       }
       if (coreIds.length > 0) {
+        // Scale core sets by session length: 2 sets for ≤60 min, 3 sets for 75+ min
+        const coreSets = (sessionMinutes <= 60 || userProfile.experience === 'beginner') ? 2 : 3;
         const coreBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'CORE', type: 'CIRCUIT', timeCap: `${bt.core} min`, isAmrap: false, hasGps: false });
         for (let i = 0; i < coreIds.length; i++) {
           const ex = exerciseById[coreIds[i]];
           if (!ex) continue;
-          await savePlanExercise({ planBlockId: coreBlockId, exerciseId: ex.id, sortOrder: i, sets: '3x15', reps: ex.default_reps || '15', weight: 'BW', rest: null, notes: null });
+          await savePlanExercise({ planBlockId: coreBlockId, exerciseId: ex.id, sortOrder: i, sets: `${coreSets}x${ex.default_reps || '15'}`, reps: ex.default_reps || '15', weight: 'BW', rest: null, notes: null });
         }
       }
       } // end core time budget check
+
+      // ── BEGINNER FINISHER — metabolic conditioning for fat loss (no named WODs) ──
+      // Added on alternating training days for overweight_beginner archetype
+      const isBeginnerFinisher = isBeginnerProfile && archetype?.periodization === 'fat_loss';
+      const isFinisherDay = tdi % 2 === 0; // days 0 and 2 get finishers
+      const isDeload = isDeloadWeek(week, totalWeeks);
+      if (isBeginnerFinisher && isFinisherDay && !isDeload && bt.wod === 0) {
+        const hasKB = (userProfile.equipment || []).some(e => /kettlebell/i.test(e));
+        const hasBike = (userProfile.equipment || []).some(e => /cardio/i.test(e));
+        // Rotate through simple circuits each week
+        const FINISHER_CIRCUITS = [
+          // Circuit A: lower body metabolic
+          [
+            { id: 'air_squats', sets: '3x15', reps: '15', weight: 'BW' },
+            { id: 'mountain_climbers', sets: '3x10 ea', reps: '10 ea', weight: 'BW' },
+            ...(hasKB ? [{ id: 'kb_swings', sets: '3x12', reps: '12', weight: '15 lb' }] : [{ id: 'high_knees', sets: '3x20', reps: '20', weight: 'BW' }]),
+          ],
+          // Circuit B: lower body + core metabolic (no push exercises to avoid skewing push/pull ratio)
+          [
+            { id: 'air_squats', sets: '3x20', reps: '20', weight: 'BW' },
+            { id: 'plank', sets: '3x20s', reps: '20s', weight: 'BW' },
+            ...(hasKB ? [{ id: 'kb_swings', sets: '3x10', reps: '10', weight: '15 lb' }] : [{ id: 'mountain_climbers', sets: '3x10 ea', reps: '10 ea', weight: 'BW' }]),
+          ],
+          // Circuit C: KB or bodyweight
+          [
+            ...(hasKB ? [{ id: 'kb_swings', sets: '3x15', reps: '15', weight: '15 lb' }] : [{ id: 'high_knees', sets: '3x20', reps: '20', weight: 'BW' }]),
+            { id: 'mountain_climbers', sets: '3x10 ea', reps: '10 ea', weight: 'BW' },
+            { id: 'air_squats', sets: '3x20', reps: '20', weight: 'BW' },
+          ],
+        ];
+        const circuit = FINISHER_CIRCUITS[(week - 1) % FINISHER_CIRCUITS.length];
+        const finBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'FINISHER', type: 'CIRCUIT', timeCap: '8 min', isAmrap: true, hasGps: false });
+        for (let i = 0; i < circuit.length; i++) {
+          const exData = circuit[i];
+          const ex = exerciseById[exData.id];
+          if (ex) {
+            await savePlanExercise({ planBlockId: finBlockId, exerciseId: exData.id, sortOrder: i, sets: exData.sets, reps: exData.reps, weight: exData.weight, rest: '0s', notes: exData.notes || 'Minimal rest between exercises' });
+          }
+        }
+      }
 
       // ── COOLDOWN ──
       if (sessionMinutes >= 45) {
@@ -946,10 +1095,21 @@ function calculateBlockTimes(sessionMinutes, dayConfig, archetypeKey) {
   if (sessionMinutes <= 30) {
     bt.warmup = 3; bt.mainLifts = 15; bt.wod = 0; bt.accessories = 0; bt.armBlaster = 0; bt.core = 3; bt.cooldown = 3;
     bt.mainLiftCount = 2; bt.accessoryCount = 0; bt.coreCount = 2; bt.warmupCount = 2; bt.rest = '30-45s';
-  } else if (sessionMinutes <= 44) {
+  } else if (sessionMinutes <= 45) {
     bt.warmup = Math.min(bt.warmup, 5); bt.cooldown = 4;
     bt.mainLiftCount = Math.min(bt.mainLiftCount, 2);
-    bt.armBlaster = 0; bt.accessories = 0; bt.accessoryCount = 0;
+    bt.armBlaster = 0;
+    bt.core = Math.min(bt.core, 5);
+    if (bt.wod > 0) {
+      // WOD day: drop accessories, cap WOD
+      bt.accessories = 0; bt.accessoryCount = 0;
+      bt.wod = Math.min(bt.wod, 8);
+      bt.mainLifts = Math.min(bt.mainLifts, 15);
+    } else {
+      // No WOD: allow 1 accessory, more time for main lifts
+      bt.accessories = Math.min(bt.accessories, 8); bt.accessoryCount = Math.min(bt.accessoryCount, 1);
+      bt.mainLifts = Math.min(bt.mainLifts, 20);
+    }
     bt.rest = '30-60s';
   } else if (sessionMinutes >= 90) {
     // 90 min: more rest between sets, 4 sets per exercise, but same exercise count
@@ -1015,9 +1175,9 @@ function getMovementNiche(exerciseId) {
     // Fly variations are their own niche (isolation, OK alongside presses)
     db_chest_fly: 'fly', cable_fly: 'fly', db_fly: 'fly',
     // Overhead press (don't pair barbell OHP + DB shoulder press)
-    overhead_press: 'overhead_press', db_shoulder_press: 'overhead_press', machine_shoulder_press: 'overhead_press', push_press: 'overhead_press',
+    overhead_press: 'overhead_press', db_shoulder_press: 'overhead_press', machine_shoulder_press: 'overhead_press', push_press: 'overhead_press', db_arnold_press: 'overhead_press', arnold_press: 'overhead_press',
     // Row (don't pair barbell row + DB row)
-    barbell_row: 'row', db_row: 'row', machine_row: 'row', cable_row: 'row',
+    barbell_row: 'row', db_row: 'row', machine_row: 'row', cable_row: 'row', chest_supported_row: 'row', seated_cable_row: 'row', single_arm_cable_row: 'row',
     // Vertical pull (pull-ups and lat pulldown are different enough to coexist, but don't double pull-up variants)
     pull_ups: 'pull_up', chin_ups: 'pull_up', band_assisted_pull_ups: 'pull_up',
     // Squat (don't pair back squat + front squat usually)
@@ -1072,17 +1232,21 @@ function expandPool(claudePicks, exerciseMenu, dayConfig, archetype, week) {
   const isBeginner = archetype?.exerciseComplexity === 'simple';
 
   // For beginners: restrict equipment by phase
-  // Weeks 1-4: machine, cable, bodyweight only
-  // Weeks 5-8: add dumbbell, kettlebell
-  // Weeks 9+: add barbell (if available)
+  // 'simple' complexity (overweight_beginner) WITH alternatives: DB/KB/machine/cable/BW only
+  //   — barbell introduces form complexity + sudden weight jumps (45 lb floor)
+  //   — but if barbell is their ONLY loaded equipment, keep it (better than BW-only)
+  // Other beginners: barbell unlocked at week 9 after building confidence
+  const userEquipSet = new Set((archetype?.equipmentPreference || []).map(e => e.toLowerCase()));
+  const hasAlternatives = exerciseMenu.some(e => e.equipment === 'dumbbell' || e.equipment === 'machine' || e.equipment === 'cable');
   let allowedEquipment;
   if (isBeginner) {
-    if (week <= 4) {
-      allowedEquipment = new Set(['machine', 'cable', 'bodyweight']);
-    } else if (week <= 8) {
+    if (archetype?.exerciseComplexity === 'simple' && hasAlternatives) {
+      // Overweight beginners with DBs/machines stay off barbell for the full plan
+      allowedEquipment = new Set(['machine', 'cable', 'dumbbell', 'kettlebell', 'bodyweight']);
+    } else if (week <= 8 && hasAlternatives) {
       allowedEquipment = new Set(['machine', 'cable', 'dumbbell', 'kettlebell', 'bodyweight']);
     } else {
-      allowedEquipment = null; // all allowed
+      allowedEquipment = null; // barbell-only gym or week 9+ — all allowed
     }
   }
 
@@ -1094,7 +1258,7 @@ function expandPool(claudePicks, exerciseMenu, dayConfig, archetype, week) {
       // Phase-based equipment restriction for beginners
       if (allowedEquipment && !allowedEquipment.has(ex.equipment)) return false;
       // Never add advanced exercises for beginners via expansion
-      if (isBeginner && /ab.?wheel|toes.?to.?bar|muscle.?up|pistol|handstand|jump.?squat/i.test(ex.id)) return false;
+      if (isBeginner && /ab.?wheel|toes.?to.?bar|muscle.?up|pistol|handstand|jump.?squat|thruster|clean.?press|push.?press|snatch/i.test(ex.id)) return false;
       return true;
     })
     .sort((a, b) => {

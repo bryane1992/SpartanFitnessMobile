@@ -161,7 +161,7 @@ export function getExperienceMultiplier(experience) {
 // Weight Calculation with Equipment Awareness
 // ═══════════════════════════════════════════════════════════════
 
-export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, experience, equipmentDetails, workingWeights) {
+export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, experience, equipmentDetails, workingWeights, sex) {
   const seedWeight = parseFloat(exercise.default_weight) || 0;
   if (seedWeight === 0 || exercise.default_weight === 'BW') return exercise.default_weight;
 
@@ -169,8 +169,19 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
   // Working weights are 8-10RM — that's roughly 75% of 1RM
   // So estimated 1RM = working weight × 1.3
   const userBase = getUserBaseWeight(exercise, workingWeights);
-  const baseWeight = userBase || seedWeight;
+  let baseWeight = userBase || seedWeight;
   const hasUserWeights = !!userBase;
+
+  // Step 1b: Scale seed defaults for sex + experience when no user working weights
+  // Seed defaults are calibrated for intermediate male — scale down for beginners/females
+  // Lower body scales less for females (proportionally stronger legs vs upper body)
+  if (!hasUserWeights) {
+    const isLowerBody = /legs|glutes/i.test(exercise.muscle_group || '') ||
+                        /squat|deadlift|leg_press|hip_thrust|lunge|rdl|leg_curl|leg_ext|calf/i.test(exercise.id || '');
+    const sexScale = (sex === 'female') ? (isLowerBody ? 0.70 : 0.50) : 1.0;
+    const expScale = { beginner: 0.60, intermediate: 0.75, advanced: 1.0, elite: 1.0 };
+    baseWeight = baseWeight * sexScale * (expScale[experience] || 0.75);
+  }
 
   // Step 2: Classify exercise — compound vs isolation
   const isCompound = exercise.is_compound;
@@ -208,8 +219,9 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
   const weeklyBump = isCompound ? expBumps.compound : expBumps.isolation;
   const progressionMultiplier = 1 + ((weekNumber - 1) * weeklyBump);
 
-  // Step 5: Experience multiplier (only when no working weights)
-  const expMult = hasUserWeights ? 1.0 : getExperienceMultiplier(experience);
+  // Step 5: Experience multiplier (only when no working weights AND no sex/exp scaling in step 1b)
+  // Step 1b already scales seed defaults for sex + experience — don't double-dip
+  const expMult = hasUserWeights ? 1.0 : (sex ? 1.0 : getExperienceMultiplier(experience));
 
   // Step 6: Calculate from estimated 1RM
   let weight = est1RM * phaseIntensity * progressionMultiplier * expMult;
@@ -235,6 +247,9 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
     if (kbWeights.length > 0) {
       weight = kbWeights.reduce((prev, curr) => Math.abs(curr - weight) < Math.abs(prev - weight) ? curr : prev);
     }
+  } else if (weight <= 25) {
+    // Light weights: round to nearest 2.5 lb for visible progression
+    weight = Math.round(weight / 2.5) * 2.5;
   } else {
     weight = Math.round(weight / 5) * 5;
   }
