@@ -259,7 +259,7 @@ export function validatePlan(planDays, userProfile) {
           }
         }
         // Leg day shouldn't have upper body pressing/pulling as main lifts
-        if (/leg|quad|posterior|thunder/i.test(title) && /main|compound/i.test(blockName)) {
+        if (/\bleg\b|quad|hamstring|posterior|glute|squat/i.test(title) && !/pull|back|push|chest|shoulder/i.test(title) && /main|compound/i.test(blockName)) {
           if (['horizontal_push', 'horizontal_pull', 'vertical_push', 'vertical_pull'].includes(pattern)) {
             violations.push({ check: 'day_role_mismatch', severity: 'warning',
               details: `${seedEx.name} (${pattern}) on leg day "${day.title}" wk${day.week_number}` });

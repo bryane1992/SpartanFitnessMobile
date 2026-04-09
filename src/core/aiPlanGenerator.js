@@ -228,7 +228,7 @@ async function callClaudeV5(apiKey, userProfile, archetype, exerciseMenu, wodMen
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: MODEL, max_tokens: 2000, system: V5_SYSTEM, messages: [{ role: 'user', content: prompt }] }),
+      body: JSON.stringify({ model: MODEL, max_tokens: 4000, system: V5_SYSTEM, messages: [{ role: 'user', content: prompt }] }),
       signal: ctrl.signal,
     });
     clearTimeout(timer);
@@ -739,10 +739,11 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       if (bt.core <= 0) { /* skip core on days with no time budget for it (e.g. carry + long run) */ } else {
       const userEquipSet = new Set((userProfile.equipment || []).map(e => e.toLowerCase()));
       const hasCables = userEquipSet.has('cables') || userEquipSet.has('cable');
+      const hasBands = userEquipSet.has('bands') || userEquipSet.has('band');
       const CORE_CATEGORIES = {
         anti_extension: ['plank', 'dead_bug', 'bird_dog', 'plank_to_pushup'],
         flexion: ['sit_ups', 'v_ups', 'mountain_climbers', 'russian_twists'],
-        anti_rotation: hasCables ? ['bird_dog', 'pallof_press', 'cable_woodchop', 'dead_bug'] : ['bird_dog', 'dead_bug', 'plank', 'plank_to_pushup'],
+        anti_rotation: hasBands ? ['bird_dog', 'pallof_press', 'dead_bug'] : hasCables ? ['bird_dog', 'cable_woodchop', 'dead_bug'] : ['bird_dog', 'dead_bug', 'plank', 'plank_to_pushup'],
         rotation: hasCables ? ['russian_twists', 'cable_woodchop'] : ['russian_twists', 'mountain_climbers'],
       };
       const corePairs = [
