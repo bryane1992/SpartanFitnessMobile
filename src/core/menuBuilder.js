@@ -68,8 +68,12 @@ export function buildExerciseMenu(userProfile, archetype) {
     const hasMachineAccess = userEquip.has('machines') || userEquip.has('cables');
     if (archetype?.exerciseComplexity === 'simple' && ex.category === 'barbell' && hasMachineAccess) return false;
 
-    // Even without machines, exclude technical barbell for beginners
+    // Exclude technical/Olympic movements for beginners
     if (archetype?.exerciseComplexity === 'simple' && /push_press|push_jerk|snatch|clean_and_jerk|handstand|pistol|muscle_up/i.test(ex.id)) return false;
+
+    // Traditional style: exclude CrossFit/Olympic derivatives — not hypertrophy-focused
+    const isTraditional = userProfile?.workoutStyles?.includes('traditional') && !userProfile?.workoutStyles?.includes('crossfit') && !userProfile?.workoutStyles?.includes('hybrid');
+    if (isTraditional && /push_jerk|snatch|clean_and_jerk|power_clean|hang_clean|db_thrusters|thrusters|db_clean_press|kb_clean_press|handstand_push_ups|pistol_squats|muscle_ups|burpee_box_jumps|wall_balls|ball_slams|battle_ropes|tire_flip/i.test(ex.id)) return false;
 
     // Running filter
     if (cantRun && pattern === 'cardio' && /run|jog|sprint/i.test(ex.name)) return false;

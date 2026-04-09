@@ -207,9 +207,9 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
   // Step 6: Calculate from estimated 1RM
   let weight = est1RM * phaseIntensity * progressionMultiplier * expMult;
 
-  // Step 7: Deload — 70% of working weight
+  // Step 7: Deload — 75% of working weight (25% reduction, not 30%)
   if (isDeloadWeek(weekNumber)) {
-    weight *= 0.70;
+    weight *= 0.75;
   }
 
   // Step 8: Apply floor — prevents absurdly light weights
