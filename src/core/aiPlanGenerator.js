@@ -524,6 +524,11 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           const PULL_HINGES = new Set(['deadlift', 'romanian_deadlift', 'db_romanian_deadlift', 'db_single_leg_deadlift', 'back_extension']);
           if (!PULL_HINGES.has(id)) return false;
         }
+        // Olympic lifts (push_jerk, snatch, clean_and_jerk) shouldn't be main lifts on push/pull days
+        // They belong on conditioning/sprint days only
+        const isPushDay = allowedDayPatterns.has('horizontal_push');
+        if ((isPushDay || isPullDay) && ['olympic', 'plyometric'].includes(pattern)) return false;
+        if ((isPushDay || isPullDay) && /push_jerk|snatch|clean_and_jerk|power_clean|hang_clean/.test(id)) return false;
         return true;
       });
       const compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, bt.mainLiftCount, weeklyExerciseCount);

@@ -197,8 +197,8 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
   const phaseIntensity = PHASE_INTENSITY[phaseKey]?.[category] || 0.70;
 
   // Step 4: Weekly progression — cumulative across ALL weeks (not reset per phase)
-  // Compounds: +2% per week, Isolation: +0.5% per week (accessories stay lighter)
-  const weeklyBump = isCompound ? 0.02 : 0.005;
+  // Compounds: +2% per week, Isolation: +1% per week
+  const weeklyBump = isCompound ? 0.02 : 0.01;
   const progressionMultiplier = 1 + ((weekNumber - 1) * weeklyBump);
 
   // Step 5: Experience multiplier (only when no working weights)

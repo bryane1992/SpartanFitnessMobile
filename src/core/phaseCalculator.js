@@ -29,13 +29,16 @@ export function calculatePhases(startDate, eventDate) {
     const racePrep = Math.min(3, Math.max(2, Math.round(totalWeeks * 0.15)));
     const peak = Math.min(4, Math.max(3, Math.round(totalWeeks * 0.20)));
     const remaining = totalWeeks - peak - racePrep;
-    const foundation = Math.min(4, Math.max(2, Math.round(remaining * 0.40)));
-    const build = remaining - foundation;
+    const foundation = Math.min(4, Math.max(3, Math.round(remaining * 0.35)));
+    const build = Math.min(5, remaining - foundation); // cap build at 5 weeks
+    // Redistribute excess to peak
+    const excess = remaining - foundation - build;
+    const finalPeak = peak + excess;
 
     phases = [
       { phase: 'foundation', weeks: foundation },
       { phase: 'build', weeks: Math.max(2, build) },
-      { phase: 'peak', weeks: peak },
+      { phase: 'peak', weeks: Math.max(3, finalPeak) },
       { phase: 'race_prep', weeks: racePrep },
     ];
   } else if (totalWeeks >= 8) {
