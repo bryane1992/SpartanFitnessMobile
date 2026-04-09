@@ -594,6 +594,45 @@ export default function Settings({ navigation }) {
               <Text style={styles.actionDesc}>Build a plan for a test profile (check console)</Text>
             </View>
           </TouchableOpacity>
+
+          <TouchableOpacity style={styles.actionButton} onPress={async () => {
+            try {
+              const { getDatabase: getDb } = require('../data/database');
+              const db = await getDb();
+              const profileStr = await AsyncStorage.getItem('userProfile');
+              if (!profileStr) { Alert.alert('No Profile', 'Complete onboarding first.'); return; }
+              const prof = JSON.parse(profileStr);
+              const planId = currentPlanId;
+              if (!planId) { Alert.alert('No Plan', 'Generate a plan first.'); return; }
+
+              Alert.alert('Reviewing...', 'AI fitness expert is analyzing your plan...');
+
+              // Load plan data
+              const days = await db.getAllAsync('SELECT * FROM plan_days WHERE plan_id = ? ORDER BY week_number, day_of_week', [planId]);
+              for (const day of days) {
+                day.blocks = await db.getAllAsync('SELECT * FROM plan_blocks WHERE plan_day_id = ? ORDER BY sort_order', [day.id]);
+                for (const block of day.blocks) {
+                  block.exercises = await db.getAllAsync(
+                    'SELECT pe.*, COALESCE(e.name, pe.exercise_id) as name FROM plan_exercises pe LEFT JOIN exercises e ON e.id = pe.exercise_id WHERE pe.plan_block_id = ? ORDER BY pe.sort_order',
+                    [block.id]
+                  );
+                }
+              }
+
+              const { reviewPlan } = require('../core/planReviewer');
+              const review = await reviewPlan(days, prof);
+              console.log('[Review]\n' + review);
+              Alert.alert('AI Review Complete', review.substring(0, 500) + (review.length > 500 ? '...\n\nFull review in console.' : ''));
+            } catch (e) {
+              console.error('Review error:', e);
+              Alert.alert('Error', e.message);
+            }
+          }}>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionLabel}>AI Review Plan</Text>
+              <Text style={styles.actionDesc}>Have an AI fitness expert critique your current plan</Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* App Info */}
