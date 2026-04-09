@@ -26,6 +26,9 @@ IMPORTANT CONTEXT:
 - Deload weeks intentionally reduce weight by 25% and sets to 2. This is by design, not a flaw. The FINAL WEEK is often a deload — evaluate peak performance from the week BEFORE the last deload, not the deload itself.
 - For bodybuilding splits, 2 back days (one width-focused, one thickness-focused) is standard and intentional — not "excessive back."
 - When evaluating weight progression, compare peak phase weights (not deload weights) to starting weights.
+- For obstacle race / hybrid plans: sprint days and carry days ARE leg work. Don't count them as "0 leg days" — sprints train quads/glutes, carries train posterior chain. A plan with 1 dedicated leg day + 1 sprint day + 1 carry day = ~3 lower body exposures per week.
+- When a lift stays at the barbell max weight for the entire plan, it's because the equipment ceiling prevents progression. The plan adds tempo/AMRAP-last-set notes to compensate. This is correct behavior, not a plateau.
+- WODs are timed blocks (typically 10-15 min), not unlimited — Cindy runs for 10-20 min, not "until you finish 5 rounds." The session time calculation already accounts for WOD duration.
 
 EVALUATION CRITERIA (rate 0-10 each):
 
