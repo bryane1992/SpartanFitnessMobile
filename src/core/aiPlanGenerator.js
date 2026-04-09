@@ -842,6 +842,27 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
     console.warn('[AI Plan] Validator failed:', e.message);
   }
 
+  // ── AUTO-REVIEW (dev only — runs AI fitness expert on the rendered plan) ──
+  try {
+    const { getDatabase: getDb2 } = require('../data/database');
+    const db2 = await getDb2();
+    const reviewDays = await db2.getAllAsync('SELECT * FROM plan_days WHERE plan_id = ? ORDER BY week_number, day_of_week', [planId]);
+    for (const day of reviewDays) {
+      day.blocks = await db2.getAllAsync('SELECT * FROM plan_blocks WHERE plan_day_id = ? ORDER BY sort_order', [day.id]);
+      for (const block of day.blocks) {
+        block.exercises = await db2.getAllAsync(
+          "SELECT pe.*, COALESCE(e.name, pe.exercise_id) as name FROM plan_exercises pe LEFT JOIN exercises e ON e.id = pe.exercise_id WHERE pe.plan_block_id = ? ORDER BY pe.sort_order",
+          [block.id]
+        );
+      }
+    }
+    const { reviewPlan } = require('./planReviewer');
+    const review = await reviewPlan(reviewDays, userProfile);
+    console.log('\n[AI REVIEW]\n' + review);
+  } catch (e) {
+    console.log('[AI Review] Skipped:', e.message);
+  }
+
   console.log('[AI Plan] Plan generated successfully');
   return { planId, totalWeeks, phases, startDate, eventDate, planName: selections.planName || 'Training Program', programNotes: selections.progressionNotes || '' };
 }

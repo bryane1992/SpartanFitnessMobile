@@ -6,7 +6,7 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-sonnet-4-6-20250514'; // Sonnet for deeper analysis
+const MODEL = 'claude-haiku-4-5-20251001'; // Haiku for fast review
 
 function getApiKey() {
   return Constants.expoConfig?.extra?.claudeApiKey
