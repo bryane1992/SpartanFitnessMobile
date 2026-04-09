@@ -535,7 +535,18 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
         return true;
       });
-      const compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, bt.mainLiftCount, weeklyExerciseCount);
+      // Always include the first compound (anchor lift — bench on push, squat on legs, etc.)
+      // Then rotate the remaining slots for variety
+      let compoundIds;
+      if (compoundPool.length > 0 && bt.mainLiftCount > 1) {
+        const anchor = compoundPool[0]; // Claude's #1 pick is the anchor
+        const remaining = compoundPool.slice(1);
+        const rotated = rotateExercises(remaining, week, recentlyUsed, usedToday, bt.mainLiftCount - 1, weeklyExerciseCount);
+        compoundIds = [anchor, ...rotated];
+        usedToday.add(anchor);
+      } else {
+        compoundIds = rotateExercises(compoundPool, week, recentlyUsed, usedToday, bt.mainLiftCount, weeklyExerciseCount);
+      }
       if (compoundIds.length > 0) {
         const compBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'MAIN LIFTS', type: 'COMPOUND', timeCap: `${bt.mainLifts} min`, isAmrap: false, hasGps: false });
         for (let i = 0; i < compoundIds.length; i++) {
