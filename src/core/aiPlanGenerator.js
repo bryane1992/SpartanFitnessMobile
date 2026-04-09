@@ -60,6 +60,8 @@ VOLUME BY EXPERIENCE:
 BODY WEIGHT AWARENESS:
 - BMI>30 or overweight: favor machines, goblet squats, leg press over barbell squats. No high-impact running.
 - Scale to barbell compounds in later phases as strength improves.
+- For beginners: ALWAYS include at least 1 pushing main lift (machine chest press, DB press, or push-ups) and 1 pulling main lift (lat pulldown, machine row, or seated cable row) per session. Full body balance is critical.
+- Never program Olympic lifts (cleans, snatches, jerks), handstand push-ups, or heavy barbell complexes for beginners. Use machines, dumbbells, and bodyweight instead.
 
 EQUIPMENT CONSTRAINTS:
 - ONLY program exercises the athlete can do with their listed equipment
@@ -582,11 +584,12 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         // Phase-tier filtering: hero WODs only in Peak, standard in Foundation/Deload
         // Foundation allows standard + intermediate (Helen, The Chief are fine for base building)
         // Only hero WODs (Grace, DT, Fran) are restricted to Peak
+        const isBeginner = archetype?.exerciseComplexity === 'simple';
         const PHASE_ALLOWED_TIERS = {
-          foundation: ['standard', 'intermediate'],
-          build: ['standard', 'intermediate'],
-          peak: ['standard', 'intermediate', 'hero'],
-          race_prep: ['standard', 'intermediate'],
+          foundation: isBeginner ? ['standard'] : ['standard', 'intermediate'],
+          build: isBeginner ? ['standard'] : ['standard', 'intermediate'],
+          peak: isBeginner ? ['standard', 'intermediate'] : ['standard', 'intermediate', 'hero'],
+          race_prep: isBeginner ? ['standard'] : ['standard', 'intermediate'],
         };
         const allowedTiers = PHASE_ALLOWED_TIERS[displayPhase] || ['standard', 'intermediate'];
         const isDeload = isDeloadWeek(week);
@@ -628,6 +631,11 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           if (/pistol squat/i.test(movText)) return false;
           if (/muscle.?up/i.test(movText) && !userEquipForWods.has('rings')) return false;
           if (/rope climb/i.test(movText) && !userEquipForWods.has('rope')) return false;
+          // Beginners: no WODs with Olympic lifts, heavy barbell, or advanced gymnastics
+          if (isBeginner) {
+            if (/clean|snatch|jerk|thruster.*lb|deadlift.*\d+.*lb/i.test(movText)) return false;
+            if (/handstand|muscle.?up|ring dip|toes.?to.?bar/i.test(movText)) return false;
+          }
           return true;
         });
         if (eligibleWods.length === 0) {
