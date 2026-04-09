@@ -436,8 +436,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
     if (archetype?.hasTaper && weeksFromEnd < 3 && totalWeeks > 12) {
       displayPhase = 'race_prep';
     } else if (phase.phase === 'race_prep' && !archetype?.hasTaper) {
-      const cw = ((week - 1) % 12) + 1;
-      displayPhase = cw <= 4 ? 'foundation' : cw <= 8 ? 'build' : 'peak';
+      // Non-race profiles: race_prep weeks become a second peak block (not regression to foundation)
+      displayPhase = 'peak';
     } else {
       displayPhase = phase.phase;
     }
