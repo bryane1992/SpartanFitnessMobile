@@ -161,7 +161,7 @@ export function getExperienceMultiplier(experience) {
 // Weight Calculation with Equipment Awareness
 // ═══════════════════════════════════════════════════════════════
 
-export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, experience, equipmentDetails, workingWeights, sex) {
+export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, experience, equipmentDetails, workingWeights, sex, totalWeeks) {
   const seedWeight = parseFloat(exercise.default_weight) || 0;
   if (seedWeight === 0 || exercise.default_weight === 'BW') return exercise.default_weight;
 
@@ -227,13 +227,13 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
   let weight = est1RM * phaseIntensity * progressionMultiplier * expMult;
 
   // Step 7: Deload — 75% of working weight (25% reduction, not 30%)
-  if (isDeloadWeek(weekNumber)) {
+  if (isDeloadWeek(weekNumber, totalWeeks)) {
     weight *= 0.75;
   }
 
   // Step 8: Apply floor — prevents absurdly light weights
   const floor = getMinimumWeight(exercise, experience, workingWeights);
-  if (!isDeloadWeek(weekNumber)) {
+  if (!isDeloadWeek(weekNumber, totalWeeks)) {
     weight = Math.max(weight, floor);
   }
 
@@ -311,7 +311,7 @@ function capToEquipment(weight, exercise, equipmentDetails) {
 // Sets, Reps & Tempo
 // ═══════════════════════════════════════════════════════════════
 
-export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal, sessionMinutes, targetSets) {
+export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal, sessionMinutes, targetSets, totalWeeks) {
   const bodyComp = getBodyCompParams(bodyCompGoal);
   const isCompound = exercise.is_compound;
   const session = sessionMinutes || 60;
@@ -357,7 +357,7 @@ export function calculateSetsReps(exercise, weekNumber, phase, bodyCompGoal, ses
 
   // Deload: fewer sets, lower reps
   // Deload: reduce sets, keep reps at phase working range (never below 8)
-  if (isDeloadWeek(weekNumber)) {
+  if (isDeloadWeek(weekNumber, totalWeeks)) {
     sets = 2;
     reps = Math.max(8, reps); // never below 8 reps on deload — 2×4 is meaningless
   }
@@ -422,7 +422,7 @@ export function calculateRunParams(weekNumber, phase, totalWeeks, targetDistance
   }
 
   // Deload: 70% of current progression (not 60%)
-  if (isDeloadWeek(weekNumber)) distance *= 0.70;
+  if (isDeloadWeek(weekNumber, totalWeeks)) distance *= 0.70;
 
   // Round to nearest 0.5 for easy measurement
   distance = Math.round(distance * 2) / 2;
@@ -548,6 +548,7 @@ export const SEQUENCING_RULES = {
 // Helpers
 // ═══════════════════════════════════════════════════════════════
 
-function isDeloadWeek(weekNumber) {
+function isDeloadWeek(weekNumber, totalWeeks) {
+  if (totalWeeks && totalWeeks <= 5) return false;
   return weekNumber > 1 && weekNumber % 4 === 0;
 }

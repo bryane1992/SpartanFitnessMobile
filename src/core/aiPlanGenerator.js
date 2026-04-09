@@ -631,8 +631,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         for (let i = 0; i < compoundIds.length; i++) {
           const ex = exerciseById[compoundIds[i]];
           if (!ex) continue;
-          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets);
-          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights, userProfile.sex);
+          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets, totalWeeks);
+          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights, userProfile.sex, totalWeeks);
           const rest = getRestForPhase(displayPhase, true);
           // Near-cap strategy: if weight is close to equipment max, add tempo/AMRAP notes
           // Check equipment ceiling: barbell max for barbell exercises, DB max for dumbbell exercises
@@ -835,8 +835,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         for (let i = 0; i < accIds.length; i++) {
           const ex = exerciseById[accIds[i]];
           if (!ex) continue;
-          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets);
-          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights, userProfile.sex);
+          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets, totalWeeks);
+          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights, userProfile.sex, totalWeeks);
           await savePlanExercise({ planBlockId: accBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: '45-60s', notes: null });
           usedToday.add(ex.id); recentlyUsed.add(ex.id);
         }
@@ -870,8 +870,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         for (let i = 0; i < armIds.length; i++) {
           const ex = exerciseById[armIds[i]];
           if (!ex) continue;
-          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets);
-          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights, userProfile.sex);
+          const { sets, reps } = calculateSetsReps(ex, week, displayPhase, bodyCompGoal, sessionMinutes, bt.sets, totalWeeks);
+          const weight = calculateWeight(ex, week, displayPhase, bodyCompGoal, userProfile.experience, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights, userProfile.sex, totalWeeks);
           await savePlanExercise({ planBlockId: armBlockId, exerciseId: ex.id, sortOrder: i, sets: `${sets}x${reps}`, reps: `${reps}`, weight, rest: '30-45s', notes: null });
         }
       }
