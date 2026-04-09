@@ -919,9 +919,9 @@ function calculateBlockTimes(sessionMinutes, dayConfig, archetypeKey) {
       sets: 3, mainLiftCount: 2, accessoryCount: 0, coreCount: 2, warmupCount: 3, rest: '45-60s' };
   } else {
     // Pure lifting day (no WOD, no run): 3 main lifts + accessories + core + arms
-    const armTime = wantArms ? 8 : 0;
-    bt = { warmup: 8, mainLifts: 25, wod: 0, accessories: 8, armBlaster: armTime, core: 8, cooldown: 5,
-      sets: 3, mainLiftCount: 3, accessoryCount: 2, coreCount: 3, warmupCount: 3, rest: '45-60s' };
+    const armTime = wantArms ? 6 : 0;
+    bt = { warmup: 5, mainLifts: 25, wod: 0, accessories: 8, armBlaster: armTime, core: 5, cooldown: 5,
+      sets: 3, mainLiftCount: 3, accessoryCount: 2, coreCount: 2, warmupCount: 2, rest: '45-60s' };
   }
 
   // ── Scale for session duration ──
@@ -934,10 +934,11 @@ function calculateBlockTimes(sessionMinutes, dayConfig, archetypeKey) {
     bt.armBlaster = 0; bt.accessories = 0; bt.accessoryCount = 0;
     bt.rest = '30-60s';
   } else if (sessionMinutes >= 90) {
+    // 90 min: more rest between sets, 4 sets per exercise, but same exercise count
     bt.sets = 4; bt.rest = '90-120s';
-    bt.warmup = 10; bt.warmupCount = 4;
-    if (!hasWod && !hasRun) { bt.mainLiftCount = 3; bt.accessoryCount = 2; bt.accessories = 10; }
-    bt.core = 6; bt.coreCount = 2; // 2 core exercises, not 3-4
+    bt.warmup = 8; bt.warmupCount = 3;
+    if (!hasWod && !hasRun) { bt.mainLiftCount = 3; bt.accessoryCount = 2; bt.accessories = 12; }
+    bt.core = 5; bt.coreCount = 2;
   } else if (sessionMinutes >= 75) {
     bt.sets = 4; bt.rest = '60-90s';
     if (!hasWod && !hasRun) { bt.mainLiftCount = 3; bt.accessoryCount = 2; bt.accessories = 10; }
