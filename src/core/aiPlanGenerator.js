@@ -1151,7 +1151,22 @@ function buildWodExercises(wod, equipmentDetails, workingWeights, experience) {
     }
     usedIds.add(exerciseId);
     console.log(`[WOD] ${wod.name}: "${movement}" → ${exerciseId} (reps: ${parsed.reps})`);
-    let weight = parsed.weight || wod.rxWeight || 'BW';
+    let weight = parsed.weight || wod.rxWeight;
+    // If no weight specified but it's a barbell exercise, estimate from working weights
+    if (!weight || weight === 'BW') {
+      const isBarbell = /clean|jerk|snatch|deadlift|squat|press|thruster/i.test(exerciseId);
+      if (isBarbell && workingWeights) {
+        const ww = workingWeights.squat || workingWeights.deadlift || workingWeights.bench;
+        if (ww) {
+          const wodWeight = Math.round(parseFloat(ww) * 0.55 / 5) * 5; // 55% for conditioning
+          weight = `${wodWeight} lb`;
+        } else {
+          weight = 'BW';
+        }
+      } else {
+        weight = 'BW';
+      }
+    }
     // Strip non-weight parentheticals like "(max reps)", "(each arm)", "(alternating)"
     if (weight && !/\d/.test(weight)) weight = 'BW';
     weight = scaleWodWeight(weight, exerciseId, equipmentDetails, workingWeights, experience);
