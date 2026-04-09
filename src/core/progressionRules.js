@@ -196,9 +196,16 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
   const phaseKey = phase === 'race_prep' ? 'race_prep' : phase === 'peak' ? 'peak' : phase === 'build' ? 'build' : 'foundation';
   const phaseIntensity = PHASE_INTENSITY[phaseKey]?.[category] || 0.70;
 
-  // Step 4: Weekly progression — cumulative across ALL weeks (not reset per phase)
-  // Compounds: +2% per week, Isolation: +1% per week
-  const weeklyBump = isCompound ? 0.02 : 0.01;
+  // Step 4: Weekly progression — scaled by experience level
+  // Beginner: +2.5%/week (fast gains), Intermediate: +1.5%/week, Advanced: +1%/week (slow gains)
+  const EXP_BUMP = {
+    beginner:     { compound: 0.025, isolation: 0.015 },
+    intermediate: { compound: 0.015, isolation: 0.010 },
+    advanced:     { compound: 0.010, isolation: 0.005 },
+    elite:        { compound: 0.008, isolation: 0.004 },
+  };
+  const expBumps = EXP_BUMP[experience] || EXP_BUMP.intermediate;
+  const weeklyBump = isCompound ? expBumps.compound : expBumps.isolation;
   const progressionMultiplier = 1 + ((weekNumber - 1) * weeklyBump);
 
   // Step 5: Experience multiplier (only when no working weights)
