@@ -178,8 +178,9 @@ function buildPlanSummary(planDays, profile) {
         if (exercises.length > 0) {
           blockSummaries.push(`[${block.name || block.type}] ${exercises.join(', ')}`);
         }
+      }
+      lines.push(`  ${day.title || 'Training'}: ${blockSummaries.join(' | ')}`);
     }
-    lines.push(`  ${day.title || 'Training'}: ${blockSummaries.join(' | ')}`);
   }
 
   return lines.join('\n');
