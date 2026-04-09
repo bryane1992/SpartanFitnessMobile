@@ -198,13 +198,13 @@ export async function generateAIPlan(userProfile, onStatus) {
 
   if (onStatus) onStatus('Designing your program...');
 
-  // Step 6: Claude picks exercises from menu
+  // Step 6: Claude picks exercises from menu — no fallback, fail fast
   let claudeSelections;
   try {
     claudeSelections = await callClaudeV5(apiKey, userProfile, archetype, exerciseMenu, wodMenu, dayConfigs, raceReqs);
   } catch (err) {
-    console.warn('[AI Plan] Claude call failed, using defaults:', err.message);
-    claudeSelections = buildDefaultSelections(dayConfigs, exerciseMenu, wodMenu, archetype);
+    console.error('[AI Plan] Claude call failed:', err.message);
+    throw new Error('Plan generation failed — please try again. (' + err.message + ')');
   }
 
   if (onStatus) onStatus('Building your workouts...');
