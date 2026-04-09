@@ -273,17 +273,29 @@ export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanG
 
   // Push/Pull/Legs — hypertrophy
   if (splitModel === 'push_pull_legs') {
+    if (daysPerWeek >= 6) {
+      // PPL x2 — each muscle group 2x/week
+      return [
+        { type: 'push_a', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true, core_block: true },
+        { type: 'pull_a', primary_patterns: ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, core_block: true },
+        { type: 'legs_a', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat', 'hinge'], arm_finisher: false, core_block: true },
+        { type: 'push_b', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true, core_block: true },
+        { type: 'pull_b', primary_patterns: ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, core_block: true },
+        { type: 'legs_b', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat', 'hinge'], arm_finisher: false, core_block: true },
+      ];
+    }
     const base = [
       { type: 'push', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true },
       { type: 'pull', primary_patterns: ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true },
-      { type: 'legs', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['core'], core_block: true },
+      { type: 'legs', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat', 'hinge'], arm_finisher: false, core_block: true },
     ];
     if (daysPerWeek >= 5) {
-      return [...base, { type: 'push_b', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true },
+      return [...base,
+        { type: 'push_b', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true },
         { type: 'pull_b', primary_patterns: ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true }];
     }
     if (daysPerWeek >= 4) {
-      return [...base, { type: 'legs_b', primary_patterns: ['squat', 'hinge'], secondary_patterns: [], wod: { type: 'AMRAP' } }];
+      return [...base, { type: 'legs_b', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat', 'hinge'], arm_finisher: false, core_block: true }];
     }
     return base;
   }
