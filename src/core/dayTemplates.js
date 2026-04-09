@@ -274,7 +274,25 @@ export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanG
   // Push/Pull/Legs — hypertrophy
   if (splitModel === 'push_pull_legs') {
     if (daysPerWeek >= 6) {
-      // PPL x2 — each muscle group 2x/week
+      // Check if bulk/hypertrophy goals warrant extra leg volume
+      const isBulk = goals.some(g => /muscle|bulk|huge|size|hypertrophy/i.test(g));
+      const bodyCompBulk = archetype?.bodyCompGoal === 'bulk' || goals.includes('build_muscle');
+
+      if (isBulk || bodyCompBulk) {
+        // Hypertrophy 6-day: Chest / Back / Legs(Quad) / Shoulders+Arms / Legs(Posterior) / Back
+        // Legs 2x with distinct focus (quad day + posterior day), back 2x, chest 1x, shoulders 1x
+        // Total push 2x (chest + shoulders), pull 2x (back x2), legs 2x (quad + posterior)
+        return [
+          { type: 'chest', primary_patterns: ['horizontal_push'], secondary_patterns: ['horizontal_push'], arm_finisher: true, core_block: true },
+          { type: 'back_width', primary_patterns: ['vertical_pull', 'horizontal_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, core_block: true },
+          { type: 'legs_quad', primary_patterns: ['squat'], secondary_patterns: ['squat'], arm_finisher: false, core_block: true },
+          { type: 'shoulders_arms', primary_patterns: ['vertical_push'], secondary_patterns: ['elbow_extension', 'elbow_flexion'], arm_finisher: true, core_block: true },
+          { type: 'legs_posterior', primary_patterns: ['hinge'], secondary_patterns: ['hinge', 'squat'], arm_finisher: false, core_block: true },
+          { type: 'back_thickness', primary_patterns: ['horizontal_pull'], secondary_patterns: ['vertical_pull', 'elbow_flexion'], arm_finisher: true, core_block: true },
+        ];
+      }
+
+      // Standard PPL x2
       return [
         { type: 'push_a', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true, core_block: true },
         { type: 'pull_a', primary_patterns: ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, core_block: true },
