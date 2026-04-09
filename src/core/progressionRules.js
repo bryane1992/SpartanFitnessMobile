@@ -188,10 +188,10 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
   // Race prep: taper is volume (fewer sets/accessories), NOT load
   // Weights hold near peak — 85% 1RM with 3x5 = reduced volume, maintained intensity
   const PHASE_INTENSITY = {
-    foundation: { compound: 0.70, isolation: 0.60 },
-    build:      { compound: 0.80, isolation: 0.70 },
-    peak:       { compound: 0.90, isolation: 0.80 },
-    race_prep:  { compound: 0.85, isolation: 0.70 },
+    foundation: { compound: 0.78, isolation: 0.65 },
+    build:      { compound: 0.83, isolation: 0.75 },
+    peak:       { compound: 0.90, isolation: 0.82 },
+    race_prep:  { compound: 0.85, isolation: 0.75 },
   };
   const phaseKey = phase === 'race_prep' ? 'race_prep' : phase === 'peak' ? 'peak' : phase === 'build' ? 'build' : 'foundation';
   const phaseIntensity = PHASE_INTENSITY[phaseKey]?.[category] || 0.70;
@@ -458,6 +458,7 @@ function getUserBaseWeight(exercise, workingWeights) {
   if (/romanian|rdl|stiff/i.test(name)) return dl * 0.65 || null;
   if (/trap\s*bar/i.test(name)) return dl * 0.95 || null;
   if (/hip\s*thrust/i.test(name)) return dl * 0.80 || null;
+  if (/good\s*morning/i.test(name)) return dl * 0.45 || null;
   if (/kb.*swing|kettlebell.*swing/i.test(name)) return dl * 0.35 || null;
 
   // Overhead variants
@@ -469,6 +470,8 @@ function getUserBaseWeight(exercise, workingWeights) {
   // Row variants
   if (/db.*row|dumbbell.*row/i.test(name)) return row * 0.55 || null;
   if (/cable.*row|seated.*row/i.test(name)) return row * 0.80 || null;
+  if (/chest.*supported.*row|seal.*row/i.test(name)) return row * 0.50 || null; // per hand
+  if (/machine.*row/i.test(name)) return row * 0.90 || null;
   if (/inverted/i.test(name)) return null; // bodyweight
 
   // Olympic lifts — scale from deadlift

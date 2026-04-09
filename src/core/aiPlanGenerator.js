@@ -507,7 +507,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       }
 
       // ── COMPOUNDS — expand pool, filter out non-compound exercises ──
-      const NEVER_MAIN_LIFT = /plank|dead.?bug|bird.?dog|v.?up|sit.?up|mountain.?climb|russian.?twist|cable.?wood|pallof|wall.?ball|ball.?slam|battle.?rope|lunge.?matrix|cossack|dead.?hang|farmer.?walk|cat.?cow|child.?pose|cobra|superman|stretch|circles|clam|hydrant|wall.?angel|pull.?apart/i;
+      const NEVER_MAIN_LIFT = /plank|dead.?bug|bird.?dog|v.?up|sit.?up|mountain.?climb|russian.?twist|cable.?wood|pallof|wall.?ball|ball.?slam|battle.?rope|lunge.?matrix|cossack|dead.?hang|farmer.?walk|cat.?cow|child.?pose|cobra|superman|stretch|circles|clam|hydrant|wall.?angel|pull.?apart|face.?pull|lateral.?raise|reverse.?fly|cable.?fly|chest.?fly|curl|tricep|pushdown|kickback|extension/i;
       const rawCompoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig, archetype, week);
       const allowedDayPatterns = new Set([...(dayConfig.primary_patterns || []), ...(dayConfig.secondary_patterns || [])]);
       const compoundPool = rawCompoundPool.filter(id => {
