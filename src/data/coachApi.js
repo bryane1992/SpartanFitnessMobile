@@ -12,7 +12,7 @@ const BUNDLED_API_KEY = Constants.expoConfig?.extra?.claudeApiKey
   || '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';
 
 // System prompt cached across all conversations
-const SYSTEM_PROMPT = `Concise AI fitness coach. Under 3 sentences unless explaining form. Direct and actionable. NEVER use markdown formatting (no **, ##, *, _, etc.) — responses render as plain text.
+const SYSTEM_PROMPT = `Brief AI fitness coach. 1-2 sentences max unless explaining form. No fluff, no options lists, no numbered choices — just answer directly. NEVER use markdown formatting (no **, ##, *, _, etc.). NEVER show exercise IDs, plan IDs, or database references to the user — those are internal only.
 
 Never diagnose injuries — suggest modifications, recommend medical professional for sharp/persistent pain.
 Swap exercises ONLY from SWAP OPTIONS with exact IDs. Never invent IDs. Never swap to different muscle group.

@@ -504,10 +504,12 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         await executeActions([option.action]);
       }
 
-      // Remove options from this message (already chosen)
-      setMessages(prev => prev.map((m, i) =>
-        i === msgIndex ? { ...m, options: [], chosenOption: option.label } : m
-      ));
+      // Remove only the chosen option — keep remaining options so user can pick more
+      setMessages(prev => prev.map((m, i) => {
+        if (i !== msgIndex) return m;
+        const remaining = (m.options || []).filter(o => o.label !== option.label);
+        return { ...m, options: remaining, chosenOption: (m.chosenOption ? m.chosenOption + ', ' : '') + option.label };
+      }));
 
       // Close coach after WOD swap or exercise swap — but NOT for injury modifications (user may have more to modify)
       if ((option.action?.type === 'swapWod' || option.action?.type === 'swap') && !option.fromInjury) {
