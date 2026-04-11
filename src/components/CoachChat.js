@@ -182,21 +182,34 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         options: response.options || [],
       }]);
 
-      // Execute immediate actions AFTER state update (loadTodayWorkout can cause re-render)
+      // Detect injury keywords in user's message BEFORE executing actions
+      const userText = text.toLowerCase();
+      const injuryMatch = userText.match(/(?:my|hurt|pain|sore|injured|tweaked|pulled|strained)\s*(\w+)/i)
+        || userText.match(/(shoulder|knee|back|wrist|elbow|hip|ankle|neck|chest)\s*(?:hurt|pain|sore|injured)/i);
+      const isInjuryConversation = !!injuryMatch;
+
+      // Execute immediate actions — but suppress modify actions during injury conversations
+      // (let the user pick from option buttons instead of Claude auto-swapping)
       if (response.actions && response.actions.length > 0) {
         try {
-          await executeActions(response.actions);
+          if (isInjuryConversation) {
+            // Only execute flagInjury, skip swap/adjustWeight/addNote/remove — buttons handle those
+            const safeActions = response.actions.filter(a => {
+              const t = (a.type || '').toLowerCase();
+              return t === 'flaginjury';
+            });
+            if (safeActions.length > 0) await executeActions(safeActions);
+            console.log(`[AI Coach] Injury conversation — suppressed ${response.actions.length - safeActions.length} auto-actions, showing buttons instead`);
+          } else {
+            await executeActions(response.actions);
+          }
         } catch (actionErr) {
           console.error('[AI Coach] Action execution failed:', actionErr);
         }
       }
 
-      // Client-side injury detection — if user mentioned pain/injury but Claude didn't
-      // send flagInjury, generate option buttons anyway so user always gets tappable choices
+      // Generate injury option buttons
       const hadInjuryAction = (response.actions || []).some(a => (a.type || '').toLowerCase() === 'flaginjury');
-      const userText = text.toLowerCase();
-      const injuryMatch = userText.match(/(?:my|hurt|pain|sore|injured|tweaked|pulled|strained)\s*(\w+)/i)
-        || userText.match(/(shoulder|knee|back|wrist|elbow|hip|ankle|neck|chest)\s*(?:hurt|pain|sore|injured)/i);
       if (!hadInjuryAction && injuryMatch && workout?.blocks) {
         const bodyPart = (injuryMatch[1] || '').toLowerCase();
         const targetMuscles = BODY_PART_MUSCLES[bodyPart] || [bodyPart];
