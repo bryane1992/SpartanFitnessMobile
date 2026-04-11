@@ -413,12 +413,17 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
                 }
 
                 if (mountedRef.current) {
-                  setMessages(prev => [...prev, {
-                    role: 'assistant',
-                    content: `Found ${affected.length} exercise${affected.length > 1 ? 's' : ''} targeting your ${bodyPart}. Pick how to modify:`,
-                    actions: [],
-                    options: injuryOptions,
-                  }]);
+                  // Merge injury options into the last assistant message as button cards
+                  setMessages(prev => {
+                    const updated = [...prev];
+                    const lastIdx = updated.length - 1;
+                    if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+                      updated[lastIdx] = { ...updated[lastIdx], options: [...(updated[lastIdx].options || []), ...injuryOptions] };
+                    } else {
+                      updated.push({ role: 'assistant', content: `Found ${affected.length} exercise${affected.length > 1 ? 's' : ''} targeting your ${bodyPart}:`, actions: [], options: injuryOptions });
+                    }
+                    return updated;
+                  });
                 }
               }
             }
