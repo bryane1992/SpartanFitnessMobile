@@ -32,7 +32,7 @@ Actions: swap(planExerciseId,newExerciseId,reason), adjustWeight(planExerciseId,
 Options: ALWAYS present 2-3 options for swaps, removals, injuries, AND WOD changes so the user can choose. Format: {"label":"WOD Name","description":"why this WOD is better","recommended":bool,"action":{"type":"swapWod","planBlockId":"id","newWodId":"wod_id","reason":"why"}}
 When user wants a different WOD, suggest 2-3 alternatives from the AVAILABLE WODS list.`;
 
-// Strip markdown formatting — chat UI renders plain text
+// Strip markdown + internal IDs from responses — chat UI renders plain text
 function stripMarkdown(text) {
   if (!text) return '';
   return text
@@ -42,7 +42,13 @@ function stripMarkdown(text) {
     .replace(/_([^_]+)_/g, '$1')        // _italic_ → italic
     .replace(/^#{1,4}\s+/gm, '')        // ## heading → heading
     .replace(/^[-*]\s+/gm, '- ')        // keep list dashes clean
-    .replace(/`([^`]+)`/g, '$1');       // `code` → code
+    .replace(/`([^`]+)`/g, '$1')        // `code` → code
+    .replace(/\s*\(id:\s*\d+\)/gi, '')  // (id:24943) → removed
+    .replace(/\s*\(planExerciseId:\s*\d+\)/gi, '') // (planExerciseId:123) → removed
+    .replace(/\bid:\s*\d+\b/gi, '')     // id:24943 → removed
+    .replace(/\s*\([a-z_]+\)/g, '')     // (bench_press) exercise IDs → removed
+    .replace(/\s{2,}/g, ' ')            // collapse double spaces
+    .trim();
 }
 
 // Sanitize user input — cap length, strip weird chars

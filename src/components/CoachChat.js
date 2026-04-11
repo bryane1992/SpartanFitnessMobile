@@ -190,6 +190,65 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
           console.error('[AI Coach] Action execution failed:', actionErr);
         }
       }
+
+      // Client-side injury detection — if user mentioned pain/injury but Claude didn't
+      // send flagInjury, generate option buttons anyway so user always gets tappable choices
+      const hadInjuryAction = (response.actions || []).some(a => (a.type || '').toLowerCase() === 'flaginjury');
+      const userText = text.toLowerCase();
+      const injuryMatch = userText.match(/(?:my|hurt|pain|sore|injured|tweaked|pulled|strained)\s*(\w+)/i)
+        || userText.match(/(shoulder|knee|back|wrist|elbow|hip|ankle|neck|chest)\s*(?:hurt|pain|sore|injured)/i);
+      if (!hadInjuryAction && injuryMatch && workout?.blocks) {
+        const bodyPart = (injuryMatch[1] || '').toLowerCase();
+        const targetMuscles = BODY_PART_MUSCLES[bodyPart] || [bodyPart];
+        if (targetMuscles.length > 0) {
+          // Find affected exercises
+          const affected = [];
+          for (const block of (workout.blocks || [])) {
+            for (const ex of (block.exercises || [])) {
+              if (ex.is_completed) continue;
+              const mg = (ex.muscle_group || '').toLowerCase();
+              let secondary = [];
+              try { secondary = JSON.parse(ex.secondary_muscles || '[]').map(s => s.toLowerCase()); } catch {}
+              if (typeof ex.secondary_muscles === 'string' && !ex.secondary_muscles.startsWith('[')) {
+                secondary = ex.secondary_muscles.split(',').map(s => s.trim().toLowerCase());
+              }
+              const allMuscles = [mg, ...secondary];
+              if (targetMuscles.some(t => allMuscles.some(m => m.includes(t) || t.includes(m)))) {
+                affected.push(ex);
+              }
+            }
+          }
+          if (affected.length > 0 && mountedRef.current) {
+            const injuryOptions = [];
+            for (const ex of affected.slice(0, 3)) {
+              const currentWeight = parseFloat(ex.weight) || 0;
+              const reducedWeight = Math.round((currentWeight * 0.5) / 5) * 5;
+              if (currentWeight > 0) {
+                injuryOptions.push({ label: `Lighten ${ex.name} to ${reducedWeight} lb`, description: `50% reduction for ${bodyPart} safety`, recommended: true, fromInjury: true, action: { type: 'adjustWeight', planExerciseId: String(ex.id), newWeight: String(reducedWeight), reason: `Reduced for ${bodyPart} injury` } });
+              }
+              try {
+                const { getAlternatives } = require('../data/database');
+                const alts = await getAlternatives(ex.exercise_id, parsedProfile);
+                const safeAlt = (alts || []).find(a => { const aMg = (a.muscle_group || '').toLowerCase(); return !targetMuscles.some(t => aMg.includes(t) || t.includes(aMg)); });
+                if (safeAlt) {
+                  injuryOptions.push({ label: `Swap ${ex.name} for ${safeAlt.name}`, description: `Avoids ${bodyPart}`, fromInjury: true, action: { type: 'swap', planExerciseId: String(ex.id), newExerciseId: safeAlt.id, reason: `Swapped to avoid ${bodyPart} injury` } });
+                }
+              } catch {}
+              injuryOptions.push({ label: `Skip ${ex.name} today`, description: 'Remove from workout', fromInjury: true, action: { type: 'removeExercise', planExerciseId: String(ex.id), reason: `Skipped due to ${bodyPart} injury` } });
+            }
+            if (injuryOptions.length > 0) {
+              setMessages(prev => {
+                const updated = [...prev];
+                const lastIdx = updated.length - 1;
+                if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+                  updated[lastIdx] = { ...updated[lastIdx], options: [...(updated[lastIdx].options || []), ...injuryOptions] };
+                }
+                return updated;
+              });
+            }
+          }
+        }
+      }
     } catch (e) {
       console.error('Coach error:', e);
       if (!mountedRef.current) return;
