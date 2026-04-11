@@ -370,55 +370,48 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
               }
 
               if (affected.length > 0) {
+                // Show options for the first affected exercise only — keep it simple
+                const ex = affected[0];
                 const injuryOptions = [];
-                for (const ex of affected.slice(0, 3)) { // cap at 3 exercises to avoid option overload
-                  const currentWeight = parseFloat(ex.weight) || 0;
-                  const reducedWeight = Math.round((currentWeight * 0.5) / 5) * 5;
+                const currentWeight = parseFloat(ex.weight) || 0;
+                const reducedWeight = Math.round((currentWeight * 0.5) / 5) * 5;
 
-                  if (currentWeight > 0) {
-                    injuryOptions.push({
-                      label: `Lighten ${ex.name} to ${reducedWeight} lb`,
-                      description: `50% reduction for ${bodyPart} safety`,
-                      recommended: true,
-                      fromInjury: true,
-                      action: { type: 'adjustWeight', planExerciseId: String(ex.id), newWeight: String(reducedWeight), reason: `Reduced for ${bodyPart} injury` },
-                    });
-                  }
-
+                if (currentWeight > 0) {
                   injuryOptions.push({
-                    label: `Modify ${ex.name} (slow tempo)`,
-                    description: 'Partial ROM, 3-sec eccentric, stop if pain',
+                    label: `Lighten ${ex.name} to ${reducedWeight} lb`,
+                    description: `50% reduction for ${bodyPart} safety`,
+                    recommended: true,
                     fromInjury: true,
-                    action: { type: 'addNote', planExerciseId: String(ex.id), note: `${bodyPart} injury: Partial ROM, 3-sec eccentric, stop if pain` },
-                  });
-
-                  // Swap option — find an alternative that doesn't target the injured area
-                  try {
-                    const { getAlternatives } = require('../data/database');
-                    const profileStr = await AsyncStorage.getItem('userProfile');
-                    const prof = profileStr ? JSON.parse(profileStr) : null;
-                    const alts = await getAlternatives(ex.exercise_id, prof);
-                    const safeAlt = (alts || []).find(a => {
-                      const aMg = (a.muscle_group || '').toLowerCase();
-                      return !targetMuscles.some(t => aMg.includes(t) || t.includes(aMg));
-                    });
-                    if (safeAlt) {
-                      injuryOptions.push({
-                        label: `Swap ${ex.name} for ${safeAlt.name}`,
-                        description: `Avoids ${bodyPart} — different muscle group`,
-                        fromInjury: true,
-                        action: { type: 'swap', planExerciseId: String(ex.id), newExerciseId: safeAlt.id, reason: `Swapped to avoid ${bodyPart} injury` },
-                      });
-                    }
-                  } catch {}
-
-                  injuryOptions.push({
-                    label: `Skip ${ex.name} today`,
-                    description: 'Remove from this workout',
-                    fromInjury: true,
-                    action: { type: 'removeExercise', planExerciseId: String(ex.id), reason: `Skipped due to ${bodyPart} injury` },
+                    action: { type: 'adjustWeight', planExerciseId: String(ex.id), newWeight: String(reducedWeight), reason: `Reduced for ${bodyPart} injury` },
                   });
                 }
+
+                // Swap option — find an alternative that doesn't target the injured area
+                try {
+                  const { getAlternatives } = require('../data/database');
+                  const profileStr = await AsyncStorage.getItem('userProfile');
+                  const prof = profileStr ? JSON.parse(profileStr) : null;
+                  const alts = await getAlternatives(ex.exercise_id, prof);
+                  const safeAlt = (alts || []).find(a => {
+                    const aMg = (a.muscle_group || '').toLowerCase();
+                    return !targetMuscles.some(t => aMg.includes(t) || t.includes(aMg));
+                  });
+                  if (safeAlt) {
+                    injuryOptions.push({
+                      label: `Swap for ${safeAlt.name}`,
+                      description: `Replaces ${ex.name} — avoids ${bodyPart}`,
+                      fromInjury: true,
+                      action: { type: 'swap', planExerciseId: String(ex.id), newExerciseId: safeAlt.id, reason: `Swapped to avoid ${bodyPart} injury` },
+                    });
+                  }
+                } catch {}
+
+                injuryOptions.push({
+                  label: `Skip ${ex.name} today`,
+                  description: 'Remove from this workout',
+                  fromInjury: true,
+                  action: { type: 'removeExercise', planExerciseId: String(ex.id), reason: `Skipped due to ${bodyPart} injury` },
+                });
 
                 if (mountedRef.current) {
                   setMessages(prev => [...prev, {
@@ -571,20 +564,10 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
                 <Text style={[styles.msgText, msg.role === 'user' ? styles.msgTextUser : styles.msgTextAssistant]}>
                   {msg.content}
                 </Text>
-                {msg.actions && msg.actions.length > 0 ? (
-                  <View style={styles.actionsList}>
-                    {msg.actions.filter(a => a && a.type).map((a, j) => (
-                      <View key={j} style={styles.actionCard}>
-                        <Text style={styles.actionType}>{String(a.type || '').toUpperCase()}</Text>
-                        <Text style={styles.actionReason}>{String(a.reason || a.bodyPart || a.note || a.newWeight || 'Done')}</Text>
-                      </View>
-                    ))}
-                    {i === messages.length - 1 && undoStack.length > 0 ? (
-                      <TouchableOpacity style={styles.undoButton} onPress={undoLastAction}>
-                        <Text style={styles.undoButtonText}>UNDO</Text>
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
+                {i === messages.length - 1 && undoStack.length > 0 ? (
+                  <TouchableOpacity style={styles.undoButton} onPress={undoLastAction}>
+                    <Text style={styles.undoButtonText}>UNDO</Text>
+                  </TouchableOpacity>
                 ) : null}
                 {msg.options && msg.options.length > 0 ? (
                   <View style={styles.optionsList}>
