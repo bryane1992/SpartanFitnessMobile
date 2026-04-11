@@ -237,6 +237,14 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         ?.flatMap(b => b.exercises || [])
         .find(e => e.id === peId);
 
+      // When flagInjury is in the actions list, skip other modify actions (addNote, adjustWeight, adjustReps)
+      // Our injury auto-modify system generates proper option cards for the user to choose from
+      const hasInjuryFlag = actions.some(a => (a.type || '').toLowerCase() === 'flaginjury' || a.flagInjury);
+      if (hasInjuryFlag && ['addNote', 'adjustWeight', 'adjustReps', 'removeExercise'].includes(action.type)) {
+        console.log(`[AI Coach] Skipping ${action.type} — injury option cards will handle modifications`);
+        continue;
+      }
+
       console.log('[AI Coach] Executing action:', action.type, action);
       try {
         switch (action.type) {
@@ -383,6 +391,26 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
                     fromInjury: true,
                     action: { type: 'addNote', planExerciseId: String(ex.id), note: `${bodyPart} injury: Partial ROM, 3-sec eccentric, stop if pain` },
                   });
+
+                  // Swap option — find an alternative that doesn't target the injured area
+                  try {
+                    const { getAlternatives } = require('../data/database');
+                    const profileStr = await AsyncStorage.getItem('userProfile');
+                    const prof = profileStr ? JSON.parse(profileStr) : null;
+                    const alts = await getAlternatives(ex.exercise_id, prof);
+                    const safeAlt = (alts || []).find(a => {
+                      const aMg = (a.muscle_group || '').toLowerCase();
+                      return !targetMuscles.some(t => aMg.includes(t) || t.includes(aMg));
+                    });
+                    if (safeAlt) {
+                      injuryOptions.push({
+                        label: `Swap ${ex.name} for ${safeAlt.name}`,
+                        description: `Avoids ${bodyPart} — different muscle group`,
+                        fromInjury: true,
+                        action: { type: 'swap', planExerciseId: String(ex.id), newExerciseId: safeAlt.id, reason: `Swapped to avoid ${bodyPart} injury` },
+                      });
+                    }
+                  } catch {}
 
                   injuryOptions.push({
                     label: `Skip ${ex.name} today`,
