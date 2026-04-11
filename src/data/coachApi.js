@@ -12,7 +12,7 @@ const BUNDLED_API_KEY = Constants.expoConfig?.extra?.claudeApiKey
   || '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';
 
 // System prompt cached across all conversations
-const SYSTEM_PROMPT = `Concise AI fitness coach. Under 3 sentences unless explaining form. Direct and actionable.
+const SYSTEM_PROMPT = `Concise AI fitness coach. Under 3 sentences unless explaining form. Direct and actionable. NEVER use markdown formatting (no **, ##, *, _, etc.) — responses render as plain text.
 
 Never diagnose injuries — suggest modifications, recommend medical professional for sharp/persistent pain.
 Swap exercises ONLY from SWAP OPTIONS with exact IDs. Never invent IDs. Never swap to different muscle group.
@@ -31,6 +31,19 @@ RESPONSE: Plain text for questions/advice. JSON ONLY when performing actions:
 Actions: swap(planExerciseId,newExerciseId,reason), adjustWeight(planExerciseId,newWeight,reason), adjustReps(planExerciseId,newSets,newReps,reason), flagInjury(bodyPart,severity), removeExercise(planExerciseId,reason), addNote(planExerciseId,note), swapWod(planBlockId,newWodId,reason)
 Options: ALWAYS present 2-3 options for swaps, removals, injuries, AND WOD changes so the user can choose. Format: {"label":"WOD Name","description":"why this WOD is better","recommended":bool,"action":{"type":"swapWod","planBlockId":"id","newWodId":"wod_id","reason":"why"}}
 When user wants a different WOD, suggest 2-3 alternatives from the AVAILABLE WODS list.`;
+
+// Strip markdown formatting — chat UI renders plain text
+function stripMarkdown(text) {
+  if (!text) return '';
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')  // **bold** → bold
+    .replace(/\*([^*]+)\*/g, '$1')      // *italic* → italic
+    .replace(/__([^_]+)__/g, '$1')      // __bold__ → bold
+    .replace(/_([^_]+)_/g, '$1')        // _italic_ → italic
+    .replace(/^#{1,4}\s+/gm, '')        // ## heading → heading
+    .replace(/^[-*]\s+/gm, '- ')        // keep list dashes clean
+    .replace(/`([^`]+)`/g, '$1');       // `code` → code
+}
 
 // Sanitize user input — cap length, strip weird chars
 function sanitizeInput(text, maxLen = 500) {
@@ -116,7 +129,7 @@ export async function sendCoachMessage(apiKey, messages, context) {
         const parsed = JSON.parse(jsonCandidate);
         console.log('[AI Coach] JSON response with actions:', parsed.actions?.length || 0);
         return {
-          message: parsed.message || text,
+          message: stripMarkdown(parsed.message || text),
           actions: Array.isArray(parsed.actions) ? parsed.actions : [],
           options: Array.isArray(parsed.options) ? parsed.options : [],
         };
@@ -126,13 +139,13 @@ export async function sendCoachMessage(apiKey, messages, context) {
         console.warn('[AI Coach] JSON parse failed:', parseErr.message);
         const msgMatch = jsonCandidate.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
         if (msgMatch) {
-          return { message: msgMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'), actions: [], options: [] };
+          return { message: stripMarkdown(msgMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n')), actions: [], options: [] };
         }
       }
     }
 
     // Plain text response — no actions needed
-    return { message: text, actions: [], options: [] };
+    return { message: stripMarkdown(text), actions: [], options: [] };
   } catch (e) {
     clearTimeout(timer);
     if (e.name === 'AbortError') {
