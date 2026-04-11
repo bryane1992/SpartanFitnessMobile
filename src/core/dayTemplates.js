@@ -53,7 +53,7 @@ const WARMUP_POOLS = {
   lower: ['easy_jog', 'dynamic_stretching', 'air_squats', 'lunge_matrix', 'cossack_squats', 'samson_stretch'],
   upper: ['easy_jog', 'dynamic_stretching', 'push_up_to_t', 'pvc_pass_throughs', 'arm_circles', 'inchworm'],
   full: ['easy_jog', 'dynamic_stretching', 'air_squats', 'push_up_to_t', 'bear_crawl', 'high_knees'],
-  run: ['easy_jog', 'dynamic_stretching', 'a_skips', 'high_knees', 'strides', 'samson_stretch'],
+  run: ['easy_jog', 'dynamic_stretching', 'a_skips', 'high_knees', 'strides', 'tibialis_raise', 'calf_raise_bodyweight'],
 };
 
 // Cooldown stretches matched to trained patterns
@@ -376,7 +376,7 @@ export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanG
       hasSpartanGoal
         ? { type: 'sprint_conditioning', primary_patterns: [], secondary_patterns: [], run: { type: 'intervals', label: 'SPRINT INTERVALS' }, core_block: true, lowerStress: 'moderate' }
         : { type: 'full_body_c', primary_patterns: ['hinge', 'horizontal_push'], secondary_patterns: [], core_block: true, wod: { type: 'CIRCUIT' } },
-      { type: 'upper_pull', primary_patterns: hasSpartanGoal ? ['pull_up', 'horizontal_pull'] : ['horizontal_pull', pullPattern], secondary_patterns: ['elbow_flexion', 'hinge'], arm_finisher: wantArms, core_block: true, wod: { type: 'FOR TIME' } },
+      { type: 'upper_pull', primary_patterns: hasSpartanGoal ? ['pull_up', 'horizontal_pull'] : ['horizontal_pull', pullPattern], secondary_patterns: ['elbow_flexion'], arm_finisher: wantArms, core_block: true, wod: { type: 'FOR TIME' } },
       hasSpartanGoal
         ? { type: 'endurance', primary_patterns: hasSpartanGoal ? ['carry'] : [], secondary_patterns: [], run: { type: 'long_run', label: 'LONG RUN' }, core_block: true }
         : { type: 'lower_hypertrophy', primary_patterns: ['squat'], secondary_patterns: ['hinge'], core_block: true, wod: { type: 'AMRAP' }, lowerStress: 'heavy' },
