@@ -370,48 +370,47 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
               }
 
               if (affected.length > 0) {
-                // Show options for the first affected exercise only — keep it simple
-                const ex = affected[0];
                 const injuryOptions = [];
-                const currentWeight = parseFloat(ex.weight) || 0;
-                const reducedWeight = Math.round((currentWeight * 0.5) / 5) * 5;
+                for (const ex of affected.slice(0, 3)) {
+                  const currentWeight = parseFloat(ex.weight) || 0;
+                  const reducedWeight = Math.round((currentWeight * 0.5) / 5) * 5;
 
-                if (currentWeight > 0) {
-                  injuryOptions.push({
-                    label: `Lighten ${ex.name} to ${reducedWeight} lb`,
-                    description: `50% reduction for ${bodyPart} safety`,
-                    recommended: true,
-                    fromInjury: true,
-                    action: { type: 'adjustWeight', planExerciseId: String(ex.id), newWeight: String(reducedWeight), reason: `Reduced for ${bodyPart} injury` },
-                  });
-                }
-
-                // Swap option — find an alternative that doesn't target the injured area
-                try {
-                  const { getAlternatives } = require('../data/database');
-                  const profileStr = await AsyncStorage.getItem('userProfile');
-                  const prof = profileStr ? JSON.parse(profileStr) : null;
-                  const alts = await getAlternatives(ex.exercise_id, prof);
-                  const safeAlt = (alts || []).find(a => {
-                    const aMg = (a.muscle_group || '').toLowerCase();
-                    return !targetMuscles.some(t => aMg.includes(t) || t.includes(aMg));
-                  });
-                  if (safeAlt) {
+                  if (currentWeight > 0) {
                     injuryOptions.push({
-                      label: `Swap for ${safeAlt.name}`,
-                      description: `Replaces ${ex.name} — avoids ${bodyPart}`,
+                      label: `Lighten ${ex.name} to ${reducedWeight} lb`,
+                      description: `50% reduction for ${bodyPart} safety`,
+                      recommended: true,
                       fromInjury: true,
-                      action: { type: 'swap', planExerciseId: String(ex.id), newExerciseId: safeAlt.id, reason: `Swapped to avoid ${bodyPart} injury` },
+                      action: { type: 'adjustWeight', planExerciseId: String(ex.id), newWeight: String(reducedWeight), reason: `Reduced for ${bodyPart} injury` },
                     });
                   }
-                } catch {}
 
-                injuryOptions.push({
-                  label: `Skip ${ex.name} today`,
-                  description: 'Remove from this workout',
-                  fromInjury: true,
-                  action: { type: 'removeExercise', planExerciseId: String(ex.id), reason: `Skipped due to ${bodyPart} injury` },
-                });
+                  try {
+                    const { getAlternatives } = require('../data/database');
+                    const profileStr = await AsyncStorage.getItem('userProfile');
+                    const prof = profileStr ? JSON.parse(profileStr) : null;
+                    const alts = await getAlternatives(ex.exercise_id, prof);
+                    const safeAlt = (alts || []).find(a => {
+                      const aMg = (a.muscle_group || '').toLowerCase();
+                      return !targetMuscles.some(t => aMg.includes(t) || t.includes(aMg));
+                    });
+                    if (safeAlt) {
+                      injuryOptions.push({
+                        label: `Swap ${ex.name} for ${safeAlt.name}`,
+                        description: `Avoids ${bodyPart} — different muscle group`,
+                        fromInjury: true,
+                        action: { type: 'swap', planExerciseId: String(ex.id), newExerciseId: safeAlt.id, reason: `Swapped to avoid ${bodyPart} injury` },
+                      });
+                    }
+                  } catch {}
+
+                  injuryOptions.push({
+                    label: `Skip ${ex.name} today`,
+                    description: 'Remove from this workout',
+                    fromInjury: true,
+                    action: { type: 'removeExercise', planExerciseId: String(ex.id), reason: `Skipped due to ${bodyPart} injury` },
+                  });
+                }
 
                 if (mountedRef.current) {
                   setMessages(prev => [...prev, {
