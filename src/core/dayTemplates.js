@@ -235,13 +235,20 @@ export function buildDayBlocks(dayConfig, phase, sessionMinutes = 60) {
 // Get default day configs based on common training splits
 // ═══════════════════════════════════════════════════════════════
 
-export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanGoal, archetype) {
+export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanGoal, archetype, equipment) {
   const wantChest = goals.some(g => /chest|muscle|size|build_muscle/i.test(g));
   // Arms on by default — most users benefit from arm isolation work
   // Only skip for pure endurance archetypes with no strength goals
   const isEnduranceOnly = archetype?.splitModel === 'endurance_focused' && !goals.some(g => /muscle|strong|size/i.test(g));
   const wantArms = !isEnduranceOnly;
   const splitModel = archetype?.splitModel || 'full_body_3x';
+
+  // Check what pull patterns the user can actually do
+  // vertical_pull (pull-ups, lat pulldown) requires pull-up bar or machines
+  const equipSet = new Set((equipment || []).map(e => e.toLowerCase()));
+  const hasVerticalPull = equipSet.has('pull_up_bar') || equipSet.has('machines') || equipSet.has('cables');
+  // Use horizontal_pull (rows) when vertical_pull isn't available
+  const pullPattern = hasVerticalPull ? 'vertical_pull' : 'horizontal_pull';
 
   // Full Body 3-4x — for beginners, general fitness, fat loss
   if (splitModel === 'full_body_3x') {
@@ -257,15 +264,15 @@ export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanG
         { type: 'lower_a', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat'], core_block: true, wod },
         { type: 'upper_a', primary_patterns: ['horizontal_push', 'horizontal_pull'], secondary_patterns: [], arm_finisher: wantArms, core_block: true },
         { type: 'lower_b', primary_patterns: ['hinge', 'squat'], secondary_patterns: ['hinge'], core_block: true, wod },
-        { type: 'upper_b', primary_patterns: ['vertical_push', 'vertical_pull'], secondary_patterns: [], arm_finisher: wantArms, core_block: true },
+        { type: 'upper_b', primary_patterns: ['vertical_push', pullPattern], secondary_patterns: [], arm_finisher: wantArms, core_block: true },
       ];
     }
 
-    // 3 days: full body each day
+    // 3 days: full body each day — each day has a unique pattern pair
     const base = [
       { type: 'full_body_a', primary_patterns: ['squat', 'horizontal_push'], secondary_patterns: ['horizontal_pull'], arm_finisher: wantArms, core_block: true, wod },
       { type: 'full_body_b', primary_patterns: ['hinge', 'horizontal_pull'], secondary_patterns: ['vertical_push'], arm_finisher: wantArms, core_block: true },
-      { type: 'full_body_c', primary_patterns: ['horizontal_push', 'vertical_pull'], secondary_patterns: ['core'], core_block: true, wod },
+      { type: 'full_body_c', primary_patterns: ['vertical_push', pullPattern], secondary_patterns: ['core'], core_block: true, wod },
     ];
     return base.slice(0, daysPerWeek);
   }
@@ -278,7 +285,7 @@ export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanG
       { type: 'full_body_push', primary_patterns: ['squat', 'horizontal_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true, wod },
       { type: 'full_body_pull', primary_patterns: ['hinge', 'horizontal_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, wod },
       { type: 'full_body_legs', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['core'], core_block: true, wod },
-      { type: 'full_body_upper', primary_patterns: ['horizontal_push', 'vertical_pull'], secondary_patterns: ['carry'], arm_finisher: true, wod },
+      { type: 'full_body_upper', primary_patterns: ['horizontal_push', pullPattern], secondary_patterns: ['carry'], arm_finisher: true, wod },
       { type: 'full_body_metabolic', primary_patterns: ['hinge', 'horizontal_pull'], secondary_patterns: [], core_block: true, wod },
     ].slice(0, daysPerWeek);
   }
@@ -296,33 +303,34 @@ export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanG
         // Total push 2x (chest + shoulders), pull 2x (back x2), legs 2x (quad + posterior)
         return [
           { type: 'chest', primary_patterns: ['horizontal_push'], secondary_patterns: ['horizontal_push'], arm_finisher: true, core_block: true },
-          { type: 'back_width', primary_patterns: ['vertical_pull', 'horizontal_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, core_block: true },
+          { type: 'back_width', primary_patterns: [pullPattern, 'horizontal_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, core_block: true },
           { type: 'legs_quad', primary_patterns: ['squat'], secondary_patterns: ['squat'], arm_finisher: false, core_block: true },
           { type: 'shoulders_arms', primary_patterns: ['vertical_push'], secondary_patterns: ['elbow_extension', 'elbow_flexion'], arm_finisher: true, core_block: true },
           { type: 'legs_posterior', primary_patterns: ['hinge'], secondary_patterns: ['hinge', 'squat'], arm_finisher: false, core_block: true },
-          { type: 'back_thickness', primary_patterns: ['horizontal_pull'], secondary_patterns: ['vertical_pull', 'elbow_flexion'], arm_finisher: true, core_block: true },
+          { type: 'back_thickness', primary_patterns: ['horizontal_pull'], secondary_patterns: [pullPattern, 'elbow_flexion'], arm_finisher: true, core_block: true },
         ];
       }
 
       // Standard PPL x2
       return [
         { type: 'push_a', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true, core_block: true },
-        { type: 'pull_a', primary_patterns: ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, core_block: true },
+        { type: 'pull_a', primary_patterns: ['horizontal_pull', pullPattern], secondary_patterns: ['elbow_flexion'], arm_finisher: true, core_block: true },
         { type: 'legs_a', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat', 'hinge'], arm_finisher: false, core_block: true },
         { type: 'push_b', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true, core_block: true },
-        { type: 'pull_b', primary_patterns: ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, core_block: true },
+        { type: 'pull_b', primary_patterns: ['horizontal_pull', pullPattern], secondary_patterns: ['elbow_flexion'], arm_finisher: true, core_block: true },
         { type: 'legs_b', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat', 'hinge'], arm_finisher: false, core_block: true },
       ];
     }
     const base = [
       { type: 'push', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true },
-      { type: 'pull', primary_patterns: ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true },
+      { type: 'pull', primary_patterns: ['horizontal_pull', pullPattern], secondary_patterns: ['elbow_flexion'], arm_finisher: true },
       { type: 'legs', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat', 'hinge'], arm_finisher: false, core_block: true },
     ];
     if (daysPerWeek >= 5) {
+      // 5-day PPL: Push/Pull/Legs/Legs/Pull — 2 leg days for hypertrophy, 2 pull for back
       return [...base,
-        { type: 'push_b', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true },
-        { type: 'pull_b', primary_patterns: ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true }];
+        { type: 'legs_b', primary_patterns: ['hinge', 'squat'], secondary_patterns: ['hinge'], arm_finisher: false, core_block: true },
+        { type: 'pull_b', primary_patterns: ['horizontal_pull', pullPattern], secondary_patterns: ['elbow_flexion'], arm_finisher: true, core_block: true }];
     }
     if (daysPerWeek >= 4) {
       return [...base, { type: 'legs_b', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat', 'hinge'], arm_finisher: false, core_block: true }];
@@ -347,35 +355,35 @@ export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanG
     // Racers get 2 run exposures (long + quality). Non-racers get 0 unless explicit.
     3: [
       { type: 'lower_power', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat', 'hinge'], arm_finisher: false, core_block: true, lowerStress: 'heavy' },
-      { type: 'upper_push_pull', primary_patterns: ['horizontal_push', 'horizontal_pull'], secondary_patterns: ['vertical_push'], arm_finisher: false, core_block: true, wod: { type: 'AMRAP' } },
+      { type: 'upper_push_pull', primary_patterns: ['horizontal_push', 'horizontal_pull'], secondary_patterns: ['vertical_push'], arm_finisher: wantArms, core_block: true, wod: { type: 'AMRAP' } },
       hasSpartanGoal
         ? { type: 'endurance', primary_patterns: [], secondary_patterns: [], run: { type: 'long_run', label: 'LONG RUN' }, core_block: true }
         : { type: 'full_body_c', primary_patterns: ['hinge', 'horizontal_pull'], secondary_patterns: [], core_block: true, wod: { type: 'CIRCUIT' } },
     ],
     4: [
       { type: 'lower_power', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat', 'hinge'], arm_finisher: false, core_block: true, lowerStress: 'heavy' },
-      { type: 'upper_push', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: false, core_block: true, wod: { type: 'AMRAP' } },
+      { type: 'upper_push', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: wantArms, core_block: true, wod: { type: 'AMRAP' } },
       hasSpartanGoal
         ? { type: 'sprint_conditioning', primary_patterns: [], secondary_patterns: [], run: { type: 'intervals', label: 'SPRINT INTERVALS' }, core_block: true, lowerStress: 'moderate' }
-        : { type: 'full_body_pull', primary_patterns: ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, wod: { type: 'CIRCUIT' } },
+        : { type: 'full_body_pull', primary_patterns: ['horizontal_pull', pullPattern], secondary_patterns: ['elbow_flexion'], arm_finisher: true, wod: { type: 'CIRCUIT' } },
       hasSpartanGoal
         ? { type: 'upper_pull_endurance', primary_patterns: ['horizontal_pull', 'pull_up'], secondary_patterns: ['elbow_flexion'], arm_finisher: true, run: { type: 'long_run', label: 'LONG RUN' } }
         : { type: 'lower_hyp', primary_patterns: ['squat'], secondary_patterns: ['hinge'], core_block: true, lowerStress: 'heavy' },
     ],
     5: [
       { type: 'lower_power', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat', 'hinge'], arm_finisher: false, core_block: true, lowerStress: 'heavy' },
-      { type: 'upper_push', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: false, wod: { type: 'AMRAP' }, core_block: true },
+      { type: 'upper_push', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: wantArms, wod: { type: 'AMRAP' }, core_block: true },
       hasSpartanGoal
         ? { type: 'sprint_conditioning', primary_patterns: [], secondary_patterns: [], run: { type: 'intervals', label: 'SPRINT INTERVALS' }, core_block: true, lowerStress: 'moderate' }
         : { type: 'full_body_c', primary_patterns: ['hinge', 'horizontal_push'], secondary_patterns: [], core_block: true, wod: { type: 'CIRCUIT' } },
-      { type: 'upper_pull', primary_patterns: hasSpartanGoal ? ['pull_up', 'horizontal_pull'] : ['horizontal_pull', 'vertical_pull'], secondary_patterns: ['elbow_flexion', 'hinge'], arm_finisher: false, core_block: true, wod: { type: 'FOR TIME' } },
+      { type: 'upper_pull', primary_patterns: hasSpartanGoal ? ['pull_up', 'horizontal_pull'] : ['horizontal_pull', pullPattern], secondary_patterns: ['elbow_flexion', 'hinge'], arm_finisher: wantArms, core_block: true, wod: { type: 'FOR TIME' } },
       hasSpartanGoal
         ? { type: 'endurance', primary_patterns: hasSpartanGoal ? ['carry'] : [], secondary_patterns: [], run: { type: 'long_run', label: 'LONG RUN' }, core_block: true }
         : { type: 'lower_hypertrophy', primary_patterns: ['squat'], secondary_patterns: ['hinge'], core_block: true, wod: { type: 'AMRAP' }, lowerStress: 'heavy' },
     ],
     6: [
       { type: 'lower_power', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat', 'hinge'], arm_finisher: false, core_block: true, lowerStress: 'heavy' },
-      { type: 'upper_push', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: false, wod: { type: 'AMRAP' }, core_block: true },
+      { type: 'upper_push', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: wantArms, wod: { type: 'AMRAP' }, core_block: true },
       hasSpartanGoal
         ? { type: 'sprint_conditioning', primary_patterns: [], secondary_patterns: [], run: { type: 'intervals', label: 'SPRINT INTERVALS' }, core_block: true, lowerStress: 'moderate' }
         : { type: 'full_body_c', primary_patterns: ['hinge', 'horizontal_push'], secondary_patterns: [], core_block: true, wod: { type: 'CIRCUIT' } },

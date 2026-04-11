@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendCoachMessage } from '../data/coachApi';
-import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, adjustFutureWeights, getPlanRationales, getWodsFromDb, swapWodBlock } from '../data/database';
+import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, adjustFutureWeights, getPlanRationales, getWodsFromDb, swapWodBlock, restoreWodBlock, deleteLatestInjury } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 import { buildExerciseMenu } from '../core/menuBuilder';
 import { detectArchetype, adjustArchetypeForEquipment } from '../core/archetypes';
@@ -27,10 +27,24 @@ const QUICK_ACTIONS = [
   { label: 'Form check', prompt: 'Give me form cues for my current exercise.' },
 ];
 
+// Body part → muscle groups for injury matching
+const BODY_PART_MUSCLES = {
+  shoulder: ['shoulders', 'delts', 'front_delt', 'rear_delt', 'lateral_delt'],
+  knee: ['quads', 'quadriceps', 'hamstrings', 'legs'],
+  back: ['back', 'lats', 'upper_back', 'lower_back', 'traps', 'rhomboids'],
+  wrist: ['forearms', 'grip', 'arms'],
+  elbow: ['biceps', 'triceps', 'forearms', 'arms'],
+  hip: ['hip_flexors', 'glutes', 'adductors', 'abductors', 'legs'],
+  ankle: ['calves', 'tibialis', 'legs'],
+  neck: ['neck', 'traps', 'upper_back'],
+  chest: ['chest', 'pecs'],
+};
+
 export default function CoachChat({ visible, onClose, workout, sessionId }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [undoStack, setUndoStack] = useState([]);
   const [apiKey, setApiKey] = useState('bundled'); // Always available, uses bundled key
   const scrollRef = useRef(null);
   const mountedRef = useRef(true);
@@ -191,8 +205,11 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
-  const executeActions = async (actions) => {
+  const executeActions = async (actions, skipUndo = false) => {
     const store = useWorkoutStore.getState();
+    const currentWorkout = store.todayWorkout; // snapshot before mutations
+    const undoEntries = [];
+
     for (let action of actions) {
       // Normalize action format — Claude sometimes nests as { "swap": {...} } instead of { "type": "swap", ... }
       if (!action.type) {
@@ -201,7 +218,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
           action = { type: key, ...action[key] };
         }
       }
-      // Normalize type to camelCase — Claude sometimes returns REMOVEEXERCISE, RemoveExercise, etc.
+      // Normalize type to camelCase
       const ACTION_TYPE_MAP = {
         'removeexercise': 'removeExercise', 'remove_exercise': 'removeExercise', 'remove': 'removeExercise',
         'adjustweight': 'adjustWeight', 'adjust_weight': 'adjustWeight',
@@ -213,28 +230,34 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
       if (action.type) {
         action.type = ACTION_TYPE_MAP[action.type.toLowerCase()] || action.type;
       }
+
+      // Find exercise snapshot from current workout (before mutation)
+      const peId = parseInt(action.planExerciseId) || action.planExerciseId;
+      const exerciseSnapshot = currentWorkout?.blocks
+        ?.flatMap(b => b.exercises || [])
+        .find(e => e.id === peId);
+
       console.log('[AI Coach] Executing action:', action.type, action);
       try {
         switch (action.type) {
           case 'swap':
             if (action.planExerciseId && action.newExerciseId) {
-              const peId = parseInt(action.planExerciseId) || action.planExerciseId;
+              if (exerciseSnapshot && !skipUndo) {
+                undoEntries.push({ type: 'swap', planExerciseId: peId, restore: { oldExerciseId: exerciseSnapshot.exercise_id } });
+              }
               console.log(`[AI Coach] Swapping plan_exercise ${peId} → ${action.newExerciseId}`);
               await store.swapExercise(peId, action.newExerciseId, null);
-              await store.loadTodayWorkout(); // refresh UI to show new exercise
-            } else {
-              console.warn('[AI Coach] Swap missing IDs:', action);
+              await store.loadTodayWorkout();
             }
             break;
           case 'adjustWeight':
             if (action.planExerciseId && action.newWeight) {
-              const peIdW = parseInt(action.planExerciseId) || action.planExerciseId;
-              const exerciseInfo = workout?.blocks?.flatMap(b => b.exercises || []).find(e => e.id === peIdW);
+              const exerciseInfo = exerciseSnapshot || workout?.blocks?.flatMap(b => b.exercises || []).find(e => e.id === peId);
               if (exerciseInfo) {
                 const oldWeight = parseFloat(exerciseInfo.weight) || 0;
                 let newWeight = parseFloat(action.newWeight) || 0;
 
-                // Equipment ceiling — get max from profile
+                // Equipment ceiling
                 let equipCap = null;
                 try {
                   const profileStr = await AsyncStorage.getItem('userProfile');
@@ -246,17 +269,15 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
                     else if (/dumbbell/i.test(cat) && ed.dumbbells?.maxWeight) equipCap = parseFloat(ed.dumbbells.maxWeight);
                   }
                 } catch { /* no profile */ }
-
-                // Enforce ceiling
-                if (equipCap && newWeight > equipCap) {
-                  console.log(`[AI Coach] Weight ${newWeight} exceeds equipment cap ${equipCap}, capping`);
-                  newWeight = equipCap;
-                }
+                if (equipCap && newWeight > equipCap) newWeight = equipCap;
 
                 if (oldWeight > 0 && newWeight > 0) {
                   const ratio = newWeight / oldWeight;
+                  if (!skipUndo) {
+                    undoEntries.push({ type: 'adjustWeight', restore: { exerciseId: exerciseInfo.exercise_id, inverseRatio: oldWeight / newWeight } });
+                  }
                   const count = await adjustFutureWeights(exerciseInfo.exercise_id, ratio);
-                  console.log(`[AI Coach] Adjusted ${count} future instances of ${exerciseInfo.exercise_id}: ${oldWeight} → ${newWeight} (ratio ${ratio.toFixed(2)})`);
+                  console.log(`[AI Coach] Adjusted ${count} future: ${exerciseInfo.exercise_id} ${oldWeight} → ${newWeight} (${ratio.toFixed(2)}x)`);
                 }
               }
               await store.loadTodayWorkout();
@@ -264,58 +285,190 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
             break;
           case 'adjustReps':
             if (action.planExerciseId) {
-              const peIdR = parseInt(action.planExerciseId) || action.planExerciseId;
+              if (exerciseSnapshot && !skipUndo) {
+                undoEntries.push({ type: 'adjustReps', planExerciseId: peId, restore: { oldSets: exerciseSnapshot.sets, oldNotes: exerciseSnapshot.notes } });
+              }
               const setsReps = action.newSets && action.newReps ? `${action.newSets}x${action.newReps}` : null;
-              await updateExerciseLog(peIdR, setsReps, null, action.reason || null);
+              await updateExerciseLog(peId, setsReps, null, action.reason || null);
               await store.loadTodayWorkout();
             }
             break;
           case 'removeExercise':
             if (action.planExerciseId) {
-              const peIdRm = parseInt(action.planExerciseId) || action.planExerciseId;
-              await updateExerciseLog(peIdRm, 'SKIP', null, action.reason || 'Removed by AI Coach');
+              if (exerciseSnapshot && !skipUndo) {
+                undoEntries.push({ type: 'removeExercise', planExerciseId: peId, restore: { oldActualReps: exerciseSnapshot.actual_reps, oldNotes: exerciseSnapshot.notes } });
+              }
+              await updateExerciseLog(peId, 'SKIP', null, action.reason || 'Removed by AI Coach');
               await store.loadTodayWorkout();
             }
             break;
           case 'addNote':
             if (action.planExerciseId && action.note) {
+              if (exerciseSnapshot && !skipUndo) {
+                undoEntries.push({ type: 'addNote', planExerciseId: peId, restore: { oldNotes: exerciseSnapshot.notes } });
+              }
               await updateExerciseLog(action.planExerciseId, null, null, action.note);
               await store.loadTodayWorkout();
             }
             break;
-          case 'swapWod':
-            console.log('[AI Coach] swapWod action received:', JSON.stringify(action));
-            if (action.planBlockId && action.newWodId) {
-              const blockId = parseInt(action.planBlockId) || action.planBlockId;
-              console.log(`[AI Coach] Swapping WOD block ${blockId} → ${action.newWodId}`);
-              const success = await swapWodBlock(blockId, action.newWodId);
-              console.log(`[AI Coach] WOD swap result: ${success}`);
-              if (success) await store.loadTodayWorkout();
-            } else {
-              // Try to find the WOD block from today's workout if planBlockId is missing
-              if (action.newWodId && workout?.blocks) {
-                const wodBlock = workout.blocks.find(b => b.is_amrap || /wod|circuit|amrap|emom/i.test(b.name || ''));
+          case 'swapWod': {
+            console.log('[AI Coach] swapWod action:', JSON.stringify(action));
+            let blockId = parseInt(action.planBlockId) || action.planBlockId;
+            if (!blockId && action.newWodId && workout?.blocks) {
+              const wodBlock = workout.blocks.find(b => b.is_amrap || /wod|circuit|amrap|emom/i.test(b.name || ''));
+              if (wodBlock) blockId = wodBlock.id;
+            }
+            if (blockId && action.newWodId) {
+              // Snapshot for undo
+              if (!skipUndo) {
+                const wodBlock = currentWorkout?.blocks?.find(b => b.id === blockId);
                 if (wodBlock) {
-                  console.log(`[AI Coach] Auto-detected WOD block ${wodBlock.id}, swapping → ${action.newWodId}`);
-                  const success = await swapWodBlock(wodBlock.id, action.newWodId);
-                  if (success) await store.loadTodayWorkout();
-                } else {
-                  console.warn('[AI Coach] No WOD block found in today\'s workout');
+                  undoEntries.push({ type: 'swapWod', planBlockId: blockId, restore: {
+                    exercises: (wodBlock.exercises || []).map(e => ({ exercise_id: e.exercise_id, sort_order: e.sort_order, sets: e.sets, reps: e.reps, weight: e.weight, rest: e.rest, notes: e.notes })),
+                    name: wodBlock.name, type: wodBlock.type, is_amrap: wodBlock.is_amrap, time_cap: wodBlock.time_cap,
+                  }});
                 }
-              } else {
-                console.warn('[AI Coach] WOD swap missing IDs:', action);
               }
+              const success = await swapWodBlock(blockId, action.newWodId);
+              if (success) await store.loadTodayWorkout();
             }
             break;
+          }
           case 'flagInjury':
             if (action.bodyPart) {
               await saveInjury(action.bodyPart, action.severity || 'mild', null);
+              if (!skipUndo) {
+                undoEntries.push({ type: 'flagInjury', restore: { bodyPart: action.bodyPart } });
+              }
+
+              // Auto-find affected exercises and present modification options
+              const bodyPart = action.bodyPart.toLowerCase();
+              const targetMuscles = BODY_PART_MUSCLES[bodyPart] || [bodyPart];
+              const affected = [];
+              for (const block of (currentWorkout?.blocks || [])) {
+                for (const ex of (block.exercises || [])) {
+                  if (ex.is_completed) continue;
+                  const mg = (ex.muscle_group || '').toLowerCase();
+                  let secondary = [];
+                  try { secondary = JSON.parse(ex.secondary_muscles || '[]').map(s => s.toLowerCase()); } catch {}
+                  if (typeof ex.secondary_muscles === 'string' && !ex.secondary_muscles.startsWith('[')) {
+                    secondary = ex.secondary_muscles.split(',').map(s => s.trim().toLowerCase());
+                  }
+                  const allMuscles = [mg, ...secondary];
+                  if (targetMuscles.some(t => allMuscles.some(m => m.includes(t) || t.includes(m)))) {
+                    affected.push(ex);
+                  }
+                }
+              }
+
+              if (affected.length > 0) {
+                const injuryOptions = [];
+                for (const ex of affected.slice(0, 3)) { // cap at 3 exercises to avoid option overload
+                  const currentWeight = parseFloat(ex.weight) || 0;
+                  const reducedWeight = Math.round((currentWeight * 0.5) / 5) * 5;
+
+                  if (currentWeight > 0) {
+                    injuryOptions.push({
+                      label: `Lighten ${ex.name} to ${reducedWeight} lb`,
+                      description: `50% reduction for ${bodyPart} safety`,
+                      recommended: true,
+                      fromInjury: true,
+                      action: { type: 'adjustWeight', planExerciseId: String(ex.id), newWeight: String(reducedWeight), reason: `Reduced for ${bodyPart} injury` },
+                    });
+                  }
+
+                  injuryOptions.push({
+                    label: `Modify ${ex.name} (slow tempo)`,
+                    description: 'Partial ROM, 3-sec eccentric, stop if pain',
+                    fromInjury: true,
+                    action: { type: 'addNote', planExerciseId: String(ex.id), note: `${bodyPart} injury: Partial ROM, 3-sec eccentric, stop if pain` },
+                  });
+
+                  injuryOptions.push({
+                    label: `Skip ${ex.name} today`,
+                    description: 'Remove from this workout',
+                    fromInjury: true,
+                    action: { type: 'removeExercise', planExerciseId: String(ex.id), reason: `Skipped due to ${bodyPart} injury` },
+                  });
+                }
+
+                if (mountedRef.current) {
+                  setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    content: `Found ${affected.length} exercise${affected.length > 1 ? 's' : ''} targeting your ${bodyPart}. Pick how to modify:`,
+                    actions: [],
+                    options: injuryOptions,
+                  }]);
+                }
+              }
             }
             break;
         }
       } catch (e) {
         console.error('Error executing action:', action.type, e);
       }
+    }
+
+    // Save undo entries
+    if (undoEntries.length > 0 && !skipUndo) {
+      setUndoStack(prev => [...prev.slice(-4), { id: Date.now(), actions: undoEntries }]);
+    }
+  };
+
+  const undoLastAction = async () => {
+    const entry = undoStack[undoStack.length - 1];
+    if (!entry) return;
+    const store = useWorkoutStore.getState();
+
+    try {
+      for (const action of [...entry.actions].reverse()) {
+        switch (action.type) {
+          case 'swap':
+            if (action.planExerciseId && action.restore?.oldExerciseId) {
+              await store.swapExercise(action.planExerciseId, action.restore.oldExerciseId, null);
+            }
+            break;
+          case 'adjustWeight':
+            if (action.restore?.exerciseId && action.restore?.inverseRatio) {
+              await adjustFutureWeights(action.restore.exerciseId, action.restore.inverseRatio);
+            }
+            break;
+          case 'adjustReps':
+            if (action.planExerciseId) {
+              await updateExerciseLog(action.planExerciseId, action.restore?.oldSets || null, null, action.restore?.oldNotes || null);
+            }
+            break;
+          case 'removeExercise':
+            if (action.planExerciseId) {
+              await updateExerciseLog(action.planExerciseId, action.restore?.oldActualReps || null, null, action.restore?.oldNotes || null);
+            }
+            break;
+          case 'addNote':
+            if (action.planExerciseId) {
+              await updateExerciseLog(action.planExerciseId, null, null, action.restore?.oldNotes || null);
+            }
+            break;
+          case 'swapWod':
+            if (action.planBlockId && action.restore) {
+              await restoreWodBlock(action.planBlockId, action.restore.exercises, action.restore);
+            }
+            break;
+          case 'flagInjury':
+            if (action.restore?.bodyPart) {
+              await deleteLatestInjury(action.restore.bodyPart);
+            }
+            break;
+        }
+      }
+      await store.loadTodayWorkout();
+      setUndoStack(prev => prev.slice(0, -1));
+      if (mountedRef.current) {
+        setMessages(prev => [...prev, {
+          role: 'assistant', content: 'Undone. Your workout is back to how it was.', actions: [], options: [],
+        }]);
+      }
+    } catch (e) {
+      console.error('[AI Coach] Undo failed:', e);
     }
   };
 
@@ -331,8 +484,8 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         i === msgIndex ? { ...m, options: [], chosenOption: option.label } : m
       ));
 
-      // Close coach after WOD swap — reload workout first, then close
-      if (option.action?.type === 'swapWod' || option.action?.type === 'swap') {
+      // Close coach after WOD swap or exercise swap — but NOT for injury modifications (user may have more to modify)
+      if ((option.action?.type === 'swapWod' || option.action?.type === 'swap') && !option.fromInjury) {
         await useWorkoutStore.getState().loadTodayWorkout();
         const updated = useWorkoutStore.getState().todayWorkout;
         console.log('[AI Coach] Workout reloaded, WOD blocks:', updated?.blocks?.filter(b => /wod|circuit/i.test(b.name || '')).map(b => `${b.name}: ${b.exercises?.length} exs`));
@@ -398,6 +551,11 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
                         <Text style={styles.actionReason}>{String(a.reason || a.bodyPart || a.note || a.newWeight || 'Done')}</Text>
                       </View>
                     ))}
+                    {i === messages.length - 1 && undoStack.length > 0 ? (
+                      <TouchableOpacity style={styles.undoButton} onPress={undoLastAction}>
+                        <Text style={styles.undoButtonText}>UNDO</Text>
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
                 ) : null}
                 {msg.options && msg.options.length > 0 ? (
@@ -495,6 +653,8 @@ const styles = StyleSheet.create({
 
   actionsList: { marginTop: 6 },
   actionCard: { backgroundColor: 'rgba(1,255,112,0.08)', borderWidth: 1, borderColor: 'rgba(1,255,112,0.2)', borderRadius: 8, padding: 8, marginBottom: 4 },
+  undoButton: { backgroundColor: 'rgba(255,65,54,0.15)', borderWidth: 1, borderColor: 'rgba(255,65,54,0.4)', borderRadius: 8, padding: 8, marginTop: 4, alignItems: 'center' },
+  undoButtonText: { color: '#FF4136', fontSize: 11, fontWeight: '800', letterSpacing: 1, fontFamily: 'monospace' },
   actionType: { color: '#01FF70', fontSize: 9, fontWeight: '800', letterSpacing: 1, fontFamily: 'monospace' },
   actionReason: { color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 2 },
 

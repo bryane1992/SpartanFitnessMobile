@@ -148,7 +148,7 @@ export async function generateAIPlan(userProfile, onStatus) {
   const hasBarbell = equip.some(e => /barbell|squat.?rack/i.test(e));
   const hasSpartanGoal = !!raceReqs || goals.some(g => /spartan|obstacle|athletic/i.test(g));
   const daysPerWeek = userProfile.trainingDaysPerWeek || 5;
-  const dayConfigs = getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanGoal, archetype);
+  const dayConfigs = getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanGoal, archetype, equip);
 
   // Step 5: Determine run eligibility
   const notes = (userProfile.additionalNotes || '').toLowerCase();
@@ -401,19 +401,36 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
     for (const wod of allWods) {
       if (wodPool.includes(wod.id)) continue;
-      // Check if WOD's equipment is available
+      // Check if WOD's equipment field is available
       let equipField = wod.equipment;
       if (typeof equipField === 'string') { try { equipField = JSON.parse(equipField); } catch { equipField = []; } }
       const wodEquip = Array.isArray(equipField) ? equipField : [];
       const canDo = wodEquip.length === 0 || wodEquip.every(e => mappedEquip.has(e) || userEquipForWods.has(e));
-      if (canDo) wodPool.push(wod.id);
+      if (!canDo) continue;
+
+      // Movement-level equipment check — WOD equipment fields are often empty
+      // but movements require specific gear (rope climb, barbell squat, rower, etc.)
+      let movArr = wod.movements;
+      if (typeof movArr === 'string') { try { movArr = JSON.parse(movArr); } catch { movArr = []; } }
+      const movText = (Array.isArray(movArr) ? movArr.join(' ') : '').toLowerCase();
+      let movementOk = true;
+      if (/rope.?climb/i.test(movText) && !userEquipForWods.has('rope')) movementOk = false;
+      if (/back.?squat|front.?squat.*barbell|barbell.*squat/i.test(movText) && !userEquipForWods.has('barbell') && !userEquipForWods.has('squat_rack')) movementOk = false;
+      if (/handstand.?push|hspu/i.test(movText)) { if (!userEquipForWods.has('wall') && !userEquipForWods.has('outdoor')) movementOk = false; }
+      if (/row\s*\d+.*meter|rower|rowing/i.test(movText) && !userEquipForWods.has('cardio_machines')) movementOk = false;
+      if (/wall.?ball/i.test(movText) && !userEquipForWods.has('wall_ball') && !userEquipForWods.has('medicine_ball')) movementOk = false;
+      if (/barbell|clean.?and.?jerk|snatch.*\d+.*lb|power.?clean/i.test(movText) && !userEquipForWods.has('barbell')) movementOk = false;
+      if (!movementOk) continue;
+
+      wodPool.push(wod.id);
       if (wodPool.length >= 30) break;
     }
   }
 
   // Pre-filter WOD pool for beginners — remove dangerous WODs before the weekly loop
   // This prevents fallback code from ever selecting them
-  const isBeginnerProfile = archetype?.exerciseComplexity === 'simple';
+  // Check BOTH archetype complexity AND experience level (general_fitness beginners need safety too)
+  const isBeginnerProfile = archetype?.exerciseComplexity === 'simple' || userProfile.experience === 'beginner';
   if (isBeginnerProfile) {
     const beforeCount = wodPool.length;
     wodPool = wodPool.filter(id => {
@@ -564,7 +581,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         const isPushDay = allowedDayPatterns.has('horizontal_push');
         if ((isPushDay || isPullDay) && ['olympic', 'plyometric'].includes(pattern)) return false;
         if ((isPushDay || isPullDay) && /push_jerk|snatch|clean_and_jerk|power_clean|hang_clean|db_thrusters|thrusters|db_clean_press|kb_clean_press/.test(id)) {
-          console.log(`[PlanV5] Blocked ${id} from ${isPushDay ? 'push' : 'pull'} day`);
+          // Blocked from push/pull day — silent
           return false;
         }
         return true;
@@ -583,12 +600,6 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           if (!byPattern[p]) byPattern[p] = [];
           byPattern[p].push(id);
         }
-        // Fallback patterns when a primary pattern has zero available exercises
-        const PATTERN_FALLBACKS = {
-          vertical_pull: 'horizontal_pull', horizontal_pull: 'vertical_pull',
-          vertical_push: 'horizontal_push', horizontal_push: 'vertical_push',
-          squat: 'hinge', hinge: 'squat',
-        };
         // Pick 1 from each primary pattern
         // First pattern = anchor (same exercise every week for visible weight progression)
         // Second pattern = rotates for variety (different exercise each week)
@@ -596,13 +607,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         for (let pi = 0; pi < dayPrimaryPatterns.length; pi++) {
           if (picks.length >= bt.mainLiftCount) break;
           const pattern = dayPrimaryPatterns[pi];
-          let group = byPattern[pattern] || [];
-          // Fallback: if no exercises for this pattern, try a related pattern
-          if (group.length === 0 && PATTERN_FALLBACKS[pattern]) {
-            const fallback = PATTERN_FALLBACKS[pattern];
-            group = (byPattern[fallback] || []).filter(id => !picks.includes(id));
-            if (group.length > 0) console.log(`[PlanV5] Pattern fallback: ${pattern} → ${fallback} (no ${pattern} exercises available)`);
-          }
+          const group = byPattern[pattern] || [];
           if (group.length > 0) {
             const pick = pi === 0 ? group[0] : group[(week - 1) % group.length];
             picks.push(pick);
@@ -792,7 +797,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           const selectedMeta = getWodMetadata(selectedWod);
           if (selectedMeta.phaseTier === 'hero') heroWodCount++;
 
-          console.log(`[PlanV5] WOD assigned: ${selectedWod.name} (${selectedMeta.phaseTier}) on ${dayConfig.type} week ${week}`);
+          if (week <= 2) console.log(`[PlanV5] WOD: ${selectedWod.name} (${selectedMeta.phaseTier}) wk${week}`);
           const wodBlockType = selectedWod.type || dayConfig.wod.type || 'CIRCUIT';
           const isAmrap = /amrap/i.test(wodBlockType);
           const isTimedWod = /amrap|for time|emom/i.test(wodBlockType);
@@ -1081,8 +1086,9 @@ function calculateBlockTimes(sessionMinutes, dayConfig, archetypeKey) {
     bt = { warmup: 8, mainLifts: 15, wod: 0, accessories: 0, armBlaster: 0, core: 5, cooldown: 5,
       sets: 3, mainLiftCount: 2, accessoryCount: 0, coreCount: 2, warmupCount: 3, rest: '45-60s' };
   } else if (hasWod) {
-    // WOD day: 2 main lifts + WOD, no accessories, no arms (WOD IS the volume)
-    bt = { warmup: 6, mainLifts: 15, wod: 10, accessories: 0, armBlaster: 0, core: 5, cooldown: 5,
+    // WOD day: 2 main lifts + WOD + arms if session allows (60+ min)
+    const wodArmTime = (wantArms && sessionMinutes >= 60) ? 6 : 0;
+    bt = { warmup: 6, mainLifts: 15, wod: wodArmTime > 0 ? 8 : 10, accessories: 0, armBlaster: wodArmTime, core: 5, cooldown: 5,
       sets: 3, mainLiftCount: 2, accessoryCount: 0, coreCount: 2, warmupCount: 3, rest: '45-60s' };
   } else {
     // Pure lifting day (no WOD, no run): 3 main lifts + accessories + core + arms
@@ -1318,11 +1324,11 @@ function buildWodExercises(wod, equipmentDetails, workingWeights, experience) {
     const exerciseId = fuzzyMatchWodMovement(parsed.name);
     // Skip duplicate exercise IDs in the same WOD
     if (usedIds.has(exerciseId)) {
-      console.log(`[WOD] ${wod.name}: skipping duplicate "${movement}" → ${exerciseId}`);
+      // skipping duplicate — silent
       continue;
     }
     usedIds.add(exerciseId);
-    console.log(`[WOD] ${wod.name}: "${movement}" → ${exerciseId} (reps: ${parsed.reps})`);
+    // Individual WOD movement parsing — silent (use [PlanV5] WOD assigned log for tracking)
     let weight = parsed.weight || wod.rxWeight;
     // If no weight specified but it's a barbell exercise, estimate from working weights
     if (!weight || weight === 'BW') {

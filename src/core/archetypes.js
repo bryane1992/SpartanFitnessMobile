@@ -170,6 +170,12 @@ export function adjustArchetypeForEquipment(archetype, equipment) {
     archetype.equipmentPreference = ['machine', 'cable', 'dumbbell', 'kettlebell', 'barbell', 'bodyweight'];
   }
 
+  // Non-beginners with barbell + working weights: promote barbell to top priority
+  // Barbell compounds (squat, bench, deadlift) are the most effective strength builders
+  if (archetype.exerciseComplexity !== 'simple' && hasBarbell && archetype.equipmentPreference.indexOf('barbell') > 1) {
+    archetype.equipmentPreference = ['barbell', ...archetype.equipmentPreference.filter(e => e !== 'barbell')];
+  }
+
   return archetype;
 }
 

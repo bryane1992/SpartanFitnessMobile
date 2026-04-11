@@ -189,6 +189,108 @@ export const TEST_PROFILES = {
       additionalNotes: 'Haven\'t worked out in a long time. Want to build muscle and bulk up.',
     },
   },
+  // ═══════════════════════════════════════════════════════════
+  // SHORT PLAN PROFILES — test phase calculator for compressed timelines
+  // ═══════════════════════════════════════════════════════════
+
+  short_4week_beginner: {
+    label: '4-Week Beginner Kickstart (no race)',
+    expected: 'overweight_beginner — Foundation only, no deload, no peak',
+    profile: {
+      goals: ['lose_fat', 'general_fitness'],
+      sex: 'male',
+      height: '5\'10"',
+      weight: '220',
+      bmi: '31.6',
+      experience: 'beginner',
+      workingWeights: {},
+      equipment: ['dumbbells', 'barbell', 'squat_rack', 'bench', 'kettlebell', 'machines'],
+      equipmentDetails: { dumbbells: { maxWeight: '50' }, barbell: { maxWeight: '135' } },
+      trainingDaysPerWeek: 3,
+      trainingDays: [0, 2, 4],
+      sessionDuration: 45,
+      workoutStyles: ['hybrid'],
+      bodyCompGoals: ['cut'],
+      exclusions: [],
+      additionalNotes: 'Just want a 1-month plan to get started.',
+      // eventDate set dynamically — 4 weeks from next Monday
+      _shortPlanWeeks: 4,
+    },
+  },
+
+  short_6week_intermediate: {
+    label: '6-Week Intermediate Cut (no race)',
+    expected: 'general_fitness — Foundation + Build, no peak/race_prep',
+    profile: {
+      goals: ['lose_fat', 'build_muscle'],
+      sex: 'female',
+      height: '5\'5"',
+      weight: '160',
+      bmi: '26.6',
+      experience: 'intermediate',
+      workingWeights: { bench: '75', squat: '115', deadlift: '135', overhead_press: '50', row: '65' },
+      equipment: ['dumbbells', 'barbell', 'squat_rack', 'bench', 'pull_up_bar', 'cables', 'machines'],
+      equipmentDetails: { dumbbells: { maxWeight: '40' }, barbell: { maxWeight: '185' } },
+      trainingDaysPerWeek: 4,
+      trainingDays: [0, 1, 3, 4],
+      sessionDuration: 60,
+      workoutStyles: ['traditional'],
+      bodyCompGoals: ['cut'],
+      exclusions: [],
+      additionalNotes: 'Six week summer cut.',
+      _shortPlanWeeks: 6,
+    },
+  },
+
+  short_5week_race: {
+    label: '5-Week Spartan Sprint Prep (with race)',
+    expected: 'obstacle_racer — Peak + Race Prep, compressed timeline',
+    profile: {
+      goals: ['endurance', 'athletic'],
+      sex: 'male',
+      height: '5\'9"',
+      weight: '175',
+      bmi: '25.8',
+      experience: 'intermediate',
+      workingWeights: { bench: '135', squat: '185', deadlift: '225', overhead_press: '85', row: '115' },
+      equipment: ['dumbbells', 'barbell', 'squat_rack', 'bench', 'pull_up_bar', 'kettlebell', 'outdoor'],
+      equipmentDetails: { dumbbells: { maxWeight: '60' }, barbell: { maxWeight: '225' } },
+      trainingDaysPerWeek: 5,
+      trainingDays: [0, 1, 2, 3, 4],
+      sessionDuration: 60,
+      workoutStyles: ['hybrid', 'crossfit'],
+      bodyCompGoals: ['maintain'],
+      exclusions: [],
+      additionalNotes: 'Spartan Sprint in 5 weeks. Need to peak fast.',
+      hasRaceDate: true,
+      raceType: 'spartan_sprint',
+      _shortPlanWeeks: 5,
+    },
+  },
+
+  short_8week_advanced: {
+    label: '8-Week Advanced Strength Block (no race)',
+    expected: 'hypertrophy — Foundation + Build + Peak, standard periodization',
+    profile: {
+      goals: ['get_stronger', 'build_muscle'],
+      sex: 'male',
+      height: '6\'0"',
+      weight: '200',
+      bmi: '27.1',
+      experience: 'advanced',
+      workingWeights: { bench: '225', squat: '315', deadlift: '365', overhead_press: '145', row: '185' },
+      equipment: ['dumbbells', 'barbell', 'squat_rack', 'bench', 'pull_up_bar', 'cables', 'machines'],
+      equipmentDetails: { dumbbells: { maxWeight: '100' }, barbell: { maxWeight: '405' } },
+      trainingDaysPerWeek: 5,
+      trainingDays: [0, 1, 2, 3, 4],
+      sessionDuration: 75,
+      workoutStyles: ['traditional'],
+      bodyCompGoals: ['bulk'],
+      exclusions: [],
+      additionalNotes: 'Short strength block between meets.',
+      _shortPlanWeeks: 8,
+    },
+  },
 };
 
 // Run archetype detection on all profiles and log results
@@ -232,5 +334,20 @@ export function getTestProfile(key) {
     console.error(`Unknown test profile: ${key}. Available: ${Object.keys(TEST_PROFILES).join(', ')}`);
     return null;
   }
-  return test.profile;
+  const profile = { ...test.profile };
+  // Short plan profiles: compute eventDate from _shortPlanWeeks
+  if (profile._shortPlanWeeks) {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const daysUntilMonday = dayOfWeek === 0 ? 1 : dayOfWeek === 1 ? 0 : 8 - dayOfWeek;
+    const nextMonday = new Date(today);
+    nextMonday.setDate(today.getDate() + daysUntilMonday);
+    const eventDate = new Date(nextMonday);
+    eventDate.setDate(eventDate.getDate() + profile._shortPlanWeeks * 7);
+    profile.eventDate = eventDate.toISOString().split('T')[0];
+    if (profile.hasRaceDate) profile.hasRaceDate = true;
+    delete profile._shortPlanWeeks;
+    console.log(`[TestProfile] Short plan: ${key} → eventDate ${profile.eventDate} (${test.profile._shortPlanWeeks} weeks)`);
+  }
+  return profile;
 }

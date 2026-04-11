@@ -633,6 +633,117 @@ export default function Settings({ navigation }) {
               <Text style={styles.actionDesc}>Have an AI fitness expert critique your current plan</Text>
             </View>
           </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.actionButton, { borderColor: '#FF4136', borderWidth: 1 }]} onPress={async () => {
+            try {
+              Alert.alert('Full Suite', 'Generates 4 plans + AI reviews + 5 coach conversations.\nTakes ~5-8 min. Results saved to file.\n\nContinue?', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Run', onPress: async () => {
+                  try {
+                    const { runPlanSuite } = require('../core/testPlanSuite');
+                    const result = await runPlanSuite(
+                      (msg) => console.log(msg),
+                      (status) => console.log(`[Suite] ${status}`)
+                    );
+                    const planSummary = result.scores.map(s =>
+                      `${s.label.substring(0, 30)}: ${s.score ? s.score + '/10' : 'ERR'}`
+                    ).join('\n');
+                    const coachSummary = (result.coachResults || []).map(r =>
+                      `${r.label}: ${r.error ? 'ERR' : r.failed === 0 ? 'PASS' : 'FAIL'}`
+                    ).join('\n');
+                    Alert.alert(
+                      `Suite Complete — Plans ${result.average}/10 | Coach ${result.coachPassed}/${result.coachTotal}`,
+                      `Plans:\n${planSummary}\n\nCoach:\n${coachSummary}\n\nFull results in console.`
+                    );
+                  } catch (e) {
+                    console.error('Suite error:', e);
+                    Alert.alert('Error', e.message);
+                  }
+                }},
+              ]);
+            } catch (e) {
+              Alert.alert('Error', e.message);
+            }
+          }}>
+            <View style={styles.actionContent}>
+              <Text style={[styles.actionLabel, { color: '#FF4136' }]}>Full Plan Suite</Text>
+              <Text style={styles.actionDesc}>4 plans + AI review + 5 coach conversations, save results to file</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.actionButton} onPress={async () => {
+            try {
+              Alert.alert('Generating...', 'Building 4 short plans (4/5/6/8 weeks)...\nThis takes ~2 min.');
+              const { testShortPlans } = require('../core/testShortPlans');
+              const result = await testShortPlans(
+                (msg) => console.log(msg),
+                (status) => console.log(`[ShortPlanTest] ${status}`)
+              );
+              const summary = result.plans.map(p =>
+                p.error ? `${p.label}: ERROR` : `${p.label}: ${p.passed}/${p.passed + p.failed}`
+              ).join('\n');
+              Alert.alert(
+                result.success ? 'Short Plans PASS' : 'Issues Found',
+                `${result.passed}/${result.passed + result.failed} checks passed\n\n${summary}\n\nFull log in console.`
+              );
+            } catch (e) {
+              console.error('Short plan test error:', e);
+              Alert.alert('Error', e.message);
+            }
+          }}>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionLabel}>Test Short Plans</Text>
+              <Text style={styles.actionDesc}>Generate 4/5/6/8-week plans and validate phases</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.actionButton} onPress={async () => {
+            try {
+              Alert.alert('Testing...', 'Running coach action tests...');
+              const { testCoachActions } = require('../core/testCoachActions');
+              const result = await testCoachActions((msg) => console.log(msg));
+              if (result.success) {
+                Alert.alert('Coach Actions WORKING',
+                  `${result.passed} passed, ${result.failed} failed, ${result.skipped} skipped\n\nUndo, injury matching, WOD restore all verified.\nCheck console for details.`
+                );
+              } else {
+                Alert.alert('Test Issues', `${result.passed} passed, ${result.failed} FAILED, ${result.skipped} skipped.\nCheck console.`);
+              }
+            } catch (e) {
+              console.error('Coach test error:', e);
+              Alert.alert('Error', e.message);
+            }
+          }}>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionLabel}>Test Coach Actions</Text>
+              <Text style={styles.actionDesc}>Test undo, injury auto-modify, WOD restore</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.actionButton} onPress={async () => {
+            try {
+              Alert.alert('Testing...', 'Simulating workouts and checking autoregulation...');
+              const { testAutoregulation } = require('../core/testAutoregulation');
+              const result = await testAutoregulation((msg) => console.log(msg));
+              if (result.success) {
+                Alert.alert('Autoregulation WORKS',
+                  `${result.targetExercise}: prescribed ${result.prescribedWeight} lb, logged ${result.actualWeight} lb\n` +
+                  `${result.adjustedCount} future weeks adjusted\n` +
+                  `${result.verified} verifications passed\n\nCheck console for full log.`
+                );
+              } else {
+                Alert.alert('Test Issue', result.error || `${result.failures} verification failures. Check console.`);
+              }
+            } catch (e) {
+              console.error('Autoreg test error:', e);
+              Alert.alert('Error', e.message);
+            }
+          }}>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionLabel}>Test Autoregulation</Text>
+              <Text style={styles.actionDesc}>Simulate logging different weights and verify future adjustments</Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* App Info */}

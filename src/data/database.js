@@ -629,7 +629,7 @@ export async function getWorkoutForDate(date) {
 
   for (const block of blocks) {
     const exercises = await database.getAllAsync(
-      `SELECT pe.*, COALESCE(e.name, pe.exercise_id) as name, e.emoji, e.muscle_group, e.category
+      `SELECT pe.*, COALESCE(e.name, pe.exercise_id) as name, e.emoji, e.muscle_group, e.secondary_muscles, e.category
        FROM plan_exercises pe
        LEFT JOIN exercises e ON e.id = pe.exercise_id
        WHERE pe.plan_block_id = ? ORDER BY pe.sort_order`,
@@ -836,6 +836,37 @@ export async function adjustFutureWeights(exerciseId, ratio, currentDate) {
 
   console.log(`[Autoregulate] Scaled ${exerciseId} by ${ratio.toFixed(2)}x for ${updated} future exercises${equipMax ? ` (cap: ${equipMax} lb)` : ''}`);
   return updated;
+}
+
+// Restore a WOD block to its previous state (for undo)
+export async function restoreWodBlock(planBlockId, exercises, blockMeta) {
+  const database = await getDatabase();
+  // Delete current exercises
+  await database.runAsync('DELETE FROM plan_exercises WHERE plan_block_id = ?', [planBlockId]);
+  // Restore block metadata
+  if (blockMeta) {
+    await database.runAsync(
+      'UPDATE plan_blocks SET name = ?, type = ?, is_amrap = ?, time_cap = ? WHERE id = ?',
+      [blockMeta.name, blockMeta.type, blockMeta.is_amrap, blockMeta.time_cap, planBlockId]
+    );
+  }
+  // Re-insert saved exercises
+  for (const ex of exercises) {
+    await database.runAsync(
+      `INSERT INTO plan_exercises (plan_block_id, exercise_id, sort_order, sets, reps, weight, rest, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [planBlockId, ex.exercise_id, ex.sort_order, ex.sets, ex.reps, ex.weight, ex.rest, ex.notes]
+    );
+  }
+}
+
+// Delete the most recent injury for a body part (for undo)
+export async function deleteLatestInjury(bodyPart) {
+  const database = await getDatabase();
+  await database.runAsync(
+    'DELETE FROM injuries WHERE id = (SELECT id FROM injuries WHERE body_part = ? ORDER BY id DESC LIMIT 1)',
+    [bodyPart]
+  );
 }
 
 // Upgrade future exercises to use newly available equipment

@@ -139,8 +139,9 @@ export function validatePlan(planDays, userProfile) {
         }
         if (isMainOrAccessory) usedMainAccessoryExercises.add(ex.exercise_id);
 
-        // Track weights by phase
-        if (weight > 0 && seedEx?.is_compound && day.phase) {
+        // Track weights by phase — exclude deload weeks (they intentionally reduce weight)
+        const isDeload = /deload/i.test(day.title || '');
+        if (weight > 0 && seedEx?.is_compound && day.phase && !isDeload) {
           const key = ex.exercise_id;
           if (!exerciseWeightsByPhase[key]) exerciseWeightsByPhase[key] = {};
           const ph = day.phase.toLowerCase();
@@ -148,9 +149,10 @@ export function validatePlan(planDays, userProfile) {
         }
 
         // ── Check 9: Rep/Set Phase Consistency ──
-        // Skip carries — they use distance (50yd, 100yd) not strength reps
+        // Skip carries, unilateral exercises, and accessory-style compounds — they use different rep ranges
         const isCarry = pattern === 'carry' || /carry|walk|farmer/i.test(ex.exercise_id || '');
-        if (isMainLift && seedEx?.is_compound && ex.sets && !isCarry) {
+        const isUnilateral = /split.?squat|lunge|single.?leg|step.?up|bulgarian|pistol|cable.?row/i.test(ex.exercise_id || '');
+        if (isMainLift && seedEx?.is_compound && ex.sets && !isCarry && !isUnilateral) {
           const m = String(ex.sets).match(/(\d+)x(\d+)/);
           if (m) {
             const reps = parseInt(m[2]);
@@ -233,9 +235,16 @@ export function validatePlan(planDays, userProfile) {
   }
 
   // ── Check 11: Exercise-to-Day-Role Check ──
+  // Skip for full-body / mixed days (titles with both push+pull keywords, or "UPPER BODY", "LOWER BODY", "FULL BODY")
   for (const day of planDays) {
     if (day.isRestDay || day.is_rest_day) continue;
     const title = (day.title || '').toLowerCase();
+    // Mixed-pattern days are intentional — don't flag them
+    const isMixedDay = /full.?body|upper.?body|lower.?body/i.test(title)
+      || (/chest|push|shoulder/i.test(title) && /pull|back/i.test(title))
+      || (/leg|squat/i.test(title) && /chest|push|pull|back/i.test(title));
+    if (isMixedDay) continue;
+
     const blocks = day.blocks || [];
     for (const block of blocks) {
       const blockName = (block.name || '').toLowerCase();
