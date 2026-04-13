@@ -29,7 +29,7 @@ INJURY ORDER: 1)reduce reps 2)lighten load 40-60% 3)limit ROM 4)slow tempo 5)cha
 RESPONSE: Plain text for questions/advice. JSON ONLY when performing actions:
 {"message":"text","actions":[...],"options":[...]}
 Actions: swap(planExerciseId,newExerciseId,reason), adjustWeight(planExerciseId,newWeight,reason), adjustReps(planExerciseId,newSets,newReps,reason), flagInjury(bodyPart,severity), removeExercise(planExerciseId,reason), addNote(planExerciseId,note), swapWod(planBlockId,newWodId,reason), swapDay(date1,date2,reason), clearInjuries(reason)
-When athlete wants to swap today's workout with another day, use swapDay with the two dates (YYYY-MM-DD format). When athlete says injuries are resolved or healed, use clearInjuries.
+When athlete wants to swap today's workout with another day, use swapDay with the two dates (YYYY-MM-DD format). Before swapping, check the WEEK SCHEDULE — don't put legs adjacent to running/sprint days, or two heavy lower-body days back-to-back. Warn the athlete if a swap creates a bad adjacency and suggest a better option. When athlete says injuries are resolved or healed, use clearInjuries.
 Options: ALWAYS present 2-3 options for swaps, removals, injuries, AND WOD changes so the user can choose. Format: {"label":"WOD Name","description":"why this WOD is better","recommended":bool,"action":{"type":"swapWod","planBlockId":"id","newWodId":"wod_id","reason":"why"}}
 When user wants a different WOD, suggest 2-3 alternatives from the AVAILABLE WODS list.`;
 
@@ -218,9 +218,19 @@ function buildContext(context) {
     }
   }
 
+  // Week schedule — coach sees the full week to avoid bad adjacencies when swapping
+  if (context.weekSchedule && context.weekSchedule.length > 0) {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    parts.push('\nWEEK SCHEDULE:');
+    for (const d of context.weekSchedule) {
+      const dow = days[new Date(d.date + 'T12:00:00').getDay()];
+      parts.push(`  ${dow} ${d.date}: ${d.is_rest_day ? 'REST' : d.title}`);
+    }
+  }
+
   if (context.tomorrow) {
     const t = context.tomorrow;
-    let tomorrowLine = `\nTOMORROW: "${t.title}"`;
+    let tomorrowLine = `TOMORROW DETAIL: "${t.title}"`;
     if (t.date) tomorrowLine += ` (${t.date})`;
     if (t.blocks) {
       const exNames = t.blocks.flatMap(b => (b.exercises || []).map(e => e.name)).filter(Boolean);

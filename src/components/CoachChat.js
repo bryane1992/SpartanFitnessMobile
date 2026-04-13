@@ -156,14 +156,22 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         availableWods = buildWodMenu(parsedProfile || {}, arch);
       } catch {}
 
-      // Load tomorrow's workout for day-swap awareness
+      // Load this week's schedule for day-swap awareness
       const todayStr = new Date().toISOString().split('T')[0];
-      const tomorrowDate = new Date();
-      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-      const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
+      let weekSchedule = [];
       let tomorrowWorkout = null;
       try {
-        tomorrowWorkout = await getWorkoutForDate(tomorrowStr);
+        const { getDatabase: getDb } = require('../data/database');
+        const db = await getDb();
+        // Get 7 days starting from today
+        weekSchedule = await db.getAllAsync(
+          `SELECT date, title, is_rest_day FROM plan_days WHERE date >= ? ORDER BY date LIMIT 7`,
+          [todayStr]
+        );
+        // Tomorrow's full workout for detailed context
+        if (weekSchedule.length > 1) {
+          tomorrowWorkout = await getWorkoutForDate(weekSchedule[1].date);
+        }
       } catch {}
 
       const context = {
@@ -171,6 +179,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         workout: workout,
         today: todayStr,
         tomorrow: tomorrowWorkout,
+        weekSchedule,
         injuries: injuries,
         alternatives: alternatives,
         rationales: rationales,
