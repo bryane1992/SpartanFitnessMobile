@@ -785,29 +785,52 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           if (eligibleWods.length === 0) eligibleWods = wodPool.filter(id => (wodUsageCount[id] || 0) < MAX_WOD_REPEATS);
         }
 
-        // Day-focus filter: deprioritize WODs with mismatched movements
-        // e.g., don't put front squats + running on a chest/push day
+        // Day-focus scoring: score each WOD by how well it matches today's focus
+        // Higher score = better match. Allows some variety (mixed WODs still appear)
+        // but prevents pure squat WODs on chest day or pure run WODs on pull day
         const isPushDay = allowedDayPatterns.has('horizontal_push') || allowedDayPatterns.has('vertical_push');
         const isPullDay = allowedDayPatterns.has('horizontal_pull') || allowedDayPatterns.has('pull_up');
         const isLegDay = allowedDayPatterns.has('squat') || allowedDayPatterns.has('hinge');
-        if (isPushDay && !isLegDay) {
-          // On push days, prefer WODs with push movements (push-ups, burpees, presses), avoid squat/run WODs
-          const pushFriendly = eligibleWods.filter(id => {
-            const w = wodById[id];
-            if (!w) return true;
-            let movArr = w.movements;
-            if (typeof movArr === 'string') { try { movArr = JSON.parse(movArr); } catch { movArr = []; } }
-            const movText = (Array.isArray(movArr) ? movArr.join(' ') : '').toLowerCase();
-            // Skip WODs dominated by squats/runs/cleans on push days
-            const hasSquat = /squat|front.squat|overhead.squat/i.test(movText);
-            const hasRun = /run|row.*meter|mile/i.test(movText);
-            const hasPush = /push.?up|press|dip|burpee/i.test(movText);
-            if (hasSquat && !hasPush) return false;
-            if (hasRun && !hasPush) return false;
-            return true;
-          });
-          if (pushFriendly.length > 0) eligibleWods = pushFriendly;
-        }
+
+        const scoredWods = eligibleWods.map(id => {
+          const w = wodById[id];
+          if (!w) return { id, score: 0 };
+          let movArr = w.movements;
+          if (typeof movArr === 'string') { try { movArr = JSON.parse(movArr); } catch { movArr = []; } }
+          const movText = (Array.isArray(movArr) ? movArr.join(' ') : '').toLowerCase();
+
+          const hasPush = /push.?up|press|dip|burpee|hspu/i.test(movText);
+          const hasPull = /pull.?up|row|chin|climb/i.test(movText);
+          const hasSquat = /squat|lunge|thruster|wall.?ball/i.test(movText);
+          const hasHinge = /deadlift|swing|clean|snatch/i.test(movText);
+          const hasRun = /run|row.*meter|mile|sprint/i.test(movText);
+          const isMixed = [hasPush, hasPull, hasSquat || hasHinge, hasRun].filter(Boolean).length >= 2;
+
+          let score = 0;
+          // Reward matching movements
+          if (isPushDay && hasPush) score += 3;
+          if (isPullDay && hasPull) score += 3;
+          if (isLegDay && (hasSquat || hasHinge)) score += 3;
+          // Mixed WODs are always decent (Cindy, Helen-style)
+          if (isMixed) score += 1;
+          // Penalize pure mismatches
+          if (isPushDay && !isLegDay && hasSquat && !hasPush) score -= 3;
+          if (isPushDay && !isLegDay && hasRun && !hasPush) score -= 2;
+          if (isPullDay && !isLegDay && hasSquat && !hasPull) score -= 3;
+          if (isLegDay && !isPushDay && !isPullDay && hasPush && !hasSquat && !hasHinge) score -= 2;
+
+          return { id, score };
+        });
+
+        // Sort by score (best match first), then by least-used for variety
+        scoredWods.sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score;
+          return (wodUsageCount[a.id] || 0) - (wodUsageCount[b.id] || 0);
+        });
+
+        // Take top half by score, then pick from those for variety
+        const topHalf = scoredWods.slice(0, Math.max(3, Math.ceil(scoredWods.length / 2)));
+        eligibleWods = topHalf.map(s => s.id);
 
         // Select WOD — pick least-used from eligible pool for maximum variety
         eligibleWods.sort((a, b) => (wodUsageCount[a] || 0) - (wodUsageCount[b] || 0));
