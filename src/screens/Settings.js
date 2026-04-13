@@ -491,8 +491,8 @@ export default function Settings({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Dev Tools */}
-        <View style={styles.section}>
+        {/* Dev Tools — hidden in production builds */}
+        {__DEV__ ? <View style={styles.section}>
           <Text style={styles.sectionTitle}>Dev Tools</Text>
 
           <TouchableOpacity style={styles.actionButton} onPress={handleRegenerate}>
@@ -744,7 +744,7 @@ export default function Settings({ navigation }) {
               <Text style={styles.actionDesc}>Simulate logging different weights and verify future adjustments</Text>
             </View>
           </TouchableOpacity>
-        </View>
+        </View> : null}
 
         {/* App Info */}
         <View style={styles.section}>
