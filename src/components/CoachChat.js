@@ -184,9 +184,13 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
 
       // Detect injury keywords in user's message BEFORE executing actions
       const userText = text.toLowerCase();
-      const injuryMatch = userText.match(/(?:my|hurt|pain|sore|injured|tweaked|pulled|strained)\s*(\w+)/i)
-        || userText.match(/(shoulder|knee|back|wrist|elbow|hip|ankle|neck|chest)\s*(?:hurt|pain|sore|injured)/i);
-      const isInjuryConversation = !!injuryMatch;
+      const BODY_PARTS = ['shoulder', 'knee', 'back', 'wrist', 'elbow', 'hip', 'ankle', 'neck', 'chest', 'arm', 'leg', 'hamstring', 'quad', 'calf', 'shin', 'bicep', 'tricep', 'forearm', 'glute'];
+      const INJURY_WORDS = ['hurt', 'hurts', 'hurting', 'pain', 'painful', 'sore', 'soreness', 'injured', 'injury', 'tweaked', 'pulled', 'strained', 'strain', 'ache', 'aching', 'tender', 'swollen', 'sharp', 'pinch', 'pinching', 'bothering'];
+      const foundBodyPart = BODY_PARTS.find(bp => userText.includes(bp));
+      const foundInjuryWord = INJURY_WORDS.some(w => userText.includes(w));
+      const isInjuryConversation = !!(foundBodyPart && foundInjuryWord);
+      const injuryMatch = isInjuryConversation ? [null, foundBodyPart] : null;
+      console.log(`[AI Coach] Injury detection: bodyPart=${foundBodyPart || 'none'}, injuryWord=${foundInjuryWord}, triggered=${isInjuryConversation}`);
 
       // Execute immediate actions — but suppress modify actions during injury conversations
       // (let the user pick from option buttons instead of Claude auto-swapping)
@@ -244,11 +248,12 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
                 const alts = await getAlternatives(ex.exercise_id, parsedProfile);
                 const safeAlt = (alts || []).find(a => { const aMg = (a.muscle_group || '').toLowerCase(); return !targetMuscles.some(t => aMg.includes(t) || t.includes(aMg)); });
                 if (safeAlt) {
-                  injuryOptions.push({ label: `Swap ${ex.name} for ${safeAlt.name}`, description: `Avoids ${bodyPart}`, fromInjury: true, action: { type: 'swap', planExerciseId: String(ex.id), newExerciseId: safeAlt.id, reason: `Swapped to avoid ${bodyPart} injury` } });
+                  injuryOptions.push({ label: `Swap ${ex.name} for ${safeAlt.name}`, description: `Avoids ${bodyPart}`, recommended: true, fromInjury: true, action: { type: 'swap', planExerciseId: String(ex.id), newExerciseId: safeAlt.id, reason: `Swapped to avoid ${bodyPart} injury` } });
                 }
               } catch {}
               injuryOptions.push({ label: `Skip ${ex.name} today`, description: 'Remove from workout', fromInjury: true, action: { type: 'removeExercise', planExerciseId: String(ex.id), reason: `Skipped due to ${bodyPart} injury` } });
             }
+            console.log(`[AI Coach] Injury options: ${injuryOptions.length} buttons for ${affected.length} exercises`);
             if (injuryOptions.length > 0) {
               setMessages(prev => {
                 const updated = [...prev];
@@ -470,6 +475,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
                       injuryOptions.push({
                         label: `Swap ${ex.name} for ${safeAlt.name}`,
                         description: `Avoids ${bodyPart} — different muscle group`,
+                        recommended: true,
                         fromInjury: true,
                         action: { type: 'swap', planExerciseId: String(ex.id), newExerciseId: safeAlt.id, reason: `Swapped to avoid ${bodyPart} injury` },
                       });
