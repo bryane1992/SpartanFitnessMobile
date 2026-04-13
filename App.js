@@ -41,7 +41,7 @@ function MainTabsWithCoach() {
         visible={coachVisible}
         onClose={() => setCoachVisible(false)}
         workout={workout}
-        sessionId={workout ? `workout-${workout.id}` : 'general-coach'}
+        sessionId={`coach-${new Date().toISOString().split('T')[0]}`}
       />
     </View>
   );
