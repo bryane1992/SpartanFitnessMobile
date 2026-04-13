@@ -23,6 +23,7 @@ WEIGHT ADJUSTMENT RULES:
 - adjustWeight ONLY changes FUTURE weeks — it does NOT change today's logged workout. Tell the user: "I'll bump up [exercise] for future weeks."
 - Use the exercise's planExerciseId and the suggested new weight.
 - Typical adjustments: +5-10 lb for upper body, +10-20 lb for lower body compounds.
+- BODYWEIGHT EXERCISES (pull-ups, push-ups, dips, air squats): when user says they can't hit the prescribed REPS, use adjustReps to lower the rep target — NOT adjustWeight. "I can only do 7 pull-ups" means adjust reps to 7, not weight to 7 lb. BW exercises have weight "BW" — never adjust their weight to a number.
 
 INJURY ORDER: 1)reduce reps 2)lighten load 40-60% 3)limit ROM 4)slow tempo 5)change grip/stance 6)swap same-muscle from SWAP OPTIONS 7)unilateral work 8)cross-train 9)skip(last resort). Always flagInjury. Suggest longer rest.
 
