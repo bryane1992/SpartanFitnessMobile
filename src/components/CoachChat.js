@@ -446,8 +446,10 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
             if (action.date1 && action.date2) {
               const success = await swapWorkoutDays(action.date1, action.date2);
               if (success) {
-                await store.loadTodayWorkout();
                 console.log(`[AI Coach] Swapped days: ${action.date1} <-> ${action.date2}`);
+                await store.loadTodayWorkout();
+                // Close coach so user sees the refreshed workout
+                setTimeout(() => onClose(), 500);
               }
             }
             break;
