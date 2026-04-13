@@ -157,6 +157,11 @@ const useWorkoutStore = create((set, get) => ({
               // User said "keep as is" — never ask again this session
               if (dismissedExercises[exId]) break;
 
+              // Skip autoregulation for bodyweight exercises (weight = "BW", "Assisted", etc.)
+              const weightStr = String(exercise.weight || '').trim();
+              const isBW = !weightStr || /^(BW|bodyweight|assisted|band)/i.test(weightStr);
+              if (isBW) break;
+
               const prescribed = parseFloat(exercise.weight);
               const actual = parseFloat(actualWeight);
               console.log(`[Autoregulation] ${exId}: prescribed=${prescribed}, actual=${actual}, diff=${prescribed > 0 ? Math.round(((actual-prescribed)/prescribed)*100) : '?'}%`);
