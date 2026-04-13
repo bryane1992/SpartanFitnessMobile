@@ -750,7 +750,7 @@ export default function Settings({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
           <View style={styles.profileCard}>
-            <ProfileRow label="App" value="Spartan Fitness" />
+            <ProfileRow label="App" value="GritOS" />
             <ProfileRow label="Version" value="1.0.0" />
           </View>
         </View>

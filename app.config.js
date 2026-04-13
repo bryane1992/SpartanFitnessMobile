@@ -2,7 +2,7 @@ import 'dotenv/config';
 
 export default {
   expo: {
-    name: 'Spartan Fitness',
+    name: 'GritOS',
     slug: 'spartan-fitness',
     version: '1.0.0',
     orientation: 'portrait',
@@ -19,11 +19,11 @@ export default {
       buildNumber: '1',
       infoPlist: {
         NSLocationAlwaysAndWhenInUseUsageDescription:
-          'Spartan Fitness tracks your runs and workouts with GPS to measure distance, pace, and route - even when the app is in the background.',
+          'GritOS tracks your runs and workouts with GPS to measure distance, pace, and route - even when the app is in the background.',
         NSLocationWhenInUseUsageDescription:
-          'Spartan Fitness uses GPS to track your runs and measure distance and pace.',
+          'GritOS uses GPS to track your runs and measure distance and pace.',
         NSMotionUsageDescription:
-          'Spartan Fitness uses motion data to track your workouts and improve accuracy.',
+          'GritOS uses motion data to track your workouts and improve accuracy.',
         UIBackgroundModes: ['location', 'audio'],
         BGTaskSchedulerPermittedIdentifiers: ['com.spartanfitness.app.refresh'],
       },
@@ -51,7 +51,7 @@ export default {
         'expo-location',
         {
           locationAlwaysAndWhenInUsePermission:
-            'Spartan Fitness tracks your runs with GPS to measure distance and pace.',
+            'GritOS tracks your runs with GPS to measure distance and pace.',
           isBackgroundLocationEnabled: true,
         },
       ],

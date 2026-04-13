@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Spartan Fitness",
+    "name": "GritOS",
     "slug": "spartan-fitness",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,9 +16,9 @@
       "bundleIdentifier": "com.spartanfitness.app",
       "buildNumber": "1",
       "infoPlist": {
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Spartan Fitness tracks your runs and workouts with GPS to measure distance, pace, and route - even when the app is in the background.",
-        "NSLocationWhenInUseUsageDescription": "Spartan Fitness uses GPS to track your runs and measure distance and pace.",
-        "NSMotionUsageDescription": "Spartan Fitness uses motion data to track your workouts and improve accuracy.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "GritOS tracks your runs and workouts with GPS to measure distance, pace, and route - even when the app is in the background.",
+        "NSLocationWhenInUseUsageDescription": "GritOS uses GPS to track your runs and measure distance and pace.",
+        "NSMotionUsageDescription": "GritOS uses motion data to track your workouts and improve accuracy.",
         "UIBackgroundModes": [
           "location",
           "audio"
@@ -50,7 +50,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Spartan Fitness tracks your runs with GPS to measure distance and pace.",
+          "locationAlwaysAndWhenInUsePermission": "GritOS tracks your runs with GPS to measure distance and pace.",
           "isBackgroundLocationEnabled": true
         }
       ],

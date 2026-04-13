@@ -1,4 +1,4 @@
-//  Spartan Fitness Exercise Catalog
+//  GritOS Exercise Catalog
 // ~136 exercises with muscle groups, style tags, exclusion tags, and alternatives
 
 // Derive movement pattern from exercise properties — used by v5 menu builder

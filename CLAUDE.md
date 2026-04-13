@@ -1,4 +1,4 @@
-# Spartan Fitness Mobile — Agent Rules & Architecture
+# GritOS — Agent Rules & Architecture
 
 ## Quick Context for New Agents
 

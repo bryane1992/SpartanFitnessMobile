@@ -1,6 +1,6 @@
-# Spartan Fitness Mobile — Polish & Professional UI Blueprint
+# GritOS — Polish & Professional UI Blueprint
 
-> **Purpose**: Implementation guide for Claude Code to transform Spartan Fitness from functional to professional-grade. Each section is a self-contained task with acceptance criteria. Work through them in priority order.
+> **Purpose**: Implementation guide for Claude Code to transform GritOS from functional to professional-grade. Each section is a self-contained task with acceptance criteria. Work through them in priority order.
 
 ---
 

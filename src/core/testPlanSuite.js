@@ -64,7 +64,7 @@ export async function runPlanSuite(onLog, onStatus) {
   const scores = [];
 
   output.push('═══════════════════════════════════════════════════════════════');
-  output.push('              SPARTAN FITNESS — PLAN + COACH TEST SUITE');
+  output.push('              GRITOS — PLAN + COACH TEST SUITE');
   output.push(`              Generated: ${new Date().toISOString().split('T')[0]}`);
   output.push('═══════════════════════════════════════════════════════════════\n');
 

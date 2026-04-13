@@ -1,4 +1,4 @@
-# Spartan Fitness — Elite Coaching Engine & AI Coach Spec
+# GritOS — Elite Coaching Engine & AI Coach Spec
 
 ## Elite Programming Logic
 
