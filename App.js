@@ -8,6 +8,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, syncExerciseDb } from './src/data/database';
 import useWorkoutStore from './src/store/useWorkoutStore';
 import CoachChat from './src/components/CoachChat';
+import { supabase } from './src/data/supabase';
+import Auth from './src/screens/Auth';
 
 // Import screens
 import TodayWorkout from './src/screens/TodayWorkout';
@@ -135,12 +137,23 @@ function MainTabs() {
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
+  const [session, setSession] = useState(null);
   const [hasOnboarded, setHasOnboarded] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
   const loadPlanMeta = useWorkoutStore(s => s.loadPlanMeta);
 
   useEffect(() => {
+    // Listen for auth state changes
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+    });
+
     initApp();
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const initApp = async () => {
@@ -197,12 +210,22 @@ export default function App() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <Text style={styles.loadingTitle}>SPARTAN FITNESS</Text>
+        <Text style={styles.loadingTitle}>GRITOS</Text>
         <ActivityIndicator size="large" color="#FF4136" style={{ marginTop: 20 }} />
         {syncStatus ? (
           <Text style={styles.syncText}>{syncStatus}</Text>
         ) : null}
       </View>
+    );
+  }
+
+  // Show auth screen if not logged in
+  if (!session) {
+    return (
+      <>
+        <StatusBar style="light" />
+        <Auth onAuth={(s) => setSession(s)} />
+      </>
     );
   }
 

@@ -56,6 +56,7 @@ export default {
         },
       ],
       'expo-sqlite',
+      'expo-secure-store',
     ],
     extra: {
       eas: {
@@ -64,6 +65,8 @@ export default {
       exerciseDbApiKey: process.env.EXERCISE_DB_KEY,
       claudeApiKey: process.env.CLAUDE_TOKEN,
       wodApiKey: process.env.WOD_TOKEN,
+      supabaseUrl: process.env.PROJECT_URL,
+      supabaseAnonKey: process.env.ANON_KEY,
     },
   },
 };
