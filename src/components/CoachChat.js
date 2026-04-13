@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendCoachMessage } from '../data/coachApi';
-import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, adjustFutureWeights, getPlanRationales, getWodsFromDb, swapWodBlock, restoreWodBlock, deleteLatestInjury } from '../data/database';
+import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, adjustFutureWeights, getPlanRationales, getWodsFromDb, swapWodBlock, restoreWodBlock, deleteLatestInjury, swapWorkoutDays, clearAllInjuries, getWorkoutForDate } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 import { buildExerciseMenu } from '../core/menuBuilder';
 import { detectArchetype, adjustArchetypeForEquipment } from '../core/archetypes';
@@ -156,9 +156,21 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         availableWods = buildWodMenu(parsedProfile || {}, arch);
       } catch {}
 
+      // Load tomorrow's workout for day-swap awareness
+      const todayStr = new Date().toISOString().split('T')[0];
+      const tomorrowDate = new Date();
+      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+      const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
+      let tomorrowWorkout = null;
+      try {
+        tomorrowWorkout = await getWorkoutForDate(tomorrowStr);
+      } catch {}
+
       const context = {
         profile: parsedProfile,
         workout: workout,
+        today: todayStr,
+        tomorrow: tomorrowWorkout,
         injuries: injuries,
         alternatives: alternatives,
         rationales: rationales,
@@ -290,7 +302,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
     for (let action of actions) {
       // Normalize action format — Claude sometimes nests as { "swap": {...} } instead of { "type": "swap", ... }
       if (!action.type) {
-        const key = Object.keys(action).find(k => ['swap', 'swapWod', 'adjustWeight', 'adjustReps', 'flagInjury', 'removeExercise', 'addNote'].includes(k));
+        const key = Object.keys(action).find(k => ['swap', 'swapWod', 'adjustWeight', 'adjustReps', 'flagInjury', 'removeExercise', 'addNote', 'swapDay', 'clearInjuries'].includes(k));
         if (key) {
           action = { type: key, ...action[key] };
         }
@@ -303,6 +315,8 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         'flaginjury': 'flagInjury', 'flag_injury': 'flagInjury',
         'addnote': 'addNote', 'add_note': 'addNote',
         'swapwod': 'swapWod', 'swap_wod': 'swapWod',
+        'swapday': 'swapDay', 'swap_day': 'swapDay',
+        'clearinjuries': 'clearInjuries', 'clear_injuries': 'clearInjuries',
       };
       if (action.type) {
         action.type = ACTION_TYPE_MAP[action.type.toLowerCase()] || action.type;
@@ -417,6 +431,21 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
               const success = await swapWodBlock(blockId, action.newWodId);
               if (success) await store.loadTodayWorkout();
             }
+            break;
+          }
+          case 'swapDay': {
+            if (action.date1 && action.date2) {
+              const success = await swapWorkoutDays(action.date1, action.date2);
+              if (success) {
+                await store.loadTodayWorkout();
+                console.log(`[AI Coach] Swapped days: ${action.date1} <-> ${action.date2}`);
+              }
+            }
+            break;
+          }
+          case 'clearInjuries': {
+            const cleared = await clearAllInjuries();
+            console.log(`[AI Coach] Cleared ${cleared} active injuries`);
             break;
           }
           case 'flagInjury':

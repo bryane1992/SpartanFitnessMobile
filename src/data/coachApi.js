@@ -28,7 +28,8 @@ INJURY ORDER: 1)reduce reps 2)lighten load 40-60% 3)limit ROM 4)slow tempo 5)cha
 
 RESPONSE: Plain text for questions/advice. JSON ONLY when performing actions:
 {"message":"text","actions":[...],"options":[...]}
-Actions: swap(planExerciseId,newExerciseId,reason), adjustWeight(planExerciseId,newWeight,reason), adjustReps(planExerciseId,newSets,newReps,reason), flagInjury(bodyPart,severity), removeExercise(planExerciseId,reason), addNote(planExerciseId,note), swapWod(planBlockId,newWodId,reason)
+Actions: swap(planExerciseId,newExerciseId,reason), adjustWeight(planExerciseId,newWeight,reason), adjustReps(planExerciseId,newSets,newReps,reason), flagInjury(bodyPart,severity), removeExercise(planExerciseId,reason), addNote(planExerciseId,note), swapWod(planBlockId,newWodId,reason), swapDay(date1,date2,reason), clearInjuries(reason)
+When athlete wants to swap today's workout with another day, use swapDay with the two dates (YYYY-MM-DD format). When athlete says injuries are resolved or healed, use clearInjuries.
 Options: ALWAYS present 2-3 options for swaps, removals, injuries, AND WOD changes so the user can choose. Format: {"label":"WOD Name","description":"why this WOD is better","recommended":bool,"action":{"type":"swapWod","planBlockId":"id","newWodId":"wod_id","reason":"why"}}
 When user wants a different WOD, suggest 2-3 alternatives from the AVAILABLE WODS list.`;
 
@@ -186,6 +187,12 @@ function buildContext(context) {
     }
   }
 
+  if (context.today) {
+    const d = new Date(context.today + 'T12:00:00');
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    parts.push(`\nTODAY: ${days[d.getDay()]}, ${context.today}`);
+  }
+
   if (context.workout) {
     const w = context.workout;
     parts.push(`\nWORKOUT: "${w.title}"`);
@@ -209,6 +216,17 @@ function buildContext(context) {
         }
       }
     }
+  }
+
+  if (context.tomorrow) {
+    const t = context.tomorrow;
+    let tomorrowLine = `\nTOMORROW: "${t.title}"`;
+    if (t.date) tomorrowLine += ` (${t.date})`;
+    if (t.blocks) {
+      const exNames = t.blocks.flatMap(b => (b.exercises || []).map(e => e.name)).filter(Boolean);
+      if (exNames.length > 0) tomorrowLine += ` — ${exNames.slice(0, 8).join(', ')}`;
+    }
+    parts.push(tomorrowLine);
   }
 
   if (context.injuries && context.injuries.length > 0) {

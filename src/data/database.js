@@ -1947,6 +1947,39 @@ export async function recoverInjury(injuryId) {
   );
 }
 
+export async function clearAllInjuries() {
+  const database = await getDatabase();
+  const active = await database.getAllAsync('SELECT id FROM injuries WHERE is_active = 1');
+  await database.runAsync('UPDATE injuries SET is_active = 0, recovered_at = ? WHERE is_active = 1', [new Date().toISOString()]);
+  return active.length;
+}
+
+export async function swapWorkoutDays(date1, date2) {
+  const database = await getDatabase();
+  const day1 = await database.getFirstAsync('SELECT * FROM plan_days WHERE date = ?', [date1]);
+  const day2 = await database.getFirstAsync('SELECT * FROM plan_days WHERE date = ?', [date2]);
+  if (!day1 || !day2) return false;
+
+  // Swap day-level fields
+  await database.runAsync(
+    'UPDATE plan_days SET title = ?, focus = ?, phase = ?, color = ?, emoji = ?, is_rest_day = ? WHERE id = ?',
+    [day2.title, day2.focus, day2.phase, day2.color, day2.emoji, day2.is_rest_day, day1.id]
+  );
+  await database.runAsync(
+    'UPDATE plan_days SET title = ?, focus = ?, phase = ?, color = ?, emoji = ?, is_rest_day = ? WHERE id = ?',
+    [day1.title, day1.focus, day1.phase, day1.color, day1.emoji, day1.is_rest_day, day2.id]
+  );
+
+  // Swap blocks by reassigning plan_day_id
+  // Use a temp id to avoid unique constraint issues
+  const TEMP_ID = -999;
+  await database.runAsync('UPDATE plan_blocks SET plan_day_id = ? WHERE plan_day_id = ?', [TEMP_ID, day1.id]);
+  await database.runAsync('UPDATE plan_blocks SET plan_day_id = ? WHERE plan_day_id = ?', [day1.id, day2.id]);
+  await database.runAsync('UPDATE plan_blocks SET plan_day_id = ? WHERE plan_day_id = ?', [day2.id, TEMP_ID]);
+
+  return true;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Coach Messages
 // ═══════════════════════════════════════════════════════════════
