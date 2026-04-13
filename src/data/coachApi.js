@@ -1,15 +1,15 @@
-// Claude AI Coach API Client
-// Uses Claude Sonnet 4.6 via Anthropic API
+// GritOS AI Coach API Client
+// Routes through Supabase Edge Function (API key stays server-side)
+// Falls back to direct Anthropic API in dev mode only
 
 import Constants from 'expo-constants';
+import { getAuthToken } from './supabase';
 
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-haiku-4-5-20251001'; // Haiku for fast, cheap coaching responses
-const TIMEOUT = 15000; // Haiku is fast but needs time for structured responses
-
-// Read from app config (sourced from .env), fallback to bundled key
-const BUNDLED_API_KEY = Constants.expoConfig?.extra?.claudeApiKey
-  || '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';
+const SUPABASE_URL = Constants.expoConfig?.extra?.supabaseUrl || 'https://nyvanilszqnjdwmxnybd.supabase.co';
+const PROXY_URL = `${SUPABASE_URL}/functions/v1/claude-proxy`;
+const DIRECT_API_URL = 'https://api.anthropic.com/v1/messages';
+const MODEL = 'claude-haiku-4-5-20251001';
+const TIMEOUT = 15000;
 
 // System prompt cached across all conversations
 const SYSTEM_PROMPT = `Brief AI fitness coach. 1-2 sentences max unless explaining form. No fluff, no options lists, no numbered choices — just answer directly. NEVER use markdown formatting (no **, ##, *, _, etc.). NEVER show exercise IDs, plan IDs, or database references to the user — those are internal only.
@@ -63,15 +63,12 @@ function sanitizeInput(text, maxLen = 500) {
 }
 
 export async function sendCoachMessage(apiKey, messages, context) {
-  // Use bundled key if none provided
-  if (!apiKey) apiKey = BUNDLED_API_KEY;
   const userContext = buildContext(context);
 
-  // Only keep last 4 messages (not 6) to reduce tokens
+  // Only keep last 4 messages to reduce tokens
   const recentMessages = messages.slice(-4);
   const anthropicMessages = recentMessages.map(m => ({
     role: m.role,
-    // Strip old context from previous messages — only keep the user's actual text
     content: m.role === 'user'
       ? sanitizeInput(
           m.content.includes('\nUser says: ') ? m.content.split('\nUser says: ').pop() : m.content
@@ -79,8 +76,6 @@ export async function sendCoachMessage(apiKey, messages, context) {
       : m.content,
   }));
 
-  // Only prepend context to the FIRST user message in the batch
-  // (system prompt + one context block is enough, Claude remembers within conversation)
   const firstUserIdx = anthropicMessages.findIndex(m => m.role === 'user');
   if (firstUserIdx >= 0) {
     anthropicMessages[firstUserIdx].content = `${userContext}\n\nUser says: ${anthropicMessages[firstUserIdx].content}`;
@@ -92,13 +87,17 @@ export async function sendCoachMessage(apiKey, messages, context) {
   const timer = setTimeout(() => controller.abort(), TIMEOUT);
 
   try {
-    const response = await fetch(ANTHROPIC_API_URL, {
+    // Route through Supabase proxy (prod) or direct API (dev fallback)
+    const authToken = await getAuthToken();
+    const useProxy = !!authToken;
+    const url = useProxy ? PROXY_URL : DIRECT_API_URL;
+    const headers = useProxy
+      ? { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }
+      : { 'Content-Type': 'application/json', 'x-api-key': Constants.expoConfig?.extra?.claudeApiKey || '', 'anthropic-version': '2023-06-01' };
+
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
+      headers,
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 800,

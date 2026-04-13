@@ -755,6 +755,28 @@ export default function Settings({ navigation }) {
           </View>
         </View>
 
+        {/* Account */}
+        <View style={styles.section}>
+          <TouchableOpacity style={[styles.actionButton, { borderColor: '#FF4136', borderWidth: 1 }]} onPress={() => {
+            Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Sign Out', style: 'destructive', onPress: async () => {
+                try {
+                  const { supabase } = require('../data/supabase');
+                  await supabase.auth.signOut();
+                } catch (e) {
+                  console.error('Sign out error:', e);
+                }
+              }},
+            ]);
+          }}>
+            <View style={styles.actionContent}>
+              <Text style={[styles.actionLabel, { color: '#FF4136' }]}>Sign Out</Text>
+              <Text style={styles.actionDesc}>Log out of your GritOS account</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
         <View style={{ height: 40 }} />
       </ScrollView>
 

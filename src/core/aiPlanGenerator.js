@@ -14,14 +14,12 @@ import { buildExerciseMenu, buildWodMenu, formatExerciseMenu, formatWodMenu, bui
 import { seedExercises, getMovementPattern } from '../data/exerciseSeed';
 import { getWodMetadata } from '../data/wodSeed';
 import { buildDayBlocks, getDefaultDayConfigs } from './dayTemplates';
+import { getAuthToken } from '../data/supabase';
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
+const SUPABASE_URL = Constants.expoConfig?.extra?.supabaseUrl || 'https://nyvanilszqnjdwmxnybd.supabase.co';
+const PROXY_URL = `${SUPABASE_URL}/functions/v1/claude-proxy`;
+const DIRECT_API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-haiku-4-5-20251001';
-
-function getApiKey() {
-  return Constants.expoConfig?.extra?.claudeApiKey
-    || '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';
-}
 
 // Warmup exercises — always safe
 const WARMUP_IDS = [
@@ -113,7 +111,6 @@ CRITICAL RULES:
 // ═══════════════════════════════════════════════════════════════
 
 export async function generateAIPlan(userProfile, onStatus) {
-  const apiKey = getApiKey();
   if (onStatus) onStatus('Analyzing your goals...');
 
   // Step 1: Detect archetype (deterministic)
@@ -203,7 +200,7 @@ export async function generateAIPlan(userProfile, onStatus) {
   // Step 6: Claude picks exercises from menu — no fallback, fail fast
   let claudeSelections;
   try {
-    claudeSelections = await callClaudeV5(apiKey, userProfile, archetype, exerciseMenu, wodMenu, dayConfigs, raceReqs);
+    claudeSelections = await callClaudeV5(null, userProfile, archetype, exerciseMenu, wodMenu, dayConfigs, raceReqs);
   } catch (err) {
     console.error('[AI Plan] Claude call failed:', err.message);
     throw new Error('Plan generation failed — please try again. (' + err.message + ')');
@@ -221,15 +218,23 @@ export async function generateAIPlan(userProfile, onStatus) {
 // Claude API — sends menu, gets exercise IDs back
 // ═══════════════════════════════════════════════════════════════
 
-async function callClaudeV5(apiKey, userProfile, archetype, exerciseMenu, wodMenu, dayConfigs, raceReqs) {
+async function callClaudeV5(unusedApiKey, userProfile, archetype, exerciseMenu, wodMenu, dayConfigs, raceReqs) {
   const prompt = buildV5Prompt(userProfile, archetype, exerciseMenu, wodMenu, dayConfigs, raceReqs);
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 120000);
   try {
-    const res = await fetch(API_URL, {
+    // Route through Supabase proxy (prod) or direct API (dev fallback)
+    const authToken = await getAuthToken();
+    const useProxy = !!authToken;
+    const url = useProxy ? PROXY_URL : DIRECT_API_URL;
+    const headers = useProxy
+      ? { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }
+      : { 'Content-Type': 'application/json', 'x-api-key': Constants.expoConfig?.extra?.claudeApiKey || '', 'anthropic-version': '2023-06-01' };
+
+    const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      headers,
       body: JSON.stringify({ model: MODEL, max_tokens: 4000, system: V5_SYSTEM, messages: [{ role: 'user', content: prompt }] }),
       signal: ctrl.signal,
     });

@@ -4,15 +4,12 @@
 
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getAuthToken } from '../data/supabase';
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-haiku-4-5-20251001'; // Haiku for fast review
-
-function getApiKey() {
-  return Constants.expoConfig?.extra?.claudeApiKey
-    || Constants.manifest?.extra?.claudeApiKey
-    || null;
-}
+const SUPABASE_URL = Constants.expoConfig?.extra?.supabaseUrl || 'https://nyvanilszqnjdwmxnybd.supabase.co';
+const PROXY_URL = `${SUPABASE_URL}/functions/v1/claude-proxy`;
+const DIRECT_API_URL = 'https://api.anthropic.com/v1/messages';
+const MODEL = 'claude-haiku-4-5-20251001';
 
 const REVIEWER_SYSTEM = `You are a professional fitness instructor and certified S&C coach with 15+ years of experience programming for athletes from beginners to competitors. You've trained bodybuilders, obstacle racers, powerlifters, endurance athletes, and general population clients.
 
@@ -44,23 +41,21 @@ EVALUATION CRITERIA (rate 0-10 each):
 FORMAT: OVERALL X/10, then each category with 1-2 lines. End with TOP 3 ISSUES + WHAT WORKS WELL. Keep under 500 words total. Be concise.`;
 
 export async function reviewPlan(planDays, userProfile, onProgress) {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error('No API key for reviewer');
-
   if (onProgress) onProgress('Building review context...');
-
-  // Build a condensed plan summary for the reviewer
   const planSummary = buildPlanSummary(planDays, userProfile);
-
   if (onProgress) onProgress('AI reviewer analyzing plan...');
 
-  const response = await fetch(API_URL, {
+  // Route through Supabase proxy (prod) or direct API (dev fallback)
+  const authToken = await getAuthToken();
+  const useProxy = !!authToken;
+  const url = useProxy ? PROXY_URL : DIRECT_API_URL;
+  const headers = useProxy
+    ? { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }
+    : { 'Content-Type': 'application/json', 'x-api-key': Constants.expoConfig?.extra?.claudeApiKey || '', 'anthropic-version': '2023-06-01' };
+
+  const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
+    headers,
     body: JSON.stringify({
       model: MODEL,
       max_tokens: 2000,
