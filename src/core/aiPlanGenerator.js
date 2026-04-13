@@ -785,6 +785,30 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           if (eligibleWods.length === 0) eligibleWods = wodPool.filter(id => (wodUsageCount[id] || 0) < MAX_WOD_REPEATS);
         }
 
+        // Day-focus filter: deprioritize WODs with mismatched movements
+        // e.g., don't put front squats + running on a chest/push day
+        const isPushDay = allowedDayPatterns.has('horizontal_push') || allowedDayPatterns.has('vertical_push');
+        const isPullDay = allowedDayPatterns.has('horizontal_pull') || allowedDayPatterns.has('pull_up');
+        const isLegDay = allowedDayPatterns.has('squat') || allowedDayPatterns.has('hinge');
+        if (isPushDay && !isLegDay) {
+          // On push days, prefer WODs with push movements (push-ups, burpees, presses), avoid squat/run WODs
+          const pushFriendly = eligibleWods.filter(id => {
+            const w = wodById[id];
+            if (!w) return true;
+            let movArr = w.movements;
+            if (typeof movArr === 'string') { try { movArr = JSON.parse(movArr); } catch { movArr = []; } }
+            const movText = (Array.isArray(movArr) ? movArr.join(' ') : '').toLowerCase();
+            // Skip WODs dominated by squats/runs/cleans on push days
+            const hasSquat = /squat|front.squat|overhead.squat/i.test(movText);
+            const hasRun = /run|row.*meter|mile/i.test(movText);
+            const hasPush = /push.?up|press|dip|burpee/i.test(movText);
+            if (hasSquat && !hasPush) return false;
+            if (hasRun && !hasPush) return false;
+            return true;
+          });
+          if (pushFriendly.length > 0) eligibleWods = pushFriendly;
+        }
+
         // Select WOD — pick least-used from eligible pool for maximum variety
         eligibleWods.sort((a, b) => (wodUsageCount[a] || 0) - (wodUsageCount[b] || 0));
         // Among least-used, add some rotation variety
@@ -869,11 +893,14 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           pushes[week % pushes.length] || pushes[0],
         ].filter(Boolean);
       }
-      if (armIds.length === 0 && dayConfig.arm_finisher && bt.armBlaster > 0) {
+      // Ensure arm blaster always has 2 exercises (1 bicep + 1 tricep) for a proper superset
+      if (armIds.length < 2 && dayConfig.arm_finisher && bt.armBlaster > 0) {
         const armPullOptions = exerciseMenu.filter(e => e.pattern === 'arm_pull').map(e => e.id);
         const armPushOptions = exerciseMenu.filter(e => e.pattern === 'arm_push').map(e => e.id);
-        if (armPullOptions.length > 0) armIds.push(armPullOptions[week % armPullOptions.length]);
-        if (armPushOptions.length > 0) armIds.push(armPushOptions[week % armPushOptions.length]);
+        const hasPull = armIds.some(id => getMovementPattern(exerciseById[id]) === 'arm_pull');
+        const hasPush = armIds.some(id => getMovementPattern(exerciseById[id]) === 'arm_push');
+        if (!hasPull && armPullOptions.length > 0) armIds.push(armPullOptions[week % armPullOptions.length]);
+        if (!hasPush && armPushOptions.length > 0) armIds.push(armPushOptions[week % armPushOptions.length]);
       }
       if (armIds.length > 0 && bt.armBlaster > 0) {
         const armBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: 'ARM BLASTER', type: 'SUPERSETS', timeCap: `${bt.armBlaster} min`, isAmrap: false, hasGps: false });
