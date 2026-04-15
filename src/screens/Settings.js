@@ -508,11 +508,6 @@ export default function Settings({ navigation }) {
               <Text style={styles.actionDesc}>Share your workout plan as text</Text>
             </View>
           </TouchableOpacity>
-        </View>
-
-        {/* Dev Tools — hidden in production builds */}
-        {__DEV__ ? <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Dev Tools</Text>
 
           <TouchableOpacity style={styles.actionButton} onPress={handleRegenerate}>
             <View style={styles.actionContent}>
@@ -527,6 +522,11 @@ export default function Settings({ navigation }) {
               <Text style={styles.actionDesc}>Change all preferences from scratch</Text>
             </View>
           </TouchableOpacity>
+        </View>
+
+        {/* Dev Tools — hidden in production builds */}
+        {__DEV__ ? <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Dev Tools</Text>
 
           <TouchableOpacity style={styles.actionButton} onPress={() => {
             const results = testArchetypes();
