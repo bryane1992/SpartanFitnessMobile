@@ -3,7 +3,7 @@ import 'dotenv/config';
 export default {
   expo: {
     name: 'GritOS',
-    slug: 'gritos',
+    slug: 'spartan-fitness',
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/app-icon.png',
@@ -56,7 +56,6 @@ export default {
         },
       ],
       'expo-sqlite',
-      'expo-secure-store',
     ],
     extra: {
       eas: {
