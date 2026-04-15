@@ -182,9 +182,6 @@ function ManualMode({ navigation, onSaved, recentSessions }) {
             <Text style={s.startBtnText}>START WORKOUT</Text>
             <Text style={s.startBtnSub}>Add exercises and log sets as you go</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.gpsBtn} onPress={() => navigation.navigate('GpsRunTracker')}>
-            <Text style={s.gpsBtnText}>GPS RUN</Text>
-          </TouchableOpacity>
         </View>
         <RecentSessions sessions={recentSessions} />
         <View style={{ height: 40 }} />
@@ -548,9 +545,6 @@ function FreetextMode({ onSaved, navigation, recentSessions }) {
         </View>
 
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-          <TouchableOpacity style={s.gpsSmall} onPress={() => navigation.navigate('GpsRunTracker')}>
-            <Text style={s.gpsSmallText}>GPS RUN</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={[s.saveBtn, { flex: 1 }, !input.trim() && { opacity: 0.4 }]}
             onPress={handleLog} disabled={!input.trim() || isProcessing}>
             {isProcessing ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>LOG IT</Text>}
