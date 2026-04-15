@@ -61,7 +61,7 @@ export default {
       eas: {
         projectId: 'a798bcee-131b-4777-bca1-b4be26db20ab',
       },
-      exerciseDbApiKey: process.env.EXERCISE_DB_KEY,
+      exerciseDbApiKey: process.env.Y,
       claudeApiKey: process.env.CLAUDE_TOKEN,
       wodApiKey: process.env.WOD_TOKEN,
       supabaseUrl: process.env.PROJECT_URL,

@@ -645,7 +645,7 @@ export default function Onboarding({ navigation }) {
           {selectedEquipment.includes('barbell') && (
             <View style={styles.detailCard}>
               <Text style={styles.detailLabel}>BARBELL</Text>
-              <Text style={styles.detailDesc}>Max weight you can load on the bar (including the bar)</Text>
+              <Text style={styles.detailDesc}>Heaviest your barbell can go (bar + all plates you own)</Text>
               <TextInput
                 style={styles.detailInput}
                 placeholder="e.g. 110"
@@ -676,7 +676,7 @@ export default function Onboarding({ navigation }) {
           {selectedEquipment.includes('dumbbells') && (
             <View style={styles.detailCard}>
               <Text style={styles.detailLabel}>DUMBBELLS</Text>
-              <Text style={styles.detailDesc}>Heaviest dumbbell you can use per hand (adjustable or fixed)</Text>
+              <Text style={styles.detailDesc}>Heaviest dumbbell you own (not your max lift — the actual weight of the dumbbell)</Text>
               <TextInput
                 style={styles.detailInput}
                 placeholder="e.g. 55"
