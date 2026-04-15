@@ -62,9 +62,10 @@ const KG_TO_LB = 2.20462;
 export function displayWeight(weightStr) {
   if (!weightStr) return '';
   const s = String(weightStr).trim();
-  // Non-numeric weights pass through
+  // Non-numeric or non-weight strings pass through unchanged
   if (/^(BW|bodyweight|assisted|band|none)/i.test(s)) return s;
-  // Strip " lb" suffix if present
+  if (/pace|effort|%|cool|warm|build|conversational|race|tempo|easy|hard|stretch|mobility/i.test(s)) return s;
+  // Strip " lb" / " kg" suffix if present
   const num = parseFloat(s);
   if (isNaN(num)) return s;
 
