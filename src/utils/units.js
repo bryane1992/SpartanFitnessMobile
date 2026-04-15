@@ -144,6 +144,17 @@ export function displayBodyWeight(lbs) {
   return `${lbs} lb`;
 }
 
+// Convert inline distance text (e.g., "1.5 mi", "400m", "3 mi") in any string
+export function convertDistanceText(text) {
+  if (!text || !isMetric()) return text;
+  const s = String(text);
+  // "1.5 mi" → "2.4 km"
+  return s.replace(/(\d+\.?\d*)\s*mi\b/gi, (_, num) => {
+    const km = (parseFloat(num) * 1.60934).toFixed(1);
+    return `${km} km`;
+  });
+}
+
 // Weight unit label
 export function weightUnit() {
   return isMetric() ? 'kg' : 'lb';
