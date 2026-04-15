@@ -330,6 +330,7 @@ export default function Settings({ navigation }) {
           <Text style={styles.regeneratingTitle}>Regenerating Plan</Text>
           <ActivityIndicator size="large" color="#FF4136" style={{ marginTop: 20 }} />
           <Text style={styles.regeneratingSub}>Rebuilding your workouts...</Text>
+          <Text style={styles.regeneratingWarn}>Please don't leave this screen or close the app</Text>
         </View>
       </SafeAreaView>
     );
@@ -1092,6 +1093,12 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 15,
     marginTop: 15,
+  },
+  regeneratingWarn: {
+    color: '#FF4136',
+    fontSize: 12,
+    marginTop: 20,
+    letterSpacing: 0.5,
   },
   // Equipment modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 },

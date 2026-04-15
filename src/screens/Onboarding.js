@@ -1076,6 +1076,7 @@ export default function Onboarding({ navigation }) {
             );
           })}
         </View>
+        <Text style={{ color: '#FF4136', fontSize: 12, marginTop: 20, textAlign: 'center' }}>Please don't leave this screen or close the app</Text>
       </View>
     );
   };
