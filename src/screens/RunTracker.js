@@ -350,6 +350,7 @@ export default function RunTracker({ route, navigation }) {
 
     // Reset segment tracking
     segmentDistance.current = 0;
+    segmentStartTime.current = Date.now(); // reset segment timer so next segment starts fresh
     setSegmentTime(0);
 
     if (currentSegment < builtSegments.length - 1) {
