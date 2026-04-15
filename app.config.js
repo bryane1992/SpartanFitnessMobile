@@ -3,10 +3,10 @@ import 'dotenv/config';
 export default {
   expo: {
     name: 'GritOS',
-    slug: 'spartan-fitness',
+    slug: 'gritos',
     version: '1.0.0',
     orientation: 'portrait',
-    icon: './assets/icon.png',
+    icon: './assets/app-icon.png',
     userInterfaceStyle: 'dark',
     splash: {
       image: './assets/splash-icon.png',
@@ -15,7 +15,7 @@ export default {
     },
     ios: {
       supportsTablet: false,
-      bundleIdentifier: 'com.spartanfitness.app',
+      bundleIdentifier: 'com.gritos.app',
       buildNumber: '1',
       infoPlist: {
         NSLocationAlwaysAndWhenInUseUsageDescription:
@@ -25,7 +25,7 @@ export default {
         NSMotionUsageDescription:
           'GritOS uses motion data to track your workouts and improve accuracy.',
         UIBackgroundModes: ['location', 'audio'],
-        BGTaskSchedulerPermittedIdentifiers: ['com.spartanfitness.app.refresh'],
+        BGTaskSchedulerPermittedIdentifiers: ['com.gritos.app.refresh'],
       },
       config: {
         usesNonExemptEncryption: false,
@@ -36,7 +36,7 @@ export default {
         backgroundColor: '#0A0A0A',
         foregroundImage: './assets/android-icon-foreground.png',
       },
-      package: 'com.spartanfitness.app',
+      package: 'com.gritos.app',
       versionCode: 1,
       permissions: [
         'ACCESS_COARSE_LOCATION',
