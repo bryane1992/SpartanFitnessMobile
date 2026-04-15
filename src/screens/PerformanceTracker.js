@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import usePerformanceStore from '../store/usePerformanceStore';
+import { displayWeight, displayDistance, displayPace } from '../utils/units';
 
 const PHASE_COLORS = {
   foundation: '#FF4136',
@@ -223,7 +224,7 @@ export default function PerformanceTracker() {
                   <ActivityIndicator size="small" color="#FF4136" />
                 ) : (
                   selectedExerciseHistory.map((entry, i) => {
-                    const weight = entry.actual_weight || entry.weight || '--';
+                    const weight = displayWeight(entry.actual_weight || entry.weight || '--');
                     const repsVal = entry.actual_reps || entry.reps || '';
                     const repsDisplay = formatRepsDisplay(repsVal, entry.sets);
                     const targetReps = parseInt(String(entry.sets || '').match(/x(\d+)/)?.[1]) || 0;
@@ -296,14 +297,14 @@ export default function PerformanceTracker() {
                             <View key={i} style={styles.customEntryRow}>
                               <View style={styles.customEntryHeader}>
                                 <Text style={styles.customEntryName}>{String(entry.exercise_name || '')}</Text>
-                                {entry.weight_lbs ? <Text style={styles.customEntryWeight}>{entry.weight_lbs} lb</Text> : null}
+                                {entry.weight_lbs ? <Text style={styles.customEntryWeight}>{displayWeight(entry.weight_lbs)}</Text> : null}
                               </View>
                               <Text style={styles.customEntryDetail}>
                                 {[
                                   entry.sets ? `${entry.sets} sets` : null,
                                   entry.reps ? `${entry.reps} reps` : null,
                                   entry.duration_minutes ? `${entry.duration_minutes} min` : null,
-                                  entry.distance_miles ? `${entry.distance_miles} mi` : null,
+                                  entry.distance_miles ? displayDistance(entry.distance_miles) : null,
                                   entry.wod_score ? `Score: ${entry.wod_score}` : null,
                                   entry.category === 'sport' ? 'Sport' : entry.category === 'cardio' ? 'Cardio' : null,
                                 ].filter(Boolean).join('  \u2022  ')}
@@ -336,7 +337,7 @@ export default function PerformanceTracker() {
                         <View style={styles.runBarTrack}>
                           <View style={[styles.runBarFill, { height: `${Math.max(barHeight, 3)}%` }]} />
                         </View>
-                        <Text style={styles.runBarDist}>{(week.total_distance || 0).toFixed(1)} mi</Text>
+                        <Text style={styles.runBarDist}>{displayDistance(week.total_distance || 0, 1)}</Text>
                         <Text style={styles.runBarPace}>{formatPace(week.avg_pace)}</Text>
                         <Text style={styles.runBarLabel}>{`W${week.week_num}`}</Text>
                       </View>
@@ -542,7 +543,7 @@ export default function PerformanceTracker() {
                       <Text style={styles.prDate}>{String(pr.date || '')}</Text>
                     </View>
                     <View style={styles.prWeightBox}>
-                      <Text style={styles.prWeight}>{`${pr.best_weight}`}</Text>
+                      <Text style={styles.prWeight}>{displayWeight(pr.best_weight)}</Text>
                       <Text style={styles.prWeightUnit}>lb</Text>
                     </View>
                   </TouchableOpacity>
@@ -568,7 +569,7 @@ export default function PerformanceTracker() {
                   <ActivityIndicator size="small" color="#FF4136" />
                 ) : (
                   selectedExerciseHistory.map((entry, i) => {
-                    const weight = entry.actual_weight || entry.weight || '--';
+                    const weight = displayWeight(entry.actual_weight || entry.weight || '--');
                     const repsVal = entry.actual_reps || entry.reps || '';
                     const repsDisplay = formatRepsDisplay(repsVal, entry.sets);
                     const targetReps = parseInt(String(entry.sets || '').match(/x(\d+)/)?.[1]) || 0;

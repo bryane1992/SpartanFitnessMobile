@@ -165,6 +165,13 @@ export async function sendCoachMessage(apiKey, messages, context) {
 function buildContext(context) {
   const parts = [];
 
+  // User's preferred units
+  try {
+    const { getUnits } = require('../utils/units');
+    const units = getUnits();
+    parts.push(`UNITS: ${units === 'metric' ? 'metric (kg, km)' : 'imperial (lb, mi)'} — always respond using these units`);
+  } catch {}
+
   if (context.profile) {
     const p = context.profile;
     const goals = (p.goals || [p.goal]).join(', ');

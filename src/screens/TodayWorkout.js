@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import useWorkoutStore from '../store/useWorkoutStore';
+import { displayWeight } from '../utils/units';
 import ExerciseSwapModal from './ExerciseSwapModal';
 import ExerciseDetailModal from '../components/ExerciseDetailModal';
 import WodTimer from '../components/WodTimer';
@@ -438,7 +439,7 @@ function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress,
   const [isExpanded, setIsExpanded] = useState(false);
   const name = String(exercise.name || 'Exercise');
   const sets = String(exercise.sets || '');
-  const weight = exercise.weight ? String(exercise.weight) : '';
+  const weight = exercise.weight ? displayWeight(exercise.weight) : '';
   const rest = exercise.rest ? String(exercise.rest) : '';
   const swapped = exercise.swapped_from ? ' (swapped)' : '';
 

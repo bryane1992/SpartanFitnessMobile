@@ -465,6 +465,24 @@ export default function Settings({ navigation }) {
           </View>
         )}
 
+        {/* Units */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Units</Text>
+          <TouchableOpacity style={styles.actionButton} onPress={async () => {
+            const { useUnits } = require('../utils/units');
+            const { getUnits, setUnits } = require('../utils/units');
+            const current = getUnits();
+            const next = current === 'imperial' ? 'metric' : 'imperial';
+            await setUnits(next);
+            Alert.alert('Units Updated', `Switched to ${next === 'metric' ? 'Metric (kg, km)' : 'Imperial (lb, mi)'}. Restart the app for all screens to update.`);
+          }}>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionLabel}>Switch to {profile?.units === 'metric' ? 'Imperial (lb, mi)' : 'Metric (kg, km)'}</Text>
+              <Text style={styles.actionDesc}>Currently using {profile?.units === 'metric' ? 'metric' : 'imperial'} units</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
         {/* Actions */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Actions</Text>

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
+import { displayDistance, displayPace, distanceUnit } from '../utils/units';
 import { useIsFocused } from '@react-navigation/native';
 import { saveRunHistory, getRunTypeForDate, getRunExercisesForDate } from '../data/database';
 
@@ -266,7 +267,7 @@ export default function RunTracker({ route, navigation }) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const formatDistance = (miles) => miles.toFixed(2);
+  const formatDist = (miles) => displayDistance(miles);
 
   const calculateDistance = (c1, c2) => {
     const R = 3959;
@@ -566,7 +567,7 @@ export default function RunTracker({ route, navigation }) {
               <Text style={styles.summaryLabel}>TOTAL TIME</Text>
             </View>
             <View style={styles.summaryBox}>
-              <Text style={styles.summaryValue}>{formatDistance(totalDistance)}</Text>
+              <Text style={styles.summaryValue}>{formatDist(totalDistance)}</Text>
               <Text style={styles.summaryLabel}>MILES</Text>
             </View>
             <View style={styles.summaryBox}>
@@ -586,7 +587,7 @@ export default function RunTracker({ route, navigation }) {
                 </View>
                 <View style={styles.splitStats}>
                   <Text style={styles.splitStat}>{formatTime(split.time)}</Text>
-                  <Text style={styles.splitStatSub}>{formatDistance(split.distance)} mi</Text>
+                  <Text style={styles.splitStatSub}>{formatDist(split.distance)}</Text>
                 </View>
               </View>
             ))}
@@ -642,7 +643,7 @@ export default function RunTracker({ route, navigation }) {
               {formatTime(Math.max(0, (currentSeg?.duration || 0) - segmentTime))} left
             </Text>
             <Text style={styles.segmentDist}>
-              {formatDistance(segmentDistance.current)} mi
+              {formatDist(segmentDistance.current)}
             </Text>
           </View>
         </View>
@@ -655,7 +656,7 @@ export default function RunTracker({ route, navigation }) {
           </View>
           <View style={styles.totalStatBox}>
             <Text style={styles.totalStatLabel}>TOTAL DIST</Text>
-            <Text style={styles.totalStatValue}>{formatDistance(totalDistance)} mi</Text>
+            <Text style={styles.totalStatValue}>{formatDist(totalDistance)}</Text>
           </View>
           <View style={styles.totalStatBox}>
             <Text style={styles.totalStatLabel}>SPEED</Text>
@@ -676,7 +677,7 @@ export default function RunTracker({ route, navigation }) {
               <View key={i} style={styles.liveSplitRow}>
                 <Text style={styles.liveSplitName}>{split.name}</Text>
                 <Text style={styles.liveSplitData}>
-                  {formatTime(split.time)} {'\u2022'} {formatDistance(split.distance)} mi
+                  {formatTime(split.time)} {'\u2022'} {formatDist(split.distance)}
                 </Text>
               </View>
             ))}
@@ -748,7 +749,7 @@ export default function RunTracker({ route, navigation }) {
                     {isActive ? (
                       <Text style={[styles.timelineStatus, { color: segTypeColor }]}>IN PROGRESS</Text>
                     ) : isDone && completedSplit ? (
-                      <Text style={styles.timelineStatus}>{`${formatTime(completedSplit.time)} \u2022 ${formatDistance(completedSplit.distance)} mi`}</Text>
+                      <Text style={styles.timelineStatus}>{`${formatTime(completedSplit.time)} \u2022 ${formatDist(completedSplit.distance)}`}</Text>
                     ) : (
                       <Text style={styles.timelineStatus}>UPCOMING</Text>
                     )}
