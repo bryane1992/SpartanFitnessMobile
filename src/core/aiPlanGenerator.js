@@ -127,12 +127,7 @@ export async function generateAIPlan(userProfile, onStatus) {
     console.log(`[AI Plan] WOD menu IDs: ${wodMenu.map(w => `${w.id}(${w.tier})`).join(', ')}`);
   } catch (menuErr) {
     console.error('[AI Plan] Menu building failed:', menuErr.message);
-    // Fallback: use all seed exercises without filtering
-    exerciseMenu = seedExercises().map(ex => ({
-      id: ex.id, name: ex.name, pattern: getMovementPattern(ex),
-      equipment: ex.category, difficulty: ex.difficulty || 'intermediate',
-    }));
-    wodMenu = [];
+    throw new Error('Failed to build exercise menu — please try again. (' + menuErr.message + ')');
   }
 
   // Step 3: Race requirements
@@ -297,58 +292,6 @@ function buildV5Prompt(userProfile, archetype, exerciseMenu, wodMenu, dayConfigs
   p.push('\n' + formatWodMenu(wodMenu));
 
   return p.join('\n');
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Default selections — when Claude fails
-// ═══════════════════════════════════════════════════════════════
-
-function buildDefaultSelections(dayConfigs, exerciseMenu, wodMenu, archetype) {
-  const menuByPattern = {};
-  for (const ex of exerciseMenu) {
-    if (!menuByPattern[ex.pattern]) menuByPattern[ex.pattern] = [];
-    menuByPattern[ex.pattern].push(ex.id);
-  }
-
-  const pickFromPattern = (pattern, count = 3) => {
-    const pool = menuByPattern[pattern] || menuByPattern['squat'] || [];
-    return pool.slice(0, count);
-  };
-
-  const days = dayConfigs.map((config, i) => {
-    // Build exercise POOLS (more than needed per session for weekly rotation)
-    const compounds = [];
-    for (const p of (config.primary_patterns || [])) {
-      compounds.push(...pickFromPattern(p, 3));
-    }
-    const accessories = [];
-    for (const p of (config.secondary_patterns || [])) {
-      accessories.push(...pickFromPattern(p, 2));
-    }
-    const arms = config.arm_finisher ? [...pickFromPattern('arm_pull', 2), ...pickFromPattern('arm_push', 2)] : [];
-    const core = config.core_block ? pickFromPattern('core', 4) : [];
-    const wod = config.wod && wodMenu.length > 0 ? wodMenu[i % wodMenu.length].id : null;
-
-    // Fun fallback names based on day type
-    const FUN_NAMES = {
-      full_body_a: 'THE FOUNDATION', full_body_b: 'TOTAL BODY BLAST', full_body_c: 'FULL SEND',
-      full_body_d: 'THE GRIND', full_body_push: 'PUSH IT', full_body_pull: 'GRIP & RIP',
-      full_body_legs: 'THUNDER THIGHS', full_body_upper: 'UPPER DECK',
-      full_body_metabolic: 'THE FURNACE', lower_power: 'LEG DAY MAYHEM',
-      upper_push: 'IRON CURTAIN', upper_pull: 'BACK ATTACK', obstacle: 'OBSTACLE CRUSHER',
-      endurance_metabolic: 'CARDIO KING', push: 'PRESS PARTY', pull: 'ROW & GO',
-      legs: 'SQUAT CITY', sprint_conditioning: 'SPRINT & BURN',
-    };
-    const title = FUN_NAMES[config.type] || config.type?.replace(/_/g, ' ').toUpperCase() || 'TRAINING';
-    return { dayIndex: i, title, compounds, accessories, arms, core, wod, rationale: 'Auto-selected defaults' };
-  });
-
-  return {
-    planName: `${archetype?.label || 'Training'} Program`,
-    days,
-    wodPool: wodMenu.slice(0, 5).map(w => w.id),
-    progressionNotes: '',
-  };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1346,13 +1289,7 @@ function expandPool(claudePicks, exerciseMenu, dayConfig, archetype, week) {
 // ═══════════════════════════════════════════════════════════════
 
 function buildWodExercises(wod, equipmentDetails, workingWeights, experience) {
-  if (!wod) {
-    return [
-      { id: 'air_squats', sets: '1x15', reps: '15', weight: 'BW', notes: 'Bodyweight circuit' },
-      { id: 'push_ups', sets: '1x10', reps: '10', weight: 'BW', notes: null },
-      { id: 'burpees', sets: '1x5', reps: '5', weight: 'BW', notes: null },
-    ];
-  }
+  if (!wod) return [];
   // Parse movements — could be JSON string from DB or array from seed
   let movements = wod.movements;
   if (typeof movements === 'string') {
