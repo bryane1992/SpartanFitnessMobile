@@ -8,8 +8,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, syncExerciseDb } from './src/data/database';
 import useWorkoutStore from './src/store/useWorkoutStore';
 import CoachChat from './src/components/CoachChat';
-import { supabase } from './src/data/supabase';
-import Auth from './src/screens/Auth';
+// Lazy import — avoid blocking startup
+const Auth = require('./src/screens/Auth').default;
 
 // Import screens
 import TodayWorkout from './src/screens/TodayWorkout';
@@ -138,22 +138,32 @@ function MainTabs() {
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [session, setSession] = useState(null);
+  const authSubRef = React.useRef(null);
   const [hasOnboarded, setHasOnboarded] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
   const loadPlanMeta = useWorkoutStore(s => s.loadPlanMeta);
 
   useEffect(() => {
-    // Listen for auth state changes
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
+    initApp().then(() => {
+      // Check auth after app is initialized
+      try {
+        const { supabase } = require('./src/data/supabase');
+        supabase.auth.getSession().then(({ data: { session: s } }) => {
+          setSession(s);
+        }).catch(() => setSession(null));
+
+        const { data: { subscription: sub } } = supabase.auth.onAuthStateChange((_event, s) => {
+          setSession(s);
+        });
+        // Store subscription for cleanup
+        authSubRef.current = sub;
+      } catch (e) {
+        console.error('[Auth] Supabase init failed:', e.message);
+        setSession(null);
+      }
     });
 
-    initApp();
-
-    return () => subscription.unsubscribe();
+    return () => { if (authSubRef.current) authSubRef.current.unsubscribe(); };
   }, []);
 
   const initApp = async () => {
