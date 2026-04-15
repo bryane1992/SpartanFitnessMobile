@@ -2,40 +2,47 @@
 // Handles auth, secure token storage, and API communication
 
 import { createClient } from '@supabase/supabase-js';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+
+// Try SecureStore for production, fall back to AsyncStorage for Expo Go
+let SecureStore = null;
+try {
+  SecureStore = require('expo-secure-store');
+} catch {
+  // expo-secure-store not available in this environment
+}
 
 const SUPABASE_URL = Constants.expoConfig?.extra?.supabaseUrl || 'https://nyvanilszqnjdwmxnybd.supabase.co';
 const SUPABASE_ANON_KEY = Constants.expoConfig?.extra?.supabaseAnonKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55dmFuaWxzenFuamR3bXhueWJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwNzk5MzYsImV4cCI6MjA5MTY1NTkzNn0.FPlc5Ue46rHOJZp0Z4LKNPfGFMj11yrY2BrPTFyhOiU';
 
-// Secure storage adapter — tokens stored encrypted, not in AsyncStorage
-const secureStoreAdapter = {
+// Storage adapter — SecureStore for production, AsyncStorage for Expo Go
+const storageAdapter = {
   getItem: async (key) => {
     try {
-      return await SecureStore.getItemAsync(key);
+      if (SecureStore) return await SecureStore.getItemAsync(key);
+      return await AsyncStorage.getItem('supabase_' + key);
     } catch {
       return null;
     }
   },
   setItem: async (key, value) => {
     try {
-      await SecureStore.setItemAsync(key, value);
-    } catch (e) {
-      console.warn('[Supabase] SecureStore write failed:', e.message);
-    }
+      if (SecureStore) await SecureStore.setItemAsync(key, value);
+      else await AsyncStorage.setItem('supabase_' + key, value);
+    } catch {}
   },
   removeItem: async (key) => {
     try {
-      await SecureStore.deleteItemAsync(key);
-    } catch {
-      // ignore
-    }
+      if (SecureStore) await SecureStore.deleteItemAsync(key);
+      else await AsyncStorage.removeItem('supabase_' + key);
+    } catch {}
   },
 };
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    storage: secureStoreAdapter,
+    storage: storageAdapter,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false, // not needed for mobile
