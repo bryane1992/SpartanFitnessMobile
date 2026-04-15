@@ -118,8 +118,8 @@ export default function WodTimer({ type, timeCap, onComplete, onRoundsChange }) 
         <Text style={styles.minuteLabel}>MINUTE {currentMinute + 1} of {Math.ceil(totalSeconds / 60)}</Text>
       ) : null}
 
-      {/* Round counter for AMRAP */}
-      {(isAMRAP || isForTime) && (isRunning || rounds > 0) ? (
+      {/* Round counter — AMRAP only (For Time doesn't track rounds) */}
+      {isAMRAP && (isRunning || rounds > 0) ? (
         <Text style={styles.roundCount}>{rounds} ROUND{rounds !== 1 ? 'S' : ''}</Text>
       ) : null}
 
@@ -140,8 +140,8 @@ export default function WodTimer({ type, timeCap, onComplete, onRoundsChange }) 
         ) : isRunning ? (
           // Running
           <>
-            {/* Big ROUND button for AMRAP — the main interaction during the WOD */}
-            {(isAMRAP || isForTime) ? (
+            {/* Big ROUND button for AMRAP only */}
+            {isAMRAP ? (
               <TouchableOpacity style={styles.roundBtn} onPress={logRound} activeOpacity={0.6}>
                 <Text style={styles.roundBtnText}>ROUND</Text>
                 <Text style={styles.roundBtnCount}>{rounds + 1}</Text>
