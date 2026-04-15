@@ -45,13 +45,16 @@ export async function reviewPlan(planDays, userProfile, onProgress) {
   const planSummary = buildPlanSummary(planDays, userProfile);
   if (onProgress) onProgress('AI reviewer analyzing plan...');
 
-  // Route through Supabase proxy (prod) or direct API (dev fallback)
+  // Route through Supabase proxy — requires auth
   const authToken = await getAuthToken();
+  if (!authToken && !Constants.expoConfig?.extra?.claudeApiKey) {
+    throw new Error('Not authenticated — please sign in');
+  }
   const useProxy = !!authToken;
   const url = useProxy ? PROXY_URL : DIRECT_API_URL;
   const headers = useProxy
     ? { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }
-    : { 'Content-Type': 'application/json', 'x-api-key': Constants.expoConfig?.extra?.claudeApiKey || '', 'anthropic-version': '2023-06-01' };
+    : { 'Content-Type': 'application/json', 'x-api-key': Constants.expoConfig?.extra?.claudeApiKey, 'anthropic-version': '2023-06-01' };
 
   const response = await fetch(url, {
     method: 'POST',

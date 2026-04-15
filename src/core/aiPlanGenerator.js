@@ -219,13 +219,16 @@ async function callClaudeV5(unusedApiKey, userProfile, archetype, exerciseMenu, 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 120000);
   try {
-    // Route through Supabase proxy (prod) or direct API (dev fallback)
+    // Route through Supabase proxy — requires auth
     const authToken = await getAuthToken();
+    if (!authToken && !Constants.expoConfig?.extra?.claudeApiKey) {
+      throw new Error('Not authenticated — please sign in to generate a plan');
+    }
     const useProxy = !!authToken;
     const url = useProxy ? PROXY_URL : DIRECT_API_URL;
     const headers = useProxy
       ? { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }
-      : { 'Content-Type': 'application/json', 'x-api-key': Constants.expoConfig?.extra?.claudeApiKey || '', 'anthropic-version': '2023-06-01' };
+      : { 'Content-Type': 'application/json', 'x-api-key': Constants.expoConfig?.extra?.claudeApiKey, 'anthropic-version': '2023-06-01' };
 
     const res = await fetch(url, {
       method: 'POST',
