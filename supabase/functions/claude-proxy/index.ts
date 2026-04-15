@@ -47,32 +47,37 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401 })
     }
 
-    // 2. Check rate limit
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('subscription_tier')
-      .eq('user_id', user.id)
-      .single()
+    // 2. Check rate limit (graceful — missing profile = free tier)
+    let tier = 'free'
+    try {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('subscription_tier')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      tier = profile?.subscription_tier || 'free'
+    } catch { /* no profile row = free tier */ }
 
-    const tier = profile?.subscription_tier || 'free'
     const limit = RATE_LIMITS[tier] || RATE_LIMITS.free
 
     // Count messages this week
-    const weekAgo = new Date()
-    weekAgo.setDate(weekAgo.getDate() - 7)
-    const { count } = await supabase
-      .from('coach_messages')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .gte('created_at', weekAgo.toISOString())
+    try {
+      const weekAgo = new Date()
+      weekAgo.setDate(weekAgo.getDate() - 7)
+      const { count } = await supabase
+        .from('coach_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('created_at', weekAgo.toISOString())
 
-    if ((count || 0) >= limit) {
-      return new Response(JSON.stringify({
-        error: 'Rate limit exceeded',
-        message: `You've used ${count}/${limit} messages this week. Upgrade to Pro for more.`,
-        tier,
-      }), { status: 429 })
-    }
+      if ((count || 0) >= limit) {
+        return new Response(JSON.stringify({
+          error: 'Rate limit exceeded',
+          message: `You've used ${count}/${limit} messages this week. Upgrade to Pro for more.`,
+          tier,
+        }), { status: 429 })
+      }
+    } catch { /* rate limit check failed — allow request */ }
 
     // 3. Parse request body
     const body = await req.json()
@@ -108,14 +113,16 @@ Deno.serve(async (req) => {
 
     const result = await anthropicRes.json()
 
-    // 5. Log usage for rate limiting
-    await supabase.from('coach_messages').insert({
-      user_id: user.id,
-      role: 'user',
-      content: messages[messages.length - 1]?.content?.substring(0, 500) || '',
-      tokens_in: result.usage?.input_tokens || 0,
-      tokens_out: result.usage?.output_tokens || 0,
-    })
+    // 5. Log usage for rate limiting (non-blocking — don't fail the response if logging fails)
+    try {
+      await supabase.from('coach_messages').insert({
+        user_id: user.id,
+        role: 'user',
+        content: messages[messages.length - 1]?.content?.substring(0, 500) || '',
+        tokens_in: result.usage?.input_tokens || 0,
+        tokens_out: result.usage?.output_tokens || 0,
+      })
+    } catch { /* logging failure shouldn't break the response */ }
 
     // 6. Return response
     return new Response(JSON.stringify(result), {
