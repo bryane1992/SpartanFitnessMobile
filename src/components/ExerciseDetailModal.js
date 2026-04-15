@@ -186,6 +186,22 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
     try {
       let ex = await getExerciseFullById(exerciseId);
 
+      // If seed exercise has no GIF, try to get gif_url from the synced ExerciseDB version
+      if (ex && !ex.gif_url) {
+        const exdbName = SEED_TO_IMAGE[ex.id] ? null : null; // skip image lookup, check DB instead
+        const exdbId = SEED_TO_EXDB_ID[ex.id];
+        if (exdbId) {
+          try {
+            const database = await getDatabase();
+            const synced = await database.getFirstAsync(
+              "SELECT gif_url FROM exercises WHERE api_id = ? AND gif_url IS NOT NULL LIMIT 1",
+              [exdbId]
+            );
+            if (synced?.gif_url) ex = { ...ex, gif_url: synced.gif_url };
+          } catch {}
+        }
+      }
+
       // If not in local DB, try fetching from RapidAPI
       if (!ex) {
         try {
@@ -201,7 +217,7 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
                 ex = {
                   id: apiEx.id,
                   name: apiEx.name,
-                  gif_url: null, // RapidAPI doesn't include GIF URLs — we'll resolve below
+                  gif_url: apiEx.gifUrl || null,
                   muscle_group: apiEx.bodyPart || '',
                   category: apiEx.equipment || 'bodyweight',
                   equipment_required: JSON.stringify([apiEx.equipment].filter(Boolean)),
