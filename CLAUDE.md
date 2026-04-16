@@ -152,7 +152,7 @@ Deterministic Builder (buildPlanV5)
     │
     ├── Pattern-balanced compound selection
     │   ├── Each primary pattern gets at least 1 exercise (no all-push on push+pull day)
-    │   ├── Fallback patterns when none available (v_pull → h_pull for home gyms)
+    │   ├── Equipment-aware templates (pullPattern adapts: v_pull with machines, h_pull for DB-only)
     │   ├── Anchor lift (1st pattern) stays consistent every week for visible progression
     │   ├── 2nd pattern rotates for variety
     │   ├── NEVER_MAIN_LIFT regex blocks isolation/warmup as compounds
@@ -183,7 +183,9 @@ Deterministic Builder (buildPlanV5)
     │   ├── Week-level dedup (no same WOD twice in one week)
     │   ├── Type diversity (vary AMRAP/For Time/EMOM within week)
     │   ├── Hero WOD cap (max 3 across entire plan)
-    │   └── Fallback safety: last-resort still enforces duration + beginner movement filters
+    │   ├── Day-focus scoring (push WODs on push day, pull WODs on pull day, mixed anywhere)
+    │   ├── Movement-level equipment check (rope climb, barbell, rower filtered by user gear)
+    │   └── No fallback — fail fast if pool is empty
     │
     ├── Beginner finishers (overweight_beginner only, replaces WODs)
     │   ├── 8-min AMRAP circuits on alternating lower-body days
@@ -279,22 +281,21 @@ Includes weekly split analysis, key lift progression chart, and 4 sample weeks.
 ## Claude AI Coach (LIVE)
 
 - **Model**: Haiku 4.5 (fast, cheap)
-- **API client**: `src/data/coachApi.js` with bundled API key
+- **API routing**: Supabase Edge Function proxy (API key server-side, never in client)
 - **Chat UI**: `src/components/CoachChat.js` — bottom sheet, quick action chips, option cards
-- **Entry point**: Floating "AI" button on workout screen
+- **Entry point**: Floating "AI" button on all screens
+- **Session**: date-based (`coach-2026-04-15`), fresh conversation each day
 - **Response format**: JSON with `message` + `actions` + `options`
-- **Actions**: swap, adjustWeight, adjustReps, flagInjury, removeExercise, addNote
-- **Options**: presented for swaps/injuries so user can choose (not auto-executed)
-- **Action normalization**: handles both `{type:"swap",...}` and `{"swap":{...}}` formats
-- **Context per message**: user profile + equipment, workout state, injuries, swap alternatives
-
-### Production Architecture (TODO)
-Currently the API key is **bundled in the client**. Before shipping:
-1. **Build a backend proxy** (Vercel/Railway) that holds the API key
-2. **Client calls proxy**, proxy calls Anthropic. Key never leaves server.
-3. **Gate behind subscription** — proxy checks user's Pro/Elite status
-4. **Rate limit per user** — 3 msgs/week free, 25/week Pro, unlimited Elite
-5. **Use RevenueCat** for subscription management
+- **Actions**: swap, adjustWeight, adjustReps, flagInjury, removeExercise, addNote, swapWod, swapDay, clearInjuries
+- **Undo system**: every action captures before-state snapshot, red UNDO button on last message
+- **Injury auto-modify**: detects body part from user text, shows lighten/swap/skip buttons
+- **Day swapping**: can swap today's workout with any other day's workout
+- **Week awareness**: sees full 7-day schedule, prevents bad adjacencies on swaps
+- **Date awareness**: knows today + tomorrow's workout for contextual advice
+- **Options**: presented for swaps/injuries, user picks from tappable cards (not auto-executed during injury conversations)
+- **BW exercise handling**: uses adjustReps not adjustWeight for pull-ups/push-ups/dips
+- **No markdown**: stripMarkdown() removes **, ##, *, IDs from responses
+- **Context per message**: user profile + equipment, workout state, injuries, swap alternatives, week schedule, units preference
 
 ## Weight Calculation
 
@@ -344,10 +345,16 @@ When a user logs an actual weight >10% different from prescribed, `adjustFutureW
 
 ## Environment
 
-- `.env` contains `EXPO_TOKEN` (EAS builds) and `CLAUDE_TOKEN` (Anthropic API) — **never commit this file**
+- `.env` contains: `EXPO_TOKEN`, `CLAUDE_TOKEN`, `ANON_KEY`, `PROJECT_URL`, `SERVICE_ROLE_KEY`, `DB_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID` — **never commit this file**
 - `.env` is in `.gitignore`
-- `eas.json` configured for iOS and Android builds
+- `eas.json` configured for iOS + Android builds with Apple creds and remote versioning
 - GitHub repo: `bryane1992/SpartanFitnessMobile` (private)
+- **Supabase project**: `nyvanilszqnjdwmxnybd` — Postgres + Auth + Edge Functions
+- **App Store Connect**: ID `6762285446` — TestFlight active
+- **Bundle ID**: `com.gritos.app`
+- **Auth**: Supabase Auth (email/password), tokens in expo-secure-store
+- **API proxy**: `https://nyvanilszqnjdwmxnybd.supabase.co/functions/v1/claude-proxy`
+- **Units**: Imperial/Metric toggle via `src/utils/units.js`, stores in lb/miles internally
 
 ## WOD Library
 
