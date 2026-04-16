@@ -78,18 +78,27 @@ export default function TodayWorkout({ navigation }) {
   }
 
   if (!workout) {
+    const isTodaySelected = selectedDate === new Date().toISOString().split('T')[0];
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.centerContainer}>
-          <Text style={styles.emptyTitle}>No workout for this day</Text>
-          <Text style={styles.emptySub}>
-            {selectedDate === new Date().toISOString().split('T')[0]
-              ? 'Complete onboarding to generate your plan.'
-              : 'Try navigating to a training day.'}
-          </Text>
-          <TouchableOpacity style={styles.todayButton} onPress={goToToday}>
-            <Text style={styles.todayButtonText}>GO TO TODAY</Text>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => goToDay(-1)} style={styles.navArrow}>
+            <Text style={styles.navArrowText}>{'\u25C0'}</Text>
           </TouchableOpacity>
+          <TouchableOpacity onPress={goToToday}>
+            <Text style={styles.navDate}>{isTodaySelected ? 'TODAY (Rest Day)' : selectedDate}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => goToDay(1)} style={styles.navArrow}>
+            <Text style={styles.navArrowText}>{'\u25B6'}</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyTitle}>{isTodaySelected ? 'Rest Day' : 'No workout scheduled'}</Text>
+          <Text style={styles.emptySub}>
+            {isTodaySelected
+              ? 'Recovery day. Use the arrows to browse your upcoming workouts.'
+              : 'Use the arrows to navigate to a training day.'}
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -437,7 +446,11 @@ const NO_GIF_IDS = new Set([
 function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress, onNamePress, onRepDropOff }) {
   const isDone = !!exercise.is_completed;
   const [isExpanded, setIsExpanded] = useState(false);
-  const name = String(exercise.name || 'Exercise');
+  const rawName = String(exercise.name || 'Exercise');
+  // Format underscore IDs into readable names: barbell_thrusters → Barbell Thrusters
+  const name = rawName.includes('_')
+    ? rawName.replace(/_/g, ' ').replace(/\b(db|kb|rdl|ohp)\b/gi, m => m.toUpperCase()).replace(/\b\w/g, c => c.toUpperCase())
+    : rawName;
   const sets = convertDistanceText(String(exercise.sets || ''));
   const weight = exercise.weight ? convertDistanceText(displayWeight(exercise.weight)) : '';
   const rest = exercise.rest ? String(exercise.rest) : '';

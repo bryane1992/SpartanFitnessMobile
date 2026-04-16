@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   TextInput,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -637,11 +638,11 @@ export default function Onboarding({ navigation }) {
     };
 
     return (
-      <View style={styles.stepContainer}>
+      <KeyboardAvoidingView style={styles.stepContainer} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={100}>
         <Text style={styles.stepTitle}>Equipment details</Text>
         <Text style={styles.stepSubtitle}>This helps us scale your workouts perfectly</Text>
 
-        <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll}>
+        <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll} keyboardShouldPersistTaps="handled">
           {selectedEquipment.includes('barbell') && (
             <View style={styles.detailCard}>
               <Text style={styles.detailLabel}>BARBELL</Text>
@@ -701,7 +702,7 @@ export default function Onboarding({ navigation }) {
             <Text style={styles.nextButtonText}>NEXT</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     );
   };
 

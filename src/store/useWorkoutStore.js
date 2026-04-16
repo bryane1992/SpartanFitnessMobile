@@ -68,22 +68,7 @@ const useWorkoutStore = create((set, get) => ({
     const { selectedDate } = get();
     set({ isLoading: true });
     try {
-      let workout = await getWorkoutForDate(selectedDate);
-      // If no workout today, find the nearest upcoming training day
-      if (!workout && selectedDate === new Date().toISOString().split('T')[0]) {
-        try {
-          const { getDatabase: getDb } = require('../data/database');
-          const db = await getDb();
-          const nearest = await db.getFirstAsync(
-            'SELECT date FROM plan_days WHERE date >= ? AND is_rest_day = 0 ORDER BY date LIMIT 1',
-            [selectedDate]
-          );
-          if (nearest) {
-            workout = await getWorkoutForDate(nearest.date);
-            set({ selectedDate: nearest.date });
-          }
-        } catch {}
-      }
+      const workout = await getWorkoutForDate(selectedDate);
       set({ todayWorkout: workout, isLoading: false });
     } catch (e) {
       console.error('Error loading workout:', e);
@@ -310,7 +295,7 @@ const useWorkoutStore = create((set, get) => ({
         totalWeeks: result.totalWeeks,
         isGenerating: false,
         // Navigate to first training day (plan starts on next Monday, not today)
-        selectedDate: result.startDate || new Date().toISOString().split('T')[0],
+        selectedDate: new Date().toISOString().split('T')[0],
       });
 
       // Load the first day's workout

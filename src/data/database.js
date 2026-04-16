@@ -629,7 +629,7 @@ export async function getWorkoutForDate(date) {
 
   for (const block of blocks) {
     const exercises = await database.getAllAsync(
-      `SELECT pe.*, COALESCE(e.name, pe.exercise_id) as name, e.emoji, e.muscle_group, e.secondary_muscles, e.category
+      `SELECT pe.*, COALESCE(e.name, REPLACE(REPLACE(REPLACE(pe.exercise_id, '_', ' '), 'db ', 'DB '), 'kb ', 'KB ')) as name, e.emoji, e.muscle_group, e.secondary_muscles, e.category
        FROM plan_exercises pe
        LEFT JOIN exercises e ON e.id = pe.exercise_id
        WHERE pe.plan_block_id = ? ORDER BY pe.sort_order`,
