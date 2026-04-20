@@ -573,9 +573,14 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
         compoundIds = picks;
       } else if (compoundPool.length > 0 && bt.mainLiftCount > 1) {
-        // Single-pattern day: anchor + rotate
+        // Single-pattern day: anchor + rotate (filter out same-niche duplicates)
         const anchor = compoundPool[0];
-        const remaining = compoundPool.slice(1);
+        const anchorNiche = getMovementNiche(anchor);
+        const remaining = compoundPool.slice(1).filter(id => {
+          if (!anchorNiche) return true;
+          const niche = getMovementNiche(id);
+          return !niche || niche !== anchorNiche; // skip same niche as anchor
+        });
         const rotated = rotateExercises(remaining, week, recentlyUsed, usedToday, bt.mainLiftCount - 1, weeklyExerciseCount);
         compoundIds = [anchor, ...rotated];
         usedToday.add(anchor);
@@ -1247,13 +1252,14 @@ function expandPool(claudePicks, exerciseMenu, dayConfig, archetype, week) {
   const hasAlternatives = exerciseMenu.some(e => e.equipment === 'dumbbell' || e.equipment === 'machine' || e.equipment === 'cable');
   let allowedEquipment;
   if (isBeginner) {
-    if (archetype?.exerciseComplexity === 'simple' && hasAlternatives) {
-      // Overweight beginners with DBs/machines stay off barbell for the full plan
+    if (week <= 4 && hasAlternatives) {
+      // Weeks 1-4: machines/DBs/KBs only (learn movement patterns safely)
       allowedEquipment = new Set(['machine', 'cable', 'dumbbell', 'kettlebell', 'bodyweight']);
-    } else if (week <= 8 && hasAlternatives) {
+    } else if (week <= 8 && archetype?.exerciseComplexity === 'simple' && hasAlternatives) {
+      // Overweight beginners: extend DB/machine preference through week 8
       allowedEquipment = new Set(['machine', 'cable', 'dumbbell', 'kettlebell', 'bodyweight']);
     } else {
-      allowedEquipment = null; // barbell-only gym or week 9+ — all allowed
+      allowedEquipment = null; // week 5+ (or week 9+ for overweight) — barbell unlocked
     }
   }
 
