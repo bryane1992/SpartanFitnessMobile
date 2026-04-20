@@ -65,6 +65,8 @@ EQUIPMENT CONSTRAINTS:
 - ONLY program exercises the athlete can do with their listed equipment
 - No cable exercises without cables. No machines without machines. No tire flips without a tire.
 - No rope climbs without a rope. No battle ropes without battle ropes.
+- RESPECT EQUIPMENT PREFERENCE ORDER: if barbell is listed first, use barbell compounds as primary lifts (bench press, back squat, deadlift, OHP, barbell row). DB exercises should be accessories/variations, not primary lifts when barbell is available.
+- Intermediate/advanced athletes with barbell access should get barbell compounds from day 1.
 
 CARDIO RULES:
 - Pure bulk/strength goals: zero cardio blocks
