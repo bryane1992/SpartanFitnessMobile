@@ -64,6 +64,7 @@ export async function reviewPlan(planDays, userProfile, onProgress) {
       max_tokens: 2000,
       system: REVIEWER_SYSTEM,
       messages: [{ role: 'user', content: planSummary }],
+      skip_rate_limit: true,
     }),
   });
 

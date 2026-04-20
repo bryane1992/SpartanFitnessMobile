@@ -233,7 +233,7 @@ async function callClaudeV5(unusedApiKey, userProfile, archetype, exerciseMenu, 
     const res = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ model: MODEL, max_tokens: 4000, system: V5_SYSTEM, messages: [{ role: 'user', content: prompt }] }),
+      body: JSON.stringify({ model: MODEL, max_tokens: 4000, system: V5_SYSTEM, messages: [{ role: 'user', content: prompt }], skip_rate_limit: true }),
       signal: ctrl.signal,
     });
     clearTimeout(timer);
