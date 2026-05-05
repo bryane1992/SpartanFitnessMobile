@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import useWorkoutStore from '../store/useWorkoutStore';
+import useSubscriptionStore from '../store/useSubscriptionStore';
 import { initDatabase, deleteAllPlanData, syncExerciseDb, getExerciseCount, exportPlanAsText, upgradeExercisesForNewEquipment } from '../data/database';
 import { testArchetypes, TEST_PROFILES, getTestProfile } from '../core/testProfiles';
 
@@ -44,7 +45,7 @@ const EQUIP_ICONS = {
   dumbbells: 'DB', barbell: 'BB', squat_rack: 'RK', bench: 'BN',
   pull_up_bar: 'PU', kettlebell: 'KB', cables: 'CB', machines: 'MC',
   bands: 'BD', cardio_machines: 'CM', outdoor: 'OD', rings: 'RG', jump_rope: 'JR',
-  tire: 'TR', sled: 'SL',
+  wall_ball: 'WB', tire: 'TR', sled: 'SL',
 };
 
 const EQUIPMENT_LIST = [
@@ -61,6 +62,7 @@ const EQUIPMENT_LIST = [
   { id: 'outdoor', label: 'Outdoor Space' },
   { id: 'rings', label: 'Gymnastics Rings' },
   { id: 'jump_rope', label: 'Jump Rope' },
+  { id: 'wall_ball', label: 'Wall Ball' },
   { id: 'tire', label: 'Tire' },
   { id: 'sled', label: 'Sled' },
 ];
@@ -77,6 +79,7 @@ export default function Settings({ navigation }) {
   const [showEquipModal, setShowEquipModal] = useState(false);
   const [editEquipment, setEditEquipment] = useState([]);
   const { generateNewPlan, totalWeeks, planPhases, currentPlanId } = useWorkoutStore();
+  const { tier, isPro, isElite, presentPaywall, presentCustomerCenter } = useSubscriptionStore();
 
   useEffect(() => {
     loadProfile();
@@ -342,6 +345,33 @@ export default function Settings({ navigation }) {
         <View style={styles.header}>
           <Text style={styles.title}>Settings</Text>
         </View>
+
+        {/* Subscription Banner */}
+        {isElite ? (
+          <TouchableOpacity style={[styles.subBannerPro, styles.subBannerElite]} onPress={presentCustomerCenter} activeOpacity={0.8}>
+            <View>
+              <Text style={styles.subBannerTitle}>GRITOS ELITE</Text>
+              <Text style={styles.subBannerSub}>Unlimited AI Coach · Manage subscription</Text>
+            </View>
+            <Text style={[styles.subBannerBadge, styles.subBannerBadgeElite]}>ELITE</Text>
+          </TouchableOpacity>
+        ) : isPro ? (
+          <TouchableOpacity style={styles.subBannerPro} onPress={presentCustomerCenter} activeOpacity={0.8}>
+            <View>
+              <Text style={styles.subBannerTitle}>GRITOS PRO</Text>
+              <Text style={styles.subBannerSub}>20 msgs/week · Manage subscription</Text>
+            </View>
+            <Text style={styles.subBannerBadge}>PRO</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.subBannerFree} onPress={presentPaywall} activeOpacity={0.8}>
+            <View>
+              <Text style={styles.subBannerTitle}>UPGRADE TO PRO</Text>
+              <Text style={styles.subBannerSub}>Unlock AI Coach, plan reviews, and more</Text>
+            </View>
+            <Text style={styles.subBannerCta}>UPGRADE</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Profile */}
         {profile && (
@@ -854,6 +884,70 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 28,
     fontWeight: '800',
+  },
+  subBannerPro: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: 'rgba(255,65,54,0.08)',
+    borderWidth: 1,
+    borderColor: '#FF4136',
+    borderRadius: 14,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  subBannerFree: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: '#161616',
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 14,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  subBannerTitle: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    fontFamily: 'monospace',
+  },
+  subBannerSub: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 3,
+  },
+  subBannerElite: {
+    borderColor: '#FFD700',
+    backgroundColor: 'rgba(255,215,0,0.06)',
+  },
+  subBannerBadge: {
+    color: '#01FF70',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    backgroundColor: 'rgba(1,255,112,0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  subBannerBadgeElite: {
+    color: '#FFD700',
+    backgroundColor: 'rgba(255,215,0,0.1)',
+  },
+  subBannerCta: {
+    color: '#FF4136',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    backgroundColor: 'rgba(255,65,54,0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   section: {
     paddingHorizontal: 15,

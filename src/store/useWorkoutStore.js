@@ -65,10 +65,10 @@ const useWorkoutStore = create((set, get) => ({
   },
 
   loadTodayWorkout: async () => {
-    const { selectedDate } = get();
+    const { selectedDate, currentPlanId } = get();
     set({ isLoading: true });
     try {
-      const workout = await getWorkoutForDate(selectedDate);
+      const workout = await getWorkoutForDate(selectedDate, currentPlanId);
       set({ todayWorkout: workout, isLoading: false });
     } catch (e) {
       console.error('Error loading workout:', e);
@@ -77,9 +77,10 @@ const useWorkoutStore = create((set, get) => ({
   },
 
   loadWorkoutForDate: async (date) => {
+    const { currentPlanId } = get();
     set({ selectedDate: date, isLoading: true });
     try {
-      const workout = await getWorkoutForDate(date);
+      const workout = await getWorkoutForDate(date, currentPlanId);
       set({ todayWorkout: workout, isLoading: false });
     } catch (e) {
       console.error('Error loading workout:', e);

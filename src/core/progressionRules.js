@@ -421,18 +421,21 @@ export function calculateRunParams(weekNumber, phase, totalWeeks, targetDistance
     distance = target * (0.50 + weeksLeft * 0.08); // Week before race = ~50%, earlier = ~65%
   }
 
-  // Deload: 70% of current progression (not 60%)
-  if (isDeloadWeek(weekNumber, totalWeeks)) distance *= 0.70;
+  // Deload: 50% of current distance, capped at 2 mi — a real recovery week
+  const isDeload = isDeloadWeek(weekNumber, totalWeeks);
+  if (isDeload) distance = Math.min(distance * 0.50, 2.0);
 
   // Round to nearest 0.5 for easy measurement
   distance = Math.round(distance * 2) / 2;
 
-  const intervals = weekNumber <= 4 ? 4 : weekNumber <= 8 ? 6 : weekNumber <= 12 ? 8 : 6;
+  // Deload intervals: halve the rounds and drop intensity label
+  const baseIntervals = weekNumber <= 4 ? 4 : weekNumber <= 8 ? 6 : weekNumber <= 12 ? 8 : 6;
+  const intervals = isDeload ? Math.max(2, Math.floor(baseIntervals / 2)) : baseIntervals;
 
   return {
     distance: `${distance} mi`,
     intervals,
-    paceType: phase === 'foundation' ? 'EASY' : phase === 'build' ? 'MODERATE' : phase === 'peak' ? 'RACE PACE' : 'TAPER',
+    paceType: isDeload ? 'EASY' : phase === 'foundation' ? 'EASY' : phase === 'build' ? 'MODERATE' : phase === 'peak' ? 'RACE PACE' : 'TAPER',
   };
 }
 
@@ -453,14 +456,21 @@ function getUserBaseWeight(exercise, workingWeights) {
   if (/^back\s*squat$|^back_squat$/.test(id)) return parseFloat(workingWeights.squat) || null;
   if (/^deadlift$/.test(id)) return parseFloat(workingWeights.deadlift) || null;
   if (/^overhead_press$|^ohp$/.test(id)) return parseFloat(workingWeights.overhead_press) || null;
-  if (/^barbell_row$/.test(id)) return parseFloat(workingWeights.row) || null;
+  // Barbell row: use row working weight, or estimate from bench (row ≈ bench × 0.85 for most athletes)
+  if (/^barbell_row$/.test(id)) {
+    const directRow = parseFloat(workingWeights.row);
+    if (directRow > 0) return directRow;
+    const bench = parseFloat(workingWeights.bench);
+    return bench > 0 ? bench * 0.85 : null;
+  }
 
   // Scaled matches — related exercises as % of the primary
   const bench = parseFloat(workingWeights.bench) || 0;
   const squat = parseFloat(workingWeights.squat) || 0;
   const dl = parseFloat(workingWeights.deadlift) || 0;
   const ohp = parseFloat(workingWeights.overhead_press) || 0;
-  const row = parseFloat(workingWeights.row) || 0;
+  // Effective row: use row working weight if available, else derive from bench
+  const row = parseFloat(workingWeights.row) || (bench > 0 ? bench * 0.85 : 0);
 
   // Bench variants — raised ratios for realism
   if (/incline.*bench|incline.*press/i.test(name)) return bench * 0.80 || null;
@@ -492,7 +502,7 @@ function getUserBaseWeight(exercise, workingWeights) {
   // Row variants
   if (/db.*row|dumbbell.*row/i.test(name)) return row * 0.55 || null;
   if (/cable.*row|seated.*row/i.test(name)) return row * 0.80 || null;
-  if (/chest.*supported.*row|seal.*row/i.test(name)) return row * 0.50 || null; // per hand
+  if (/chest.*supported.*row|seal.*row/i.test(name)) return row * 0.85 || null;
   if (/machine.*row/i.test(name)) return row * 0.90 || null;
   if (/inverted/i.test(name)) return null; // bodyweight
 

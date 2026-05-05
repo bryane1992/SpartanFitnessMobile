@@ -30,6 +30,9 @@ export default {
       config: {
         usesNonExemptEncryption: false,
       },
+      entitlements: {
+        'com.apple.developer.in-app-payments': [],
+      },
     },
     android: {
       adaptiveIcon: {
@@ -66,6 +69,8 @@ export default {
       wodApiKey: process.env.WOD_TOKEN,
       supabaseUrl: process.env.PROJECT_URL,
       supabaseAnonKey: process.env.ANON_KEY,
+      revenueCatApiKeyIos: process.env.REVENUECAT_IOS_KEY,
+      revenueCatApiKeyAndroid: process.env.REVENUECAT_ANDROID_KEY,
     },
   },
 };

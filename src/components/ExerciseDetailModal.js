@@ -12,6 +12,9 @@ import {
 } from 'react-native';
 import { getExerciseFullById, getDatabase } from '../data/database';
 import Constants from 'expo-constants';
+import * as FileSystem from 'expo-file-system/legacy';
+
+const GIF_CACHE_DIR = `${FileSystem.documentDirectory}exercise_gifs/`;
 
 // Verified mapping: seed exercise ID → ExerciseDB API ID (for animated GIFs)
 const SEED_TO_EXDB_ID = {
@@ -67,100 +70,6 @@ function getRapidApiKey() {
     || null;
 }
 
-const GITHUB_IMG_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises';
-
-// Verified mapping: seed exercise ID → GitHub exercise DB image folder name
-const SEED_TO_IMAGE = {
-  // Barbell compounds
-  bench_press: 'Barbell_Bench_Press_-_Medium_Grip',
-  incline_bench: 'Barbell_Incline_Bench_Press_-_Medium_Grip',
-  back_squat: 'Barbell_Squat',
-  front_squat: 'Front_Squat_Clean_Grip',
-  deadlift: 'Barbell_Deadlift',
-  overhead_press: 'Standing_Military_Press',
-  barbell_row: 'Bent_Over_Barbell_Row',
-  sumo_deadlift: 'Sumo_Deadlift',
-  romanian_deadlift: 'Romanian_Deadlift',
-  close_grip_bench: 'Close-Grip_Barbell_Bench_Press',
-  push_press: 'Push_Press',
-  power_clean: 'Power_Clean',
-  barbell_curl: 'Barbell_Curl',
-  barbell_hip_thrust: 'Barbell_Hip_Thrust',
-  good_morning: 'Good_Morning',
-  barbell_lunge: 'Barbell_Lunge',
-  barbell_thrusters: 'Barbell_Squat', // closest
-  // Dumbbell
-  db_bench_press: 'Dumbbell_Bench_Press',
-  db_incline_press: 'Hammer_Grip_Incline_DB_Bench_Press',
-  db_shoulder_press: 'Dumbbell_Shoulder_Press',
-  db_row: 'Bent_Over_Two-Dumbbell_Row',
-  bicep_curl: 'Dumbbell_Bicep_Curl',
-  hammer_curl: 'Hammer_Curls',
-  db_chest_fly: 'Dumbbell_Flyes',
-  lateral_raise: 'Side_Lateral_Raise',
-  db_lunge: 'Dumbbell_Lunges',
-  goblet_squat: 'Goblet_Squat',
-  db_rdl: 'Stiff-Legged_Dumbbell_Deadlift',
-  skull_crushers: 'Lying_Dumbbell_Tricep_Extension',
-  overhead_tricep_ext: 'Standing_Dumbbell_Triceps_Extension',
-  tricep_kickback: 'Tricep_Dumbbell_Kickback',
-  concentration_curl: 'Concentration_Curls',
-  db_arnold_press: 'Arnold_Dumbbell_Press',
-  db_reverse_fly: 'Seated_Bent-Over_Rear_Delt_Raise',
-  bulgarian_split_squat: 'Split_Squats',
-  step_ups: 'Barbell_Step_Ups',
-  db_walking_lunge: 'Bodyweight_Walking_Lunge',
-  db_thrusters: 'Dumbbell_Squat',
-  // Bodyweight
-  push_ups: 'Push-Ups_-_Close_Triceps_Position',
-  pull_ups: 'Scapular_Pull-Up',
-  chin_ups: 'Chin-Up',
-  dips: 'Dips_-_Chest_Version',
-  air_squats: 'Bodyweight_Squat',
-  burpees: 'Frog_Sit-Ups',
-  mountain_climbers: 'Mountain_Climbers',
-  sit_ups: 'Sit-Up',
-  plank: 'Plank',
-  bird_dog: null,
-  dead_bug: null,
-  v_ups: 'Jackknife_Sit-Up',
-  russian_twists: 'Russian_Twist',
-  box_jumps: 'Front_Box_Jump',
-  glute_bridge: 'Butt_Lift_Bridge',
-  pike_push_ups: 'Handstand_Push-Ups',
-  inverted_row: 'Inverted_Row',
-  bench_dips: 'Bench_Dips',
-  high_knees: null,
-  bear_crawl: 'Bear_Crawl',
-  // Cable/Machine
-  lat_pulldown: 'Wide-Grip_Lat_Pulldown',
-  cable_row: 'Seated_Cable_Rows',
-  cable_fly: 'Flat_Bench_Cable_Flyes',
-  cable_tricep_pushdown: 'Triceps_Pushdown',
-  cable_bicep_curl: 'Cable_Hammer_Curls_-_Rope_Attachment',
-  cable_face_pulls: 'Face_Pull',
-  cable_lateral_raise: 'Cable_Seated_Lateral_Raise',
-  cable_woodchop: null,
-  cable_crunch: null,
-  leg_press: 'Leg_Press',
-  leg_extension: 'Leg_Extensions',
-  leg_curl: 'Lying_Leg_Curls',
-  machine_chest_press: 'Machine_Bench_Press',
-  machine_shoulder_press: 'Leverage_Shoulder_Press',
-  machine_row: null,
-  // Kettlebell
-  kb_swing: 'One-Arm_Kettlebell_Swings',
-  kb_goblet_squat: 'Goblet_Squat',
-  farmer_walk: 'Farmers_Walk',
-  // Olympic
-  hang_power_clean: 'Power_Clean',
-};
-
-function getSeedImageUrl(exerciseId) {
-  const folder = SEED_TO_IMAGE[exerciseId];
-  if (!folder) return null;
-  return `${GITHUB_IMG_BASE}/${folder}/0.jpg`;
-}
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -185,125 +94,94 @@ export default function ExerciseDetailModal({ visible, exerciseId, onClose }) {
   const loadExercise = async () => {
     try {
       let ex = await getExerciseFullById(exerciseId);
-
-      // If seed exercise has no GIF, try to get gif_url from the synced ExerciseDB version
-      if (ex && !ex.gif_url) {
-        const exdbName = SEED_TO_IMAGE[ex.id] ? null : null; // skip image lookup, check DB instead
-        const exdbId = SEED_TO_EXDB_ID[ex.id];
-        if (exdbId) {
-          try {
-            const database = await getDatabase();
-            const synced = await database.getFirstAsync(
-              "SELECT gif_url FROM exercises WHERE api_id = ? AND gif_url IS NOT NULL LIMIT 1",
-              [exdbId]
-            );
-            if (synced?.gif_url) ex = { ...ex, gif_url: synced.gif_url };
-          } catch {}
-        }
-      }
-
-      // If not in local DB, try fetching from RapidAPI
-      if (!ex) {
-        try {
-          const rapidApiKey = Constants.expoConfig?.extra?.exerciseDbApiKey
-            || Constants.manifest?.extra?.exerciseDbApiKey;
-          if (rapidApiKey) {
-            const response = await fetch(`https://exercisedb.p.rapidapi.com/exercises/exercise/${exerciseId}`, {
-              headers: { 'X-RapidAPI-Key': rapidApiKey, 'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com' }
-            });
-            if (response.ok) {
-              const apiEx = await response.json();
-              if (apiEx) {
-                ex = {
-                  id: apiEx.id,
-                  name: apiEx.name,
-                  gif_url: apiEx.gifUrl || null,
-                  muscle_group: apiEx.bodyPart || '',
-                  category: apiEx.equipment || 'bodyweight',
-                  equipment_required: JSON.stringify([apiEx.equipment].filter(Boolean)),
-                  instructions: JSON.stringify(apiEx.instructions || []),
-                  target_muscles: JSON.stringify(apiEx.target ? [apiEx.target] : []),
-                  secondary_muscles: JSON.stringify(apiEx.secondaryMuscles || []),
-                  is_compound: (1 + (apiEx.secondaryMuscles?.length || 0)) >= 3 ? 1 : 0,
-                  default_sets: 3, default_reps: '10', default_weight: 'BW',
-                };
-              }
-            }
-          }
-        } catch (e) { /* offline */ }
-      }
-
       if (!ex) return;
 
-      // Enrich seed exercises with API data (instructions, target muscles, description)
-      const exdbId = SEED_TO_EXDB_ID[ex.id] || (ex.api_id ? ex.api_id : null);
-      const needsEnrichment = !ex.instructions || ex.instructions === '[]' || ex.instructions === 'null';
-      if (needsEnrichment && exdbId) {
-        const apiKey = getRapidApiKey();
-        if (apiKey) {
-          try {
-            const resp = await fetch(`https://exercisedb.p.rapidapi.com/exercises/exercise/${exdbId}`, {
-              headers: { 'X-RapidAPI-Key': apiKey, 'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com' }
-            });
-            if (resp.ok) {
-              const apiData = await resp.json();
-              if (apiData) {
-                ex = {
-                  ...ex,
-                  instructions: JSON.stringify(apiData.instructions || []),
-                  target_muscles: JSON.stringify(apiData.target ? [apiData.target] : []),
-                  secondary_muscles: JSON.stringify(apiData.secondaryMuscles || []),
-                  description: apiData.description || null,
-                };
-                // Cache enrichment to DB so we don't re-fetch
-                try {
-                  const database = await getDatabase();
-                  await database.runAsync(
-                    'UPDATE exercises SET instructions = ?, target_muscles = ?, description = ? WHERE id = ?',
-                    [ex.instructions, ex.target_muscles, ex.description, ex.id]
-                  );
-                } catch { /* ignore cache failure */ }
-              }
-            }
-          } catch { /* offline */ }
-        }
+      const exdbId = SEED_TO_EXDB_ID[ex.id] || ex.api_id || null;
+      const apiKey = getRapidApiKey();
+
+      console.log(`[GIF] exercise=${ex.id} exdbId=${exdbId} hasKey=${!!apiKey}`);
+
+      // Check if GIF is already cached locally on device
+      const localPath = exdbId ? `${GIF_CACHE_DIR}${exdbId}.gif` : null;
+      let gifUri = null;
+
+      if (localPath) {
+        try {
+          const info = await FileSystem.getInfoAsync(localPath);
+          // Discard cached file if it's suspiciously small (likely a previous error response)
+          if (info.exists && (info.size || 0) > 2000) {
+            gifUri = localPath;
+            console.log(`[GIF] Cache hit: ${localPath} (${info.size} bytes)`);
+          } else if (info.exists) {
+            await FileSystem.deleteAsync(localPath, { idempotent: true });
+            console.log(`[GIF] Discarded bad cache (${info.size} bytes)`);
+          }
+        } catch {}
       }
 
-      // Try animated GIF from ExerciseDB paid API first
-      if (!ex.gif_url) {
-        const exdbId = SEED_TO_EXDB_ID[ex.id] || (ex.api_id ? ex.api_id : null);
-        if (exdbId) {
-          const apiKey = getRapidApiKey();
-          if (apiKey) {
-            try {
-              const response = await fetch(
-                `https://exercisedb.p.rapidapi.com/image?exerciseId=${exdbId}&resolution=720`,
-                { headers: { 'X-RapidAPI-Key': apiKey, 'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com' } }
-              );
-              if (response.ok) {
-                const blob = await response.blob();
-                const dataUri = await new Promise((resolve) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => resolve(reader.result);
-                  reader.readAsDataURL(blob);
-                });
-                if (dataUri) {
-                  ex = { ...ex, gif_url: dataUri };
-                }
-              }
-            } catch (e) {
-              console.log('[GIF] API fetch failed:', e.message);
+      // Not cached — download from RapidAPI and save to device
+      if (!gifUri && exdbId && apiKey) {
+        try {
+          await FileSystem.makeDirectoryAsync(GIF_CACHE_DIR, { intermediates: true });
+          const url = `https://exercisedb.p.rapidapi.com/image?exerciseId=${exdbId}&resolution=360`;
+          console.log(`[GIF] Downloading: ${url}`);
+          const dl = await FileSystem.downloadAsync(
+            url,
+            localPath,
+            { headers: { 'X-RapidAPI-Key': apiKey, 'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com' } }
+          );
+          console.log(`[GIF] Download result: status=${dl.status} mimeType=${dl.mimeType}`);
+          if (dl.status === 200) {
+            // Verify we got actual image data, not a JSON error response
+            const info = await FileSystem.getInfoAsync(localPath);
+            if ((info.size || 0) > 2000) {
+              gifUri = localPath;
+              console.log(`[GIF] Saved: ${localPath} (${info.size} bytes)`);
+            } else {
+              await FileSystem.deleteAsync(localPath, { idempotent: true });
+              console.log(`[GIF] Response too small (${info.size} bytes) — likely an API error`);
+            }
+          } else {
+            console.log(`[GIF] Non-200 status: ${dl.status}`);
+          }
+        } catch (e) {
+          console.log('[GIF] Download failed:', e.message);
+        }
+      } else if (!apiKey) {
+        console.log('[GIF] No API key — skipping download');
+      } else if (!exdbId) {
+        console.log(`[GIF] No ExerciseDB ID for: ${ex.id}`);
+      }
+
+      if (gifUri) ex = { ...ex, gif_url: gifUri };
+
+      // Enrich with instructions/muscles if missing (separate from GIF, non-blocking on failure)
+      const needsEnrichment = !ex.instructions || ex.instructions === '[]' || ex.instructions === 'null';
+      if (needsEnrichment && exdbId && apiKey) {
+        try {
+          const resp = await fetch(`https://exercisedb.p.rapidapi.com/exercises/exercise/${exdbId}`, {
+            headers: { 'X-RapidAPI-Key': apiKey, 'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com' }
+          });
+          if (resp.ok) {
+            const apiData = await resp.json();
+            if (apiData) {
+              ex = {
+                ...ex,
+                instructions: JSON.stringify(apiData.instructions || []),
+                target_muscles: JSON.stringify(apiData.target ? [apiData.target] : []),
+                secondary_muscles: JSON.stringify(apiData.secondaryMuscles || []),
+                description: apiData.description || null,
+              };
+              try {
+                const database = await getDatabase();
+                await database.runAsync(
+                  'UPDATE exercises SET instructions = ?, target_muscles = ?, description = ? WHERE id = ?',
+                  [ex.instructions, ex.target_muscles, ex.description, ex.id]
+                );
+              } catch {}
             }
           }
-        }
-      }
-
-      // Fallback: GitHub static images
-      if (!ex.gif_url) {
-        const imageUrl = getSeedImageUrl(ex.id);
-        if (imageUrl) {
-          ex = { ...ex, gif_url: imageUrl };
-        }
+        } catch {}
       }
 
       setExercise(ex);

@@ -23,10 +23,10 @@ const MODEL = 'claude-haiku-4-5-20251001';
 
 // Warmup exercises — always safe
 const WARMUP_IDS = [
-  'dynamic_stretching', 'push_up_to_t', 'air_squats',
+  'push_up_to_t', 'air_squats',
   'lunge_matrix', 'pvc_pass_throughs', 'samson_stretch',
   'bear_crawl', 'cossack_squats', 'high_knees',
-  'arm_circles', 'inchworm',
+  'arm_circles', 'inchworm', 'hip_90_90',
 ];
 const WARMUP_IDS_WITH_JOG = ['easy_jog', ...WARMUP_IDS, 'a_skips', 'strides'];
 
@@ -156,6 +156,12 @@ export async function generateAIPlan(userProfile, onStatus) {
     if (!shouldHaveRuns && day.run) {
       day.run = null;
       if (!day.wod) day.wod = { type: 'CIRCUIT' };
+      // If the day had no lifting patterns (was a pure run day), give it full-body patterns
+      // so expandPool can find exercises from the menu — otherwise the day starves (warmup only)
+      if (!day.primary_patterns || day.primary_patterns.length === 0) {
+        day.primary_patterns = ['horizontal_push', 'horizontal_pull'];
+        day.secondary_patterns = day.secondary_patterns?.length ? day.secondary_patterns : ['core'];
+      }
     }
   }
   // Ensure long run for racers
@@ -172,21 +178,20 @@ export async function generateAIPlan(userProfile, onStatus) {
   // Step 5b: Reorder days based on user notes (e.g. "no legs Monday")
   const userNotes = (userProfile.additionalNotes || '').toLowerCase();
   const trainingDayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-  // Check for "no legs [day]" or "no lower [day]" patterns
   const noLegsMatch = userNotes.match(/no\s+(?:legs?|lower|squat)\s+(?:on\s+)?(\w+day)/i);
   if (noLegsMatch) {
     const avoidDay = trainingDayNames.indexOf(noLegsMatch[1].toLowerCase());
     const trainingDaysList = userProfile.trainingDays || Array.from({ length: daysPerWeek }, (_, i) => i);
     const avoidIdx = trainingDaysList.indexOf(avoidDay);
-    if (avoidIdx >= 0) {
-      // Find the leg day config and swap it away from the avoided day
-      const legIdx = dayConfigs.findIndex(d => d.primary_patterns?.includes('squat') && d.primary_patterns?.includes('hinge'));
-      if (legIdx >= 0 && legIdx === avoidIdx) {
-        // Find a non-leg day to swap with
-        const swapIdx = dayConfigs.findIndex((d, i) => i !== legIdx && !d.primary_patterns?.includes('squat'));
+    if (avoidIdx >= 0 && avoidIdx < dayConfigs.length) {
+      const isLegPattern = (d) => d.primary_patterns?.some(p => p === 'squat' || p === 'hinge');
+      // Only swap if the day currently at avoidIdx is actually a lower-body day
+      if (isLegPattern(dayConfigs[avoidIdx])) {
+        // Find the first non-leg day to swap with (prefer one that has upper patterns)
+        const swapIdx = dayConfigs.findIndex((d, i) => i !== avoidIdx && !isLegPattern(d) && d.primary_patterns?.length > 0);
         if (swapIdx >= 0) {
-          console.log(`[PlanV5] Reordering: moving leg day from ${trainingDayNames[trainingDaysList[legIdx]]} to ${trainingDayNames[trainingDaysList[swapIdx]]} (user requested no legs ${noLegsMatch[1]})`);
-          [dayConfigs[legIdx], dayConfigs[swapIdx]] = [dayConfigs[swapIdx], dayConfigs[legIdx]];
+          console.log(`[PlanV5] Reordering: moving leg day off ${noLegsMatch[1]} (idx ${avoidIdx}) → swapping with idx ${swapIdx}`);
+          [dayConfigs[avoidIdx], dayConfigs[swapIdx]] = [dayConfigs[swapIdx], dayConfigs[avoidIdx]];
         }
       }
     }
@@ -347,7 +352,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
   // Expand pool from ALL available WODs that match user's equipment
   if (wodPool.length < 15) {
-    const equipMap = { dumbbells: 'dumbbell', barbell: 'barbell', kettlebell: 'kettlebell', pull_up_bar: 'pull_up_bar', bands: 'band', outdoor: 'outdoor', rings: 'rings', jump_rope: 'jump_rope' };
+    const equipMap = { dumbbells: 'dumbbell', barbell: 'barbell', kettlebell: 'kettlebell', pull_up_bar: 'pull_up_bar', bands: 'band', outdoor: 'outdoor', rings: 'rings', jump_rope: 'jump_rope', wall_ball: 'wall_ball', medicine_ball: 'wall_ball' };
     const mappedEquip = new Set();
     userEquipForWods.forEach(eq => { if (equipMap[eq]) mappedEquip.add(equipMap[eq]); });
     mappedEquip.add('bodyweight');
@@ -459,19 +464,62 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       const dayConfig = dayConfigs[tdi % dayConfigs.length];
       const daySelection = (selections.days || [])[tdi % (selections.days || []).length] || {};
 
-      // Day name — generate from actual selected exercises, not Claude's static week 1 title
-      // Claude's title was for week 1 exercises, but rotation changes exercises each week
-      const PATTERN_NAMES = { squat: 'LEGS', hinge: 'POSTERIOR', horizontal_push: 'CHEST', horizontal_pull: 'BACK', vertical_push: 'SHOULDERS', vertical_pull: 'PULL', pull_up: 'PULL', carry: 'CARRY', core: 'CORE', arm_push: 'ARMS', arm_pull: 'ARMS', elbow_flexion: 'ARMS', elbow_extension: 'ARMS', olympic: 'POWER', plyometric: 'EXPLOSIVE', warmup: 'MOBILITY', cardio: 'CARDIO' };
-      // Clean labels for upper/lower splits
-      const DAY_TYPE_LABELS = { lower_a: 'LOWER BODY', lower_b: 'LOWER BODY', upper_a: 'UPPER BODY', upper_b: 'UPPER BODY' };
-      const FUN_SUFFIXES = ['FORGE', 'GRIND', 'POWER', 'BLITZ', 'FIRE', 'IRON', 'THUNDER', 'FURY', 'SPARK', 'RUSH', 'WAVE', 'STEEL', 'GRIT', 'RISE', 'BURN'];
+      // Day name — themed pools per pattern type, rotated by week for variety
+      const DAY_NAME_POOLS = {
+        // Push patterns
+        chest:    ['CHEST WARS', 'IRON CHEST', 'PUSH AUTHORITY', 'BENCH HEAVY', 'CHEST SIEGE', 'PUSH PROTOCOL', 'CHEST DAY', 'PUSH DOMINANCE'],
+        push:     ['PUSH AUTHORITY', 'CHEST SIEGE', 'IRON CHEST', 'PUSH PROTOCOL', 'PRESS HEAVY', 'CHEST WARS', 'PUSH DOMINANCE', 'BENCH HEAVY'],
+        shoulder: ['BOULDER SHOULDERS', 'SHOULDER ASSAULT', 'DELTA FORCE', 'SHOULDER PUSH', 'OVERHEAD AUTHORITY', 'SHOULDER SIEGE', 'PRESS DAY', 'DELTA BUILD'],
+        // Pull patterns
+        back:     ['BACK ATTACK', 'ROW HARD', 'BACK BUILDER', 'PULL PROTOCOL', 'THICKNESS SESSION', 'BACK SIEGE', 'ROW HEAVY', 'PULL NATION'],
+        pull:     ['PULL PROTOCOL', 'BACK ATTACK', 'ROW HARD', 'PULL NATION', 'BACK BUILDER', 'PULL SIEGE', 'ROW HEAVY', 'BACK SIEGE'],
+        // Leg patterns
+        leg:      ['LEG DAY HELL', 'SQUAT HEAVY', 'QUAD ANNIHILATION', 'LEG SIEGE', 'SQUAT PROTOCOL', 'LEG DAY ALPHA', 'QUAD DESTROYER', 'LEG AUTHORITY'],
+        posterior:['POSTERIOR POWER', 'DEADLIFT HEAVY', 'POSTERIOR CHAIN', 'HINGE PROTOCOL', 'GLUTE & HAMSTRING', 'POSTERIOR SIEGE', 'HINGE HEAVY', 'DEAD SERIOUS'],
+        // Special
+        upper:    ['UPPER BODY ASSAULT', 'PUSH & PULL', 'UPPER SIEGE', 'PUSH PULL PROTOCOL', 'UPPER AUTHORITY', 'PUSH PULL HEAVY', 'UPPER DOMINATION', 'TOTAL UPPER'],
+        lower:    ['LOWER BODY ASSAULT', 'LEG DAY HELL', 'LOWER SIEGE', 'SQUAT HEAVY', 'LOWER AUTHORITY', 'QUAD ANNIHILATION', 'LOWER DOMINATION', 'TOTAL LOWER'],
+        full:     ['FULL SEND', 'TOTAL DOMINATION', 'NO MERCY', 'FULL BODY ASSAULT', 'TOTAL WARFARE', 'FULL SIEGE', 'NO DAYS OFF', 'TOTAL PROTOCOL'],
+        power:    ['POWER HOUR', 'OLYMPIC COMPLEX', 'POWER PROTOCOL', 'EXPLOSIVE SESSION', 'POWER SIEGE', 'CLEAN & BUILD', 'POWER AUTHORITY', 'EXPLOSIVE POWER'],
+        run:      ['ROAD WARRIOR', 'TEMPO PROTOCOL', 'SPRINT WARFARE', 'ENDURANCE SIEGE', 'INTERVAL HELL', 'SPEED PROTOCOL', 'RUN HEAVY', 'CARDIO ASSAULT'],
+      };
+
+      // Map primary pattern(s) to a name pool key
       const primaryPatterns = (dayConfig.primary_patterns || []).slice(0, 2);
-      const patternLabel = DAY_TYPE_LABELS[dayConfig.type] || primaryPatterns.map(p => PATTERN_NAMES[p] || p.toUpperCase()).join(' & ');
-      const suffix = FUN_SUFFIXES[(week * dayConfigs.length + tdi) % FUN_SUFFIXES.length];
+      const DAY_TYPE_KEYS = {
+        lower_a: 'lower', lower_b: 'lower', upper_a: 'upper', upper_b: 'upper',
+      };
+      const getPoolKey = () => {
+        const typeKey = DAY_TYPE_KEYS[dayConfig.type];
+        if (typeKey) return typeKey;
+        const p0 = primaryPatterns[0] || '';
+        const p1 = primaryPatterns[1] || '';
+        if (p0 === 'squat' && p1 === 'horizontal_push') return 'full';
+        if (p0 === 'squat' || p1 === 'squat') return p0 === 'hinge' || p1 === 'hinge' ? 'leg' : 'leg';
+        if (p0 === 'hinge' || p1 === 'hinge') return 'posterior';
+        if ((p0 === 'horizontal_push' || p1 === 'horizontal_push') && (p0 === 'horizontal_pull' || p1 === 'horizontal_pull')) return 'upper';
+        if (p0 === 'horizontal_push' || p1 === 'horizontal_push') return 'chest';
+        if (p0 === 'vertical_push' || p1 === 'vertical_push') {
+          if (p0 === 'horizontal_pull' || p1 === 'horizontal_pull' || p0 === 'vertical_pull' || p1 === 'vertical_pull' || p0 === 'pull_up' || p1 === 'pull_up') return 'upper';
+          return 'shoulder';
+        }
+        if (p0 === 'horizontal_pull' || p1 === 'horizontal_pull' || p0 === 'vertical_pull' || p1 === 'vertical_pull' || p0 === 'pull_up' || p1 === 'pull_up') return 'back';
+        if (p0 === 'olympic') return 'power';
+        return 'full';
+      };
+      const poolKey = getPoolKey();
+      const pool = DAY_NAME_POOLS[poolKey] || DAY_NAME_POOLS.full;
       const deload = isDeloadWeek(week, totalWeeks);
+      // Run-day title
+      const runLabel = dayConfig.run
+        ? (/long/i.test(dayConfig.run.type || '') ? 'LONG RUN' : /interval|sprint/i.test(dayConfig.run.type || '') ? 'SPRINT INTERVALS' : 'TEMPO RUN')
+        : null;
+      const baseTitle = runLabel && primaryPatterns.length === 0
+        ? (DAY_NAME_POOLS.run[(week * dayConfigs.length + tdi) % DAY_NAME_POOLS.run.length])
+        : pool[(week * dayConfigs.length + tdi) % pool.length];
       const title = deload
-        ? `${patternLabel || 'RECOVERY'} DELOAD`
-        : (patternLabel ? `${patternLabel} ${suffix}` : (daySelection.title || 'TRAINING'));
+        ? `${baseTitle} — DELOAD`
+        : baseTitle;
       const focusLabel = deload
         ? `DELOAD WEEK \u2022 2 sets \u2022 70% weight \u2022 Week ${week}`
         : displayPhase === 'race_prep'
@@ -489,10 +537,13 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       const bt = calculateBlockTimes(sessionMinutes, dayConfig, archetype?.archetype);
 
       // ── WARMUP — matched to day's movement patterns ──
+      const hasJumpRope = (userProfile.equipment || []).includes('jump_rope');
       const WARMUP_BY_FOCUS = {
-        lower: ['air_squats', 'cossack_squats', 'lunge_matrix', 'samson_stretch', 'high_knees', 'dynamic_stretching'],
-        upper: ['push_up_to_t', 'pvc_pass_throughs', 'dynamic_stretching', 'arm_circles', 'bear_crawl', 'inchworm'],
-        full: ['dynamic_stretching', 'air_squats', 'push_up_to_t', 'bear_crawl', 'high_knees', 'lunge_matrix'],
+        lower: ['air_squats', 'cossack_squats', 'lunge_matrix', 'samson_stretch', 'high_knees', 'hip_90_90', 'glute_stretch_seated', 'adductor_stretch',
+          ...(hasJumpRope ? ['jump_rope', 'double_unders'] : [])],
+        upper: ['push_up_to_t', 'pvc_pass_throughs', 'arm_circles', 'bear_crawl', 'inchworm', 'band_pull_apart', 'wall_angels', 'shoulder_ext_rotation'],
+        full: ['air_squats', 'push_up_to_t', 'bear_crawl', 'high_knees', 'lunge_matrix', 'inchworm', 'arm_circles',
+          ...(hasJumpRope ? ['jump_rope'] : [])],
       };
       const warmupFocus = dayPatterns.some(p => ['squat', 'hinge'].includes(p)) ? 'lower'
         : dayPatterns.some(p => ['horizontal_push', 'horizontal_pull', 'vertical_push', 'vertical_pull'].includes(p)) ? 'upper' : 'full';
@@ -513,7 +564,8 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       const BW_NOT_MAIN = hasRealEquip ? /air.?squat|pike.?push|push.?up|burpee|high.?knee|jump.?jack|jumping.?jack/i : null;
       const rawCompoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig, archetype, week);
       const allowedDayPatterns = new Set([...(dayConfig.primary_patterns || []), ...(dayConfig.secondary_patterns || [])]);
-      const compoundPool = rawCompoundPool.filter(id => {
+      // Sprint/run-only days with no patterns = no compound block (run IS the workout)
+      const compoundPool = allowedDayPatterns.size === 0 && hasRun ? [] : rawCompoundPool.filter(id => {
         const ex = exerciseById[id];
         if (!ex) return false;
         if (NEVER_MAIN_LIFT.test(ex.name)) return false;
@@ -539,6 +591,19 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         }
         return true;
       });
+
+      // Sort compoundPool by equipment preference so barbell exercises are anchored first.
+      // Claude may return only DB picks — this guarantees the equipment priority is enforced
+      // at selection time regardless of what Claude returned.
+      const equipPref = archetype?.equipmentPreference || ['barbell', 'dumbbell', 'kettlebell', 'machine', 'cable', 'bodyweight'];
+      compoundPool.sort((a, b) => {
+        const aEquip = exerciseById[a]?.category || 'bodyweight';
+        const bEquip = exerciseById[b]?.category || 'bodyweight';
+        const aRank = equipPref.indexOf(aEquip);
+        const bRank = equipPref.indexOf(bEquip);
+        return (aRank >= 0 ? aRank : 99) - (bRank >= 0 ? bRank : 99);
+      });
+
       // Pattern-balanced compound selection: ensure each primary pattern gets at least 1 exercise
       // Without this, a day with [h_push, v_pull] could get 2 push exercises and 0 pull
       let compoundIds;
@@ -567,9 +632,15 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
             usedToday.add(pick);
           }
         }
-        // If we still need more (rare), fill from the full pool
+        // If we still need more (rare), fill from pool — enforce niche dedup against all already-picked
         if (picks.length < bt.mainLiftCount) {
-          const remaining = compoundPool.filter(id => !picks.includes(id));
+          const pickedNiches = new Set(picks.map(id => getMovementNiche(id)).filter(Boolean));
+          const remaining = compoundPool.filter(id => {
+            if (picks.includes(id)) return false;
+            const niche = getMovementNiche(id);
+            if (niche && pickedNiches.has(niche)) return false; // skip same-niche as any picked compound
+            return true;
+          });
           const extra = rotateExercises(remaining, week, recentlyUsed, usedToday, bt.mainLiftCount - picks.length, weeklyExerciseCount);
           picks.push(...extra);
         }
@@ -1178,36 +1249,53 @@ function enforceSessionTime(bt, sessionMinutes) {
 // weeklyCount tracks frequency to prevent any exercise appearing 3+ times in a week
 // Movement niche — finer than movement pattern, prevents same-angle/same-motion duplication
 // e.g. incline_bench and db_incline_press are both "incline_push" — shouldn't appear in same session
+// Pattern matching catches variants not explicitly listed (e.g. db_romanian_deadlift, single_arm_row)
 function getMovementNiche(exerciseId) {
+  const id = exerciseId?.toLowerCase() || '';
+
   const NICHE_MAP = {
-    // Incline push (don't pair barbell incline + DB incline)
+    // Incline push
     incline_bench: 'incline_push', db_incline_press: 'incline_push', incline_machine_press: 'incline_push',
-    // Flat push (don't pair barbell bench + DB bench)
+    // Flat push
     bench_press: 'flat_push', db_bench_press: 'flat_push', machine_chest_press: 'flat_push',
-    // Floor press is its own niche (different ROM)
     floor_press: 'floor_push', db_floor_press: 'floor_push',
-    // Fly variations are their own niche (isolation, OK alongside presses)
+    // Fly
     db_chest_fly: 'fly', cable_fly: 'fly', db_fly: 'fly',
-    // Overhead press (don't pair barbell OHP + DB shoulder press)
+    // Overhead press
     overhead_press: 'overhead_press', db_shoulder_press: 'overhead_press', machine_shoulder_press: 'overhead_press', push_press: 'overhead_press', db_arnold_press: 'overhead_press', arnold_press: 'overhead_press',
-    // Row (don't pair barbell row + DB row)
+    // Row
     barbell_row: 'row', db_row: 'row', machine_row: 'row', cable_row: 'row', chest_supported_row: 'row', seated_cable_row: 'row', single_arm_cable_row: 'row',
-    // Vertical pull (pull-ups and lat pulldown are different enough to coexist, but don't double pull-up variants)
+    // Vertical pull
     pull_ups: 'pull_up', chin_ups: 'pull_up', band_assisted_pull_ups: 'pull_up',
-    // Squat (don't pair back squat + front squat usually)
+    // Squat
     back_squat: 'squat_main', front_squat: 'squat_main',
     goblet_squat: 'squat_light', kb_goblet_squat: 'squat_light', db_goblet_squat: 'squat_light',
-    // Hinge (don't pair deadlift + RDL)
+    // Hinge — explicit entries
     deadlift: 'hinge_main', sumo_deadlift: 'hinge_main', trap_bar_deadlift: 'hinge_main',
-    romanian_deadlift: 'hinge_accessory', db_rdl: 'hinge_accessory', db_stiff_leg_deadlift: 'hinge_accessory',
-    // Curl (don't pair two curl variations)
+    romanian_deadlift: 'hinge_accessory', db_rdl: 'hinge_accessory', db_romanian_deadlift: 'hinge_accessory', db_stiff_leg_deadlift: 'hinge_accessory',
+    // Curl
     bicep_curl: 'curl', hammer_curl: 'curl', cable_bicep_curl: 'curl', concentration_curl: 'curl', barbell_curl: 'curl',
-    // Tricep extension (don't pair two extension variations)
+    // Tricep extension
     skull_crushers: 'tricep_ext', overhead_tricep_ext: 'tricep_ext', cable_tricep_pushdown: 'tricep_ext',
-    // Lateral raise variations
+    // Lateral raise
     lateral_raise: 'lateral_raise', cable_lateral_raise: 'lateral_raise',
   };
-  return NICHE_MAP[exerciseId] || null;
+
+  if (NICHE_MAP[id]) return NICHE_MAP[id];
+
+  // Pattern-based fallback — catches DB variants, single-arm versions, machine variants
+  if (id.includes('romanian_deadlift') || id.includes('_rdl') || id.includes('stiff_leg_deadlift')) return 'hinge_accessory';
+  if (id.includes('deadlift')) return 'hinge_main';
+  if (id.includes('incline') && (id.includes('press') || id.includes('bench'))) return 'incline_push';
+  if ((id.includes('bench_press') || id.includes('chest_press')) && !id.includes('incline')) return 'flat_push';
+  if (id.includes('overhead_press') || id.includes('shoulder_press') || id.includes('arnold_press')) return 'overhead_press';
+  if (id.includes('_row') || id.startsWith('row_')) return 'row';
+  if (id.includes('pull_up') || id.includes('pullup') || id.includes('chin_up')) return 'pull_up';
+  if (id.includes('lateral_raise')) return 'lateral_raise';
+  if (id.endsWith('_curl') || id.includes('curl_')) return 'curl';
+  if (id.includes('tricep') && (id.includes('ext') || id.includes('pushdown') || id.includes('press'))) return 'tricep_ext';
+
+  return null;
 }
 
 function rotateExercises(pool, week, recentlyUsed, usedToday, pickCount, weeklyCount) {
@@ -1239,11 +1327,23 @@ function rotateExercises(pool, week, recentlyUsed, usedToday, pickCount, weeklyC
 // Respects archetype equipment preference AND phase progression
 // Beginners: machines only in weeks 1-4, add DB in weeks 5-8, barbell in 9+
 function expandPool(claudePicks, exerciseMenu, dayConfig, archetype, week) {
-  const pool = [...claudePicks];
-  const poolSet = new Set(pool);
   const patterns = [...(dayConfig.primary_patterns || []), ...(dayConfig.secondary_patterns || [])];
   const equipPref = archetype?.equipmentPreference || ['barbell', 'dumbbell', 'kettlebell', 'machine', 'cable', 'bodyweight'];
   const isBeginner = archetype?.exerciseComplexity === 'simple';
+
+  // Re-sort Claude's picks by equipment preference so barbell exercises
+  // come first even if Claude returned DB variants first
+  const exerciseById = Object.fromEntries(exerciseMenu.map(e => [e.id, e]));
+  const sortedClaudePicks = [...claudePicks].sort((a, b) => {
+    const aEquip = exerciseById[a]?.equipment || 'bodyweight';
+    const bEquip = exerciseById[b]?.equipment || 'bodyweight';
+    const aRank = equipPref.indexOf(aEquip);
+    const bRank = equipPref.indexOf(bEquip);
+    return (aRank >= 0 ? aRank : 99) - (bRank >= 0 ? bRank : 99);
+  });
+
+  const pool = [...sortedClaudePicks];
+  const poolSet = new Set(pool);
 
   // For beginners: restrict equipment by phase
   // 'simple' complexity (overweight_beginner) WITH alternatives: DB/KB/machine/cable/BW only
@@ -1570,7 +1670,11 @@ function generateRunExercises(weekNumber, phase, totalWeeks, runType, experience
 
   const exercises = [{ id: 'easy_jog', sets: '5 min', reps: '5 min', weight: 'Build pace', rest: null, notes: 'Warm into it' }];
   switch (runType) {
-    case 'INTERVALS': exercises.push({ id: 'interval_run', sets: `${runParams.intervals} rounds`, reps: '2 min hard / 1 min easy', weight: '80-85% effort', rest: null, notes: `Target: ${distance}` }); break;
+    case 'INTERVALS': {
+      const perRound = Math.round((scaledDist / runParams.intervals) * 4) / 4; // nearest 0.25 mi
+      exercises.push({ id: 'interval_run', sets: `${runParams.intervals} rounds`, reps: `~${perRound} mi each`, weight: '80-85% effort', rest: '90s walk between', notes: `Total: ${distance}` });
+      break;
+    }
     case 'TEMPO': exercises.push({ id: 'tempo_run', sets: distance, reps: distance, weight: runParams.paceType + ' pace', rest: null, notes: `Target: ${distance}` }); break;
     case 'LONG_RUN': exercises.push({ id: 'easy_run', sets: distance, reps: distance, weight: 'Conversational pace', rest: null, notes: `Target: ${distance}` }); break;
     case 'RACE_PACE': exercises.push({ id: 'interval_run', sets: distance, reps: distance, weight: 'Goal race pace', rest: null, notes: `Target: ${distance} at race effort` }); break;

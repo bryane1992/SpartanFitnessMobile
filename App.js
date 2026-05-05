@@ -7,9 +7,9 @@ import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'rea
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, syncExerciseDb } from './src/data/database';
 import useWorkoutStore from './src/store/useWorkoutStore';
+import useSubscriptionStore from './src/store/useSubscriptionStore';
 import CoachChat from './src/components/CoachChat';
-// Lazy import — avoid blocking startup
-const Auth = require('./src/screens/Auth').default;
+import Auth from './src/screens/Auth';
 
 // Import screens
 import TodayWorkout from './src/screens/TodayWorkout';
@@ -28,13 +28,23 @@ const Stack = createStackNavigator();
 function MainTabsWithCoach() {
   const [coachVisible, setCoachVisible] = useState(false);
   const workout = useWorkoutStore(s => s.todayWorkout);
+  const canUseCoach = useSubscriptionStore(s => s.canUse('aiCoach'));
+  const presentPaywall = useSubscriptionStore(s => s.presentPaywall);
+
+  const handleCoachPress = () => {
+    if (canUseCoach) {
+      setCoachVisible(true);
+    } else {
+      presentPaywall();
+    }
+  };
 
   return (
     <View style={{ flex: 1 }}>
       <MainTabs />
       <TouchableOpacity
         style={styles.globalCoachFab}
-        onPress={() => setCoachVisible(true)}
+        onPress={handleCoachPress}
         activeOpacity={0.8}
       >
         <Text style={styles.globalCoachFabText}>AI</Text>
@@ -83,7 +93,7 @@ function MainTabs() {
           title: "Today's Workout",
           tabBarLabel: 'Workout',
           tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 20, color }}>{'\uD83D\uDCAA'}</Text>
+            <Text style={{ fontSize: 20, color }}>{'💪'}</Text>
           ),
         }}
       />
@@ -127,7 +137,7 @@ function MainTabs() {
           title: "Settings",
           tabBarLabel: 'Settings',
           tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 20, color }}>{'\u2699\uFE0F'}</Text>
+            <Text style={{ fontSize: 20, color }}>{'⚙️'}</Text>
           ),
         }}
       />
@@ -142,10 +152,11 @@ export default function App() {
   const [hasOnboarded, setHasOnboarded] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
   const loadPlanMeta = useWorkoutStore(s => s.loadPlanMeta);
+  const initSubscription = useSubscriptionStore(s => s.initialize);
+  const identifyUser = useSubscriptionStore(s => s.identifyUser);
 
   useEffect(() => {
     initApp().then(() => {
-      // Check auth after app is initialized
       try {
         const { supabase } = require('./src/data/supabase');
         supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -154,8 +165,8 @@ export default function App() {
 
         const { data: { subscription: sub } } = supabase.auth.onAuthStateChange((_event, s) => {
           setSession(s);
+          if (s?.user?.id) identifyUser(s.user.id);
         });
-        // Store subscription for cleanup
         authSubRef.current = sub;
       } catch (e) {
         console.error('[Auth] Supabase init failed:', e.message);
@@ -168,26 +179,17 @@ export default function App() {
 
   const initApp = async () => {
     try {
-      // Initialize database
       await initDatabase();
+      await initSubscription();
 
-      // Seed Claude API key from env if not already stored
-      const existingKey = await AsyncStorage.getItem('claudeApiKey');
-      if (!existingKey) {
-        // In dev, you can set this in .env — but RN doesn't auto-read .env at runtime
-        // The key must be manually entered in Settings or pre-seeded here
-      }
-
-      // Sync ExerciseDB if needed — check if we have API exercises
       const { getDatabase: getDb } = require('./src/data/database');
       const db = await getDb();
       const apiCount = await db.getFirstAsync("SELECT COUNT(*) as count FROM exercises WHERE source = 'exercisedb'");
-      const needsSync = !apiCount || apiCount.count < 1000; // sync until we have most exercises
+      const needsSync = !apiCount || apiCount.count < 1000;
 
       if (needsSync) {
         try {
           setSyncStatus('Downloading exercise library...');
-          console.log('Starting ExerciseDB sync...');
           const synced = await syncExerciseDb((fetched, total) => {
             setSyncStatus(`Downloading exercises... ${fetched}/${total}`);
           });
@@ -197,16 +199,12 @@ export default function App() {
           console.log('Exercise sync failed:', e.message);
           setSyncStatus(null);
         }
-      } else {
-        console.log(`ExerciseDB already synced: ${apiCount.count} exercises`);
       }
 
-      // Check onboarding status
       const onboardingComplete = await AsyncStorage.getItem('onboardingComplete');
       const onboarded = onboardingComplete === 'true';
       setHasOnboarded(onboarded);
 
-      // Load plan metadata if onboarded
       if (onboarded) {
         await loadPlanMeta();
       }
@@ -229,7 +227,6 @@ export default function App() {
     );
   }
 
-  // Show auth screen if not logged in
   if (!session) {
     return (
       <>

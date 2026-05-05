@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import usePerformanceStore from '../store/usePerformanceStore';
+import useSubscriptionStore from '../store/useSubscriptionStore';
 import { displayWeight, displayDistance, displayPace } from '../utils/units';
 
 const PHASE_COLORS = {
@@ -86,6 +87,9 @@ export default function PerformanceTracker() {
     loadExerciseHistory,
     clearExerciseHistory,
   } = usePerformanceStore();
+
+  const canSeeAdvancedStats = useSubscriptionStore(s => s.canUse('advancedStats'));
+  const presentPaywall = useSubscriptionStore(s => s.presentPaywall);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedSection, setExpandedSection] = useState(null);
@@ -164,11 +168,20 @@ export default function PerformanceTracker() {
           ))}
         </View>
 
+        {/* Pro gate banner — shown for free users above all tabs */}
+        {!canSeeAdvancedStats ? (
+          <TouchableOpacity style={styles.proGateBanner} onPress={presentPaywall} activeOpacity={0.85}>
+            <Text style={styles.proGateTitle}>UPGRADE TO PRO</Text>
+            <Text style={styles.proGateSub}>See full history, weight progression, and run trends</Text>
+            <Text style={styles.proGateCta}>UPGRADE</Text>
+          </TouchableOpacity>
+        ) : null}
+
         {/* ═══ LIFTS TAB ═══ */}
         {activeTab === 'lifts' ? (
           <View>
             {/* Week vs Week Comparison */}
-            {weekOverWeekLifts.length > 0 ? (
+            {canSeeAdvancedStats && weekOverWeekLifts.length > 0 ? (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>THIS WEEK vs LAST WEEK</Text>
                 {weekOverWeekLifts.map((lift) => (
@@ -195,7 +208,7 @@ export default function PerformanceTracker() {
             )}
 
             {/* Biggest Gains */}
-            {biggestGains.length > 0 ? (
+            {canSeeAdvancedStats && biggestGains.length > 0 ? (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>BIGGEST STRENGTH GAINS</Text>
                 {biggestGains.map((g) => (
@@ -212,7 +225,7 @@ export default function PerformanceTracker() {
             ) : null}
 
             {/* Inline Exercise History */}
-            {selectedExerciseId && selectedExerciseHistory.length > 0 && activeTab === 'lifts' ? (
+            {canSeeAdvancedStats && selectedExerciseId && selectedExerciseHistory.length > 0 && activeTab === 'lifts' ? (
               <View style={styles.historyPanel}>
                 <View style={styles.historyPanelHeader}>
                   <Text style={styles.historyPanelTitle}>WEIGHT PROGRESSION</Text>
@@ -249,7 +262,7 @@ export default function PerformanceTracker() {
             ) : null}
 
             {/* Weekly Progress */}
-            {weeklyProgress.length > 0 ? (
+            {canSeeAdvancedStats && weeklyProgress.length > 0 ? (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>WEEKLY PROGRESS</Text>
                 <View style={styles.weeklyGrid}>
@@ -325,7 +338,7 @@ export default function PerformanceTracker() {
         {activeTab === 'runs' ? (
           <View>
             {/* Run Progression Chart */}
-            {runProgression.length > 0 ? (
+            {canSeeAdvancedStats && runProgression.length > 0 ? (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>RUN PROGRESSION</Text>
                 <View style={styles.runChart}>
@@ -413,7 +426,7 @@ export default function PerformanceTracker() {
         {activeTab === 'wods' ? (
           <View>
             {/* AMRAP Progression */}
-            {wodProgression.length > 0 ? (
+            {canSeeAdvancedStats && wodProgression.length > 0 ? (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>AMRAP ROUNDS PROGRESSION</Text>
                 {(() => {
@@ -557,7 +570,7 @@ export default function PerformanceTracker() {
             </View>
 
             {/* Inline Exercise History */}
-            {selectedExerciseId && selectedExerciseHistory.length > 0 && activeTab === 'prs' ? (
+            {canSeeAdvancedStats && selectedExerciseId && selectedExerciseHistory.length > 0 && activeTab === 'prs' ? (
               <View style={styles.historyPanel}>
                 <View style={styles.historyPanelHeader}>
                   <Text style={styles.historyPanelTitle}>WEIGHT PROGRESSION</Text>
@@ -683,6 +696,10 @@ const styles = StyleSheet.create({
   tabTextActive: { color: '#FF4136' },
 
   // Sections
+  proGateBanner: { marginHorizontal: 12, marginTop: 12, backgroundColor: '#161616', borderWidth: 1, borderColor: '#333', borderRadius: 14, padding: 16, alignItems: 'center', gap: 4 },
+  proGateTitle: { color: '#fff', fontSize: 13, fontWeight: '800', letterSpacing: 1.5, fontFamily: 'monospace' },
+  proGateSub: { color: '#666', fontSize: 12, textAlign: 'center' },
+  proGateCta: { color: '#FF4136', fontSize: 11, fontWeight: '800', letterSpacing: 1, backgroundColor: 'rgba(255,65,54,0.12)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6, marginTop: 6 },
   section: { marginHorizontal: 12, marginTop: 12, backgroundColor: 'rgba(255,255,255,0.02)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: 12 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sectionTitle: { color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '700', letterSpacing: 1.5, marginBottom: 10 },

@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getWods, WOD_CATEGORIES } from '../data/wodSeed';
 import { saveWodResult, getWodHistory, getAllCompletedWodIds } from '../data/database';
+import useSubscriptionStore from '../store/useSubscriptionStore';
 
 const DIFFICULTY_COLORS = {
   beginner: '#01FF70',
@@ -34,6 +35,8 @@ const CATEGORY_FILTERS = [
 ];
 
 export default function WodLibrary({ navigation }) {
+  const canLogWods = useSubscriptionStore(s => s.canUse('wodLogging'));
+  const presentPaywall = useSubscriptionStore(s => s.presentPaywall);
   const [wods] = useState(getWods());
   const [filteredWods, setFilteredWods] = useState([]);
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -277,9 +280,12 @@ export default function WodLibrary({ navigation }) {
                 {/* Log Result Button */}
                 <TouchableOpacity
                   style={styles.logButton}
-                  onPress={() => { setLogModal(selectedWod); setLogScore(''); setLogNotes(''); setLogRx(false); }}
+                  onPress={() => {
+                    if (!canLogWods) { presentPaywall(); return; }
+                    setLogModal(selectedWod); setLogScore(''); setLogNotes(''); setLogRx(false);
+                  }}
                 >
-                  <Text style={styles.logButtonText}>LOG RESULT</Text>
+                  <Text style={styles.logButtonText}>{canLogWods ? 'LOG RESULT' : 'PRO — LOG RESULT'}</Text>
                 </TouchableOpacity>
 
                 {/* History */}

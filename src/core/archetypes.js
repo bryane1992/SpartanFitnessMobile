@@ -110,43 +110,56 @@ export function detectArchetype(userProfile) {
   const hasRace = /spartan|obstacle|mud run|tough mudder|marathon|half marathon|10k|5k|race/i.test(notes + ' ' + goals.join(' '));
   const hasSpartan = /spartan|obstacle/i.test(notes + ' ' + goals.join(' '));
 
+  // Whether user explicitly selected CrossFit / hybrid / WOD-focused training style
+  // `styles` was read above but never used in any condition — honour it here
+  const wantsWods = styles.some(s => /crossfit|wod|hybrid/i.test(s));
+
+  // Helper: apply WOD override to any archetype result (except safety-excluded ones)
+  const withWodOverride = (result) => {
+    if (wantsWods && result.archetype !== 'overweight_beginner') {
+      result.conditioningStyle = 'wod';
+      result.maxWodDifficulty = Math.max(result.maxWodDifficulty || 0, 3);
+    }
+    return result;
+  };
+
   // Skinny beginner wanting to bulk — needs volume, not conditioning
   const isUnderweight = bmi > 0 && bmi < 22 && experience === 'beginner' && bodyCompGoals.some(g => /bulk/i.test(g));
   if (isUnderweight) {
-    return { archetype: 'skinny_beginner', ...ARCHETYPES.skinny_beginner };
+    return withWodOverride({ archetype: 'skinny_beginner', ...ARCHETYPES.skinny_beginner });
   }
 
-  // Overweight beginner — highest priority check
+  // Overweight beginner — highest priority check (WODs intentionally excluded for safety)
   if (experience === 'beginner' && (bmi >= 30 || bodyWeight >= 220)) {
     return { archetype: 'overweight_beginner', ...ARCHETYPES.overweight_beginner };
   }
 
   // Obstacle racer
   if (hasSpartan || (hasRace && goals.some(g => /athletic|endurance/i.test(g)))) {
-    return { archetype: 'obstacle_racer', ...ARCHETYPES.obstacle_racer };
+    return withWodOverride({ archetype: 'obstacle_racer', ...ARCHETYPES.obstacle_racer });
   }
 
   // Endurance athlete (runners without obstacles)
   if (hasRace && !hasSpartan && goals.some(g => /endurance/i.test(g))) {
-    return { archetype: 'endurance', ...ARCHETYPES.endurance };
+    return withWodOverride({ archetype: 'endurance', ...ARCHETYPES.endurance });
   }
 
   // Hypertrophy / bodybuilding
   if (goals.some(g => /build_muscle|get_stronger/i.test(g)) && bodyCompGoals.some(g => /bulk/i.test(g))) {
-    return { archetype: 'hypertrophy', ...ARCHETYPES.hypertrophy };
+    return withWodOverride({ archetype: 'hypertrophy', ...ARCHETYPES.hypertrophy });
   }
 
   // Fat loss
   if (goals.some(g => /lose_fat/i.test(g)) || bodyCompGoals.some(g => /cut/i.test(g))) {
-    // Beginner + fat loss = overweight beginner path
+    // Beginner + fat loss = overweight beginner path (no WODs for safety)
     if (experience === 'beginner') {
       return { archetype: 'overweight_beginner', ...ARCHETYPES.overweight_beginner };
     }
-    return { archetype: 'fat_loss', ...ARCHETYPES.fat_loss };
+    return withWodOverride({ archetype: 'fat_loss', ...ARCHETYPES.fat_loss });
   }
 
   // General fitness (fallback)
-  return { archetype: 'general_fitness', ...ARCHETYPES.general_fitness };
+  return withWodOverride({ archetype: 'general_fitness', ...ARCHETYPES.general_fitness });
 }
 
 // Adjust archetype based on equipment available
@@ -170,9 +183,9 @@ export function adjustArchetypeForEquipment(archetype, equipment) {
     archetype.equipmentPreference = ['machine', 'cable', 'dumbbell', 'kettlebell', 'barbell', 'bodyweight'];
   }
 
-  // Non-beginners with barbell + working weights: promote barbell to top priority
-  // Barbell compounds (squat, bench, deadlift) are the most effective strength builders
-  if (archetype.exerciseComplexity !== 'simple' && hasBarbell && archetype.equipmentPreference.indexOf('barbell') > 1) {
+  // Non-beginners with a barbell: always promote barbell to top priority
+  // Was `> 1` which skipped general_fitness (barbell at index 1) — changed to `> 0`
+  if (archetype.exerciseComplexity !== 'simple' && hasBarbell && archetype.equipmentPreference.indexOf('barbell') > 0) {
     archetype.equipmentPreference = ['barbell', ...archetype.equipmentPreference.filter(e => e !== 'barbell')];
   }
 

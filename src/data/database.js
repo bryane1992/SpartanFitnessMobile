@@ -301,6 +301,20 @@ export async function initDatabase() {
     try { await database.runAsync(sql); } catch (e) { /* column already exists or table exists */ }
   }
 
+  // Data migration: clear bad v2.exercisedb.io URLs (they 404) so GIF download runs fresh
+  try {
+    await database.runAsync(
+      "UPDATE exercises SET gif_url = NULL WHERE gif_url LIKE '%v2.exercisedb.io%'"
+    );
+  } catch {}
+
+  // Data migration: rename generic 'Dynamic Stretching' to a useful name
+  try {
+    await database.runAsync(
+      "UPDATE exercises SET name = 'Arm Circles + Leg Swings' WHERE id = 'dynamic_stretching' AND (name = 'Dynamic Stretching' OR name = 'Arm Circles + Leg Swings + Torso Twists')"
+    );
+  } catch (e) { /* ignore */ }
+
   // Data migration: remove deprecated 'heavy_barbell' exclusion tag from all exercises
   try {
     const tagged = await database.getAllAsync(
@@ -614,12 +628,11 @@ export async function savePlanExercise(exercise) {
   return result.lastInsertRowId;
 }
 
-export async function getWorkoutForDate(date) {
+export async function getWorkoutForDate(date, planId) {
   const database = await getDatabase();
-  const day = await database.getFirstAsync(
-    'SELECT * FROM plan_days WHERE date = ?',
-    [date]
-  );
+  const day = planId
+    ? await database.getFirstAsync('SELECT * FROM plan_days WHERE date = ? AND plan_id = ?', [date, planId])
+    : await database.getFirstAsync('SELECT * FROM plan_days WHERE date = ? ORDER BY id DESC', [date]);
   if (!day) return null;
 
   const blocks = await database.getAllAsync(

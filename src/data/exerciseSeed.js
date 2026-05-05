@@ -280,7 +280,7 @@ export function seedExercises() {
     // ═══════════════════════════════════════════════════════════
     //  WARM-UP / MOBILITY
     // ═══════════════════════════════════════════════════════════
-    { id: 'dynamic_stretching', name: 'Arm Circles + Leg Swings + Torso Twists', emoji: '', muscle_group: 'full_body', secondary_muscles: [], category: 'bodyweight', style_tags: ['crossfit', 'bodyweight', 'hybrid', 'traditional'], exclusion_tags: [], equipment_required: [], default_sets: 1, default_reps: '2 min', default_weight: 'Full body', is_compound: false, difficulty: 'beginner' },
+    { id: 'dynamic_stretching', name: 'Arm Circles + Leg Swings', emoji: '', muscle_group: 'full_body', secondary_muscles: [], category: 'bodyweight', style_tags: ['crossfit', 'bodyweight', 'hybrid', 'traditional'], exclusion_tags: [], equipment_required: [], default_sets: 1, default_reps: '2 min', default_weight: 'Full body', is_compound: false, difficulty: 'beginner' },
     { id: 'pvc_pass_throughs', name: 'PVC Pass-Throughs', emoji: '', muscle_group: 'shoulders', secondary_muscles: [], category: 'bodyweight', style_tags: ['crossfit', 'hybrid'], exclusion_tags: [], equipment_required: [], default_sets: 1, default_reps: '15', default_weight: 'Shoulder mobility', is_compound: false, difficulty: 'beginner' },
     { id: 'samson_stretch', name: 'Samson Stretch', emoji: '', muscle_group: 'legs', secondary_muscles: ['core'], category: 'bodyweight', style_tags: ['crossfit', 'hybrid'], exclusion_tags: [], equipment_required: [], default_sets: 1, default_reps: '30s ea', default_weight: 'Hip flexors', is_compound: false, difficulty: 'beginner' },
     // Cooldown / Mobility

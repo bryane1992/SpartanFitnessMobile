@@ -9,12 +9,11 @@ const CLAUDE_API_KEY = Deno.env.get('CLAUDE_API_KEY')!
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-// Rate limits by tier (messages per week)
-// Beta: generous limits. Tighten before public launch.
+// Coach message limits per week by tier
 const RATE_LIMITS: Record<string, number> = {
-  free: 200,
-  pro: 500,
-  elite: 999999, // unlimited
+  free: 0,       // no coach access — gated in UI, enforced here as safety net
+  pro: 20,
+  elite: 999999,
 }
 
 Deno.serve(async (req) => {
@@ -48,46 +47,40 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401 })
     }
 
-    // 2. Check rate limit (graceful — missing profile = free tier)
-    let tier = 'free'
-    try {
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('subscription_tier')
-        .eq('user_id', user.id)
-        .maybeSingle()
-      tier = profile?.subscription_tier || 'free'
-    } catch { /* no profile row = free tier */ }
-
-    const limit = RATE_LIMITS[tier] || RATE_LIMITS.free
-
-    // Count messages this week (skip for plan generation/review calls)
-    if (!skip_rate_limit) {
-      try {
-        const weekAgo = new Date()
-        weekAgo.setDate(weekAgo.getDate() - 7)
-        const { count } = await supabase
-          .from('coach_messages')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .gte('created_at', weekAgo.toISOString())
-
-        if ((count || 0) >= limit) {
-          return new Response(JSON.stringify({
-            error: 'Rate limit exceeded',
-            message: `You've used ${count}/${limit} coach messages this week. Upgrade for more.`,
-            tier,
-          }), { status: 429 })
-        }
-      } catch { /* rate limit check failed — allow request */ }
-    }
-
-    // 3. Parse request body
+    // 2. Parse request body
     const body = await req.json()
     const { model, system, messages, max_tokens, skip_rate_limit } = body
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: 'Invalid request: messages required' }), { status: 400 })
+    }
+
+    // 3. Rate limiting (skipped for plan generation and plan review)
+    if (!skip_rate_limit) {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('subscription_tier')
+        .eq('id', user.id)
+        .single()
+
+      const tier = profile?.subscription_tier || 'free'
+      const limit = RATE_LIMITS[tier] ?? RATE_LIMITS.free
+
+      if (limit === 0) {
+        return new Response(JSON.stringify({ error: 'AI Coach requires a Pro subscription' }), { status: 403 })
+      }
+
+      const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      const { count } = await supabase
+        .from('coach_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('role', 'user')
+        .gte('created_at', oneWeekAgo)
+
+      if ((count ?? 0) >= limit) {
+        return new Response(JSON.stringify({ error: `Weekly message limit reached (${limit}/week). Upgrade to Elite for unlimited access.` }), { status: 429 })
+      }
     }
 
     // 4. Forward to Anthropic API
