@@ -34,7 +34,11 @@
     "production": {
       "ios": {
         "appleId": "bryane92@yahoo.com",
-        "appleTeamId": "3324685FTA"
+        "appleTeamId": "3324685FTA",
+        "ascAppId": "6762285446",
+        "ascApiKeyIssuerId": "1c3ac808-5951-4ccc-8397-dad59ddce1b1",
+        "ascApiKeyId": "X66F939YTC",
+        "ascApiKeyPath": "./AuthKey_X66F939YTC.p8"
       }
     }
   }
