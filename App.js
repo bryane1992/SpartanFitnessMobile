@@ -187,7 +187,12 @@ export default Sentry.wrap(function App() {
 
         const { data: { subscription: sub } } = supabase.auth.onAuthStateChange((_event, s) => {
           setSession(s);
-          if (s?.user?.id) identifyUser(s.user.id);
+          if (s?.user?.id) {
+            identifyUser(s.user.id);
+            Sentry.setUser({ id: s.user.id, email: s.user.email });
+          } else {
+            Sentry.setUser(null);
+          }
         });
         authSubRef.current = sub;
       } catch (e) {
