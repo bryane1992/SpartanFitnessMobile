@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
+import { navigationRef } from './src/navigation/navigationRef';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
@@ -21,6 +22,7 @@ import Onboarding from './src/screens/Onboarding';
 import PerformanceTracker from './src/screens/PerformanceTracker';
 import ExerciseDictionary from './src/screens/ExerciseDictionary';
 import WodLibrary from './src/screens/WodLibrary';
+import PaywallScreen from './src/screens/PaywallScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -237,7 +239,7 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <StatusBar style="light" />
       <Stack.Navigator
         screenOptions={{ headerShown: false }}
@@ -248,6 +250,7 @@ export default function App() {
         <Stack.Screen name="ExerciseLibrary" component={ExerciseDictionary} />
         <Stack.Screen name="WodLibrary" component={WodLibrary} />
         <Stack.Screen name="GpsRunTracker" component={RunTracker} options={{ headerShown: true, title: 'GPS Run', headerStyle: { backgroundColor: '#0A0A0A' }, headerTintColor: '#fff' }} />
+        <Stack.Screen name="Paywall" component={PaywallScreen} options={{ presentation: 'modal', headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

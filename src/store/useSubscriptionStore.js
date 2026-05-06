@@ -3,6 +3,8 @@ import { Platform } from 'react-native';
 import Purchases, { LOG_LEVEL } from 'react-native-purchases';
 import { RevenueCatUI } from 'react-native-purchases-ui';
 import Constants from 'expo-constants';
+import { navigate } from '../navigation/navigationRef';
+import { supabase } from '../data/supabase';
 
 export const ENTITLEMENT_PRO = 'pro';
 export const ENTITLEMENT_ELITE = 'elite';
@@ -31,10 +33,28 @@ export const TIER_FEATURES = {
   },
 };
 
-function getTier(customerInfo) {
+const TEST_ELITE_EMAILS = [
+  'bryane92@yahoo.com',
+];
+
+function getTier(customerInfo, userEmail) {
+  if (userEmail && TEST_ELITE_EMAILS.includes(userEmail.toLowerCase())) return 'elite';
   if (customerInfo?.entitlements?.active?.[ENTITLEMENT_ELITE]) return 'elite';
   if (customerInfo?.entitlements?.active?.[ENTITLEMENT_PRO]) return 'pro';
   return 'free';
+}
+
+async function syncTierToSupabase(tier) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase
+      .from('user_profiles')
+      .update({ subscription_tier: tier })
+      .eq('id', user.id);
+  } catch (e) {
+    console.warn('[RevenueCat] Supabase tier sync failed:', e.message);
+  }
 }
 
 const useSubscriptionStore = create((set, get) => ({
@@ -65,13 +85,18 @@ const useSubscriptionStore = create((set, get) => ({
       if (__DEV__) Purchases.setLogLevel(LOG_LEVEL.DEBUG);
       Purchases.configure({ apiKey });
 
+      const { data: { user } } = await supabase.auth.getUser();
+      const userEmail = user?.email;
+
       const customerInfo = await Purchases.getCustomerInfo();
-      const tier = getTier(customerInfo);
+      const tier = getTier(customerInfo, userEmail);
       set({ tier, isPro: tier !== 'free', isElite: tier === 'elite', customerInfo, isLoading: false });
+      syncTierToSupabase(tier);
 
       Purchases.addCustomerInfoUpdateListener((info) => {
-        const t = getTier(info);
+        const t = getTier(info, userEmail);
         set({ tier: t, isPro: t !== 'free', isElite: t === 'elite', customerInfo: info });
+        syncTierToSupabase(t);
       });
     } catch (e) {
       console.error('[RevenueCat] Init error:', e.message);
@@ -82,21 +107,17 @@ const useSubscriptionStore = create((set, get) => ({
   identifyUser: async (userId) => {
     try {
       const { loggedInCustomerInfo } = await Purchases.logIn(userId);
-      const tier = getTier(loggedInCustomerInfo);
+      const { data: { user } } = await supabase.auth.getUser();
+      const tier = getTier(loggedInCustomerInfo, user?.email);
       set({ tier, isPro: tier !== 'free', isElite: tier === 'elite', customerInfo: loggedInCustomerInfo });
+      syncTierToSupabase(tier);
     } catch (e) {
       console.error('[RevenueCat] identifyUser error:', e.message);
     }
   },
 
-  presentPaywall: async () => {
-    try {
-      await RevenueCatUI.presentPaywallIfNeeded({
-        requiredEntitlementIdentifier: ENTITLEMENT_PRO,
-      });
-    } catch (e) {
-      console.error('[RevenueCat] Paywall error:', e.message);
-    }
+  presentPaywall: (featureName) => {
+    navigate('Paywall', featureName ? { featureName } : undefined);
   },
 
   presentCustomerCenter: async () => {
@@ -111,6 +132,7 @@ const useSubscriptionStore = create((set, get) => ({
     try {
       await Purchases.logOut();
       set({ tier: 'free', isPro: false, isElite: false, customerInfo: null });
+      syncTierToSupabase('free');
     } catch {}
   },
 }));
