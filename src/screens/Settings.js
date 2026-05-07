@@ -364,7 +364,7 @@ export default function Settings({ navigation }) {
             <Text style={styles.subBannerBadge}>PRO</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.subBannerFree} onPress={presentPaywall} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.subBannerFree} onPress={() => presentPaywall()} activeOpacity={0.8}>
             <View>
               <Text style={styles.subBannerTitle}>UPGRADE TO PRO</Text>
               <Text style={styles.subBannerSub}>Unlock AI Coach, plan reviews, and more</Text>

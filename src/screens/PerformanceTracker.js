@@ -170,7 +170,7 @@ export default function PerformanceTracker() {
 
         {/* Pro gate banner — shown for free users above all tabs */}
         {!canSeeAdvancedStats ? (
-          <TouchableOpacity style={styles.proGateBanner} onPress={presentPaywall} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.proGateBanner} onPress={() => presentPaywall()} activeOpacity={0.85}>
             <Text style={styles.proGateTitle}>UPGRADE TO PRO</Text>
             <Text style={styles.proGateSub}>See full history, weight progression, and run trends</Text>
             <Text style={styles.proGateCta}>UPGRADE</Text>
