@@ -301,12 +301,7 @@ export async function initDatabase() {
     try { await database.runAsync(sql); } catch (e) { /* column already exists or table exists */ }
   }
 
-  // Data migration: clear bad v2.exercisedb.io URLs (they 404) so GIF download runs fresh
-  try {
-    await database.runAsync(
-      "UPDATE exercises SET gif_url = NULL WHERE gif_url LIKE '%v2.exercisedb.io%'"
-    );
-  } catch {}
+  // NOTE: v2.exercisedb.io URL wipe removed — free API is down, no replacement source
 
   // Data migration: rename generic 'Dynamic Stretching' to a useful name
   try {

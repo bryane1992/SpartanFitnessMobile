@@ -1,7 +1,6 @@
 import { create } from 'zustand';
-import { Platform } from 'react-native';
+import { Platform, Linking } from 'react-native';
 import Purchases, { LOG_LEVEL } from 'react-native-purchases';
-import { RevenueCatUI } from 'react-native-purchases-ui';
 import Constants from 'expo-constants';
 import { navigate } from '../navigation/navigationRef';
 import { supabase } from '../data/supabase';
@@ -120,12 +119,8 @@ const useSubscriptionStore = create((set, get) => ({
     navigate('Paywall', featureName ? { featureName } : undefined);
   },
 
-  presentCustomerCenter: async () => {
-    try {
-      await RevenueCatUI.presentCustomerCenter();
-    } catch (e) {
-      console.error('[RevenueCat] CustomerCenter error:', e.message);
-    }
+  presentCustomerCenter: () => {
+    Linking.openURL('https://apps.apple.com/account/subscriptions');
   },
 
   reset: async () => {
