@@ -291,9 +291,15 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
     } catch (e) {
       console.error('Coach error:', e);
       if (!mountedRef.current) return;
+      const msg = e.message || '';
+      const content = msg.includes('403') || msg.includes('Pro subscription')
+        ? 'AI Coach requires a Pro subscription. Upgrade in Settings to unlock.'
+        : msg.includes('429') || msg.includes('limit')
+        ? 'Weekly message limit reached. Upgrade to Elite for unlimited access.'
+        : 'Having trouble connecting. Try again in a moment.';
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Having trouble connecting. Try again in a moment.',
+        content,
         actions: [],
       }]);
     }
