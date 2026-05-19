@@ -559,6 +559,6 @@ export const SEQUENCING_RULES = {
 // ═══════════════════════════════════════════════════════════════
 
 function isDeloadWeek(weekNumber, totalWeeks) {
-  if (totalWeeks && totalWeeks <= 5) return false;
+  if (totalWeeks && totalWeeks <= 8) return false; // deload only meaningful on 9+ week plans
   return weekNumber > 1 && weekNumber % 4 === 0;
 }

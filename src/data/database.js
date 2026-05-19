@@ -248,6 +248,8 @@ export async function initDatabase() {
     "ALTER TABLE exercises ADD COLUMN api_id TEXT",
     "ALTER TABLE exercises ADD COLUMN description TEXT",
     "ALTER TABLE plan_blocks ADD COLUMN amrap_rounds TEXT",
+    "ALTER TABLE plan_blocks ADD COLUMN wod_elapsed INTEGER",
+    "ALTER TABLE plan_blocks ADD COLUMN has_gps INTEGER DEFAULT 0",
     `CREATE TABLE IF NOT EXISTS activity_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       date TEXT NOT NULL,
@@ -623,6 +625,21 @@ export async function savePlanExercise(exercise) {
   return result.lastInsertRowId;
 }
 
+export async function addExerciseToBlock(planBlockId, exerciseId, sets, reps, weight, notes) {
+  const database = await getDatabase();
+  const existing = await database.getAllAsync(
+    'SELECT sort_order FROM plan_exercises WHERE plan_block_id = ? ORDER BY sort_order DESC LIMIT 1',
+    [planBlockId]
+  );
+  const nextOrder = existing.length > 0 ? (existing[0].sort_order + 1) : 0;
+  const result = await database.runAsync(
+    `INSERT INTO plan_exercises (plan_block_id, exercise_id, sort_order, sets, reps, weight, rest, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [planBlockId, exerciseId, nextOrder, sets || '2x15', reps || '15', weight || 'BW', null, notes || null]
+  );
+  return result.lastInsertRowId;
+}
+
 export async function getWorkoutForDate(date, planId) {
   const database = await getDatabase();
   const day = planId
@@ -783,7 +800,7 @@ export async function completeExercise(planExerciseId, actualWeight, actualReps)
 export async function uncompleteExercise(planExerciseId) {
   const database = await getDatabase();
   await database.runAsync(
-    'UPDATE plan_exercises SET is_completed = 0, actual_weight = NULL, actual_reps = NULL WHERE id = ?',
+    'UPDATE plan_exercises SET is_completed = 0 WHERE id = ?',
     [planExerciseId]
   );
 }
@@ -973,6 +990,70 @@ export async function upgradeExercisesForNewEquipment(addedEquipment, exerciseSw
 }
 
 // Replace a WOD block's exercises with a different WOD
+// Swap WOD on a specific date — Charlie uses this for future days where he doesn't have planBlockId
+export async function swapWodOnDate(date, newWodId) {
+  const database = await getDatabase();
+  const block = await database.getFirstAsync(
+    `SELECT pb.id FROM plan_blocks pb
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     WHERE pd.date = ? AND pb.is_amrap = 1
+     ORDER BY pb.sort_order LIMIT 1`,
+    [date]
+  );
+  if (!block) return false;
+  return swapWodBlock(block.id, newWodId);
+}
+
+// Add exercise to warmup/cooldown block on a specific date
+export async function addExerciseOnDate(date, exerciseId, sets, reps, weight, notes, blockPreference = 'warmup') {
+  const database = await getDatabase();
+  let block = null;
+
+  if (blockPreference === 'main') {
+    // Target accessory block first, then main lift block, then any non-WOD non-warmup block
+    block = await database.getFirstAsync(
+      `SELECT pb.id FROM plan_blocks pb
+       JOIN plan_days pd ON pd.id = pb.plan_day_id
+       WHERE pd.date = ? AND (LOWER(pb.name) LIKE '%accessor%' OR LOWER(pb.name) LIKE '%arm%' OR LOWER(pb.name) LIKE '%core%' OR LOWER(pb.name) LIKE '%finish%')
+       ORDER BY pb.sort_order LIMIT 1`,
+      [date]
+    );
+    if (!block) {
+      block = await database.getFirstAsync(
+        `SELECT pb.id FROM plan_blocks pb
+         JOIN plan_days pd ON pd.id = pb.plan_day_id
+         WHERE pd.date = ? AND LOWER(pb.name) NOT LIKE '%warm%' AND LOWER(pb.name) NOT LIKE '%cool%'
+           AND LOWER(pb.name) NOT LIKE '%wod%' AND LOWER(pb.name) NOT LIKE '%amrap%'
+           AND LOWER(pb.name) NOT LIKE '%emom%' AND LOWER(pb.name) NOT LIKE '%circuit%'
+         ORDER BY pb.sort_order LIMIT 1`,
+        [date]
+      );
+    }
+  } else {
+    // Default: warmup block
+    block = await database.getFirstAsync(
+      `SELECT pb.id FROM plan_blocks pb
+       JOIN plan_days pd ON pd.id = pb.plan_day_id
+       WHERE pd.date = ? AND (LOWER(pb.name) LIKE '%warm%' OR LOWER(pb.name) LIKE '%movement%' OR LOWER(pb.name) LIKE '%activation%' OR LOWER(pb.name) LIKE '%prep%')
+       ORDER BY pb.sort_order LIMIT 1`,
+      [date]
+    );
+  }
+
+  if (!block) {
+    // Final fallback: first block on that day
+    block = await database.getFirstAsync(
+      `SELECT pb.id FROM plan_blocks pb
+       JOIN plan_days pd ON pd.id = pb.plan_day_id
+       WHERE pd.date = ?
+       ORDER BY pb.sort_order LIMIT 1`,
+      [date]
+    );
+  }
+  if (!block) return null;
+  return addExerciseToBlock(block.id, exerciseId, sets, reps, weight, notes);
+}
+
 export async function swapWodBlock(planBlockId, newWodId) {
   const database = await getDatabase();
 
@@ -983,22 +1064,26 @@ export async function swapWodBlock(planBlockId, newWodId) {
   // Delete existing exercises in this block
   await database.runAsync('DELETE FROM plan_exercises WHERE plan_block_id = ?', [planBlockId]);
 
-  // Parse movements and insert new exercises (skip duplicates)
+  // Parse movements and insert exercises — allow intentional duplicates (e.g. Murph's 2 mile runs)
   const movements = JSON.parse(wod.movements || '[]');
-  const usedExerciseIds = new Set();
   let sortOrder = 0;
   for (let i = 0; i < movements.length; i++) {
     const movement = movements[i];
-    const repMatch = movement.match(/^(\d+)\s+(.+)$/);
-    const name = repMatch ? repMatch[2].replace(/\s*\([^)]+\)/, '').trim() : movement;
-    const reps = repMatch ? repMatch[1] : '10';
+    // Detect distance movements: "1 mile Run", "400m Run", etc.
+    const distMatch = movement.match(/^(\d+(?:\.\d+)?)\s*(mile|km|m\b|meter|yard)s?\s*(run|row|swim)?/i);
+    let reps, name;
+    if (distMatch) {
+      // Normalize to standard abbreviations so convertDistanceText handles unit switching
+      const unit = /mile/i.test(distMatch[2]) ? 'mi' : /km/i.test(distMatch[2]) ? 'km' : distMatch[2].toLowerCase();
+      reps = `${distMatch[1]} ${unit}`;
+      name = distMatch[3] ? `${distMatch[3]} (${reps})` : movement;
+    } else {
+      const repMatch = movement.match(/^(\d+)\s+(.+)$/);
+      reps = repMatch ? repMatch[1] : '10';
+      name = repMatch ? repMatch[2].replace(/\s*\([^)]+\)/, '').trim() : movement;
+    }
 
     const exerciseId = mapWodMovementToId(name);
-
-    // Skip duplicate exercise IDs in the same WOD
-    if (usedExerciseIds.has(exerciseId)) continue;
-    usedExerciseIds.add(exerciseId);
-
     await database.runAsync(
       `INSERT INTO plan_exercises (plan_block_id, exercise_id, sort_order, sets, reps, weight, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -1042,12 +1127,19 @@ function mapWodMovementToId(name) {
   return 'burpees';
 }
 
-export async function saveAmrapRounds(planBlockId, rounds) {
+export async function saveAmrapRounds(planBlockId, rounds, elapsed = null) {
   const database = await getDatabase();
-  await database.runAsync(
-    'UPDATE plan_blocks SET amrap_rounds = ? WHERE id = ?',
-    [rounds, planBlockId]
-  );
+  if (elapsed != null) {
+    await database.runAsync(
+      'UPDATE plan_blocks SET amrap_rounds = ?, wod_elapsed = ? WHERE id = ?',
+      [rounds, elapsed, planBlockId]
+    );
+  } else {
+    await database.runAsync(
+      'UPDATE plan_blocks SET amrap_rounds = ? WHERE id = ?',
+      [rounds, planBlockId]
+    );
+  }
 }
 
 export async function completeDay(planDayId) {
@@ -1115,6 +1207,7 @@ export async function getPersonalRecords() {
        AND pe.actual_weight != ''
        AND pe.actual_weight != 'BW'
        AND CAST(pe.actual_weight AS REAL) > 0
+       AND e.category != 'cardio'
      GROUP BY pe.exercise_id
      ORDER BY best_weight DESC`
   );
@@ -1309,8 +1402,18 @@ export async function getWeeklyProgress() {
 export async function getWodProgression() {
   const database = await getDatabase();
   return database.getAllAsync(
-    `SELECT pb.name as wod_name, pb.amrap_rounds, pb.time_cap,
-            pd.week_number, pd.date, pd.phase
+    `SELECT pb.name as wod_name, pb.amrap_rounds, pb.time_cap, pb.wod_elapsed,
+            pd.week_number, pd.date, pd.phase,
+            (SELECT GROUP_CONCAT(
+               COALESCE(e.name, pe.exercise_id) || ' @ ' || COALESCE(pe.actual_weight, pe.weight),
+               ' / ')
+             FROM plan_exercises pe
+             LEFT JOIN exercises e ON e.id = pe.exercise_id
+             WHERE pe.plan_block_id = pb.id
+               AND (pe.actual_weight IS NOT NULL OR pe.weight IS NOT NULL)
+               AND COALESCE(pe.actual_weight, pe.weight) != 'BW'
+               AND (e.category IS NULL OR e.category != 'cardio')
+            ) as exercise_weights
      FROM plan_blocks pb
      JOIN plan_days pd ON pd.id = pb.plan_day_id
      WHERE pb.is_amrap = 1
@@ -1371,6 +1474,19 @@ export async function updateBlockRunType(blockId, runType) {
   await database.runAsync(
     'UPDATE plan_blocks SET type = ? WHERE id = ?',
     [runType, blockId]
+  );
+}
+
+export async function getCardioExercisesForDate(date) {
+  const database = await getDatabase();
+  return database.getAllAsync(
+    `SELECT pe.id, pe.exercise_id, e.name, e.category
+     FROM plan_exercises pe
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     JOIN exercises e ON e.id = pe.exercise_id
+     WHERE pd.date = ? AND e.category = 'cardio'`,
+    [date]
   );
 }
 
@@ -2038,6 +2154,97 @@ export async function savePlanRationales(planId, archetype, selections) {
       selections.excludedRationale || '',
     ]
   );
+}
+
+export async function getWorkoutLog(limit = 30) {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync(
+    `SELECT pd.date, pd.title, pd.week_number, pd.phase,
+            COALESCE(e.name, pe.exercise_id) as exercise_name,
+            pe.sets, pe.weight as prescribed, pe.actual_weight, pe.actual_reps, pe.notes
+     FROM plan_days pd
+     JOIN plan_blocks pb ON pb.plan_day_id = pd.id
+     JOIN plan_exercises pe ON pe.plan_block_id = pb.id
+     LEFT JOIN exercises e ON e.id = pe.exercise_id
+     WHERE pd.is_completed = 1
+       AND pe.is_completed = 1
+       AND (e.category IS NULL OR e.category != 'cardio')
+       AND pe.actual_weight IS NOT NULL
+       AND pe.actual_weight != ''
+       AND pe.actual_weight != 'BW'
+     ORDER BY pd.date DESC, pb.sort_order, pe.sort_order
+     LIMIT ?`,
+    [limit * 10]
+  );
+  // Group by date
+  const byDate = {};
+  for (const row of rows) {
+    if (!byDate[row.date]) byDate[row.date] = { date: row.date, title: row.title, week: row.week_number, phase: row.phase, exercises: [] };
+    byDate[row.date].exercises.push(row);
+  }
+  return Object.values(byDate).slice(0, limit);
+}
+
+export async function getFullPlanContext(planId) {
+  const database = await getDatabase();
+  // Get all plan days past + future with exercise summaries
+  const days = await database.getAllAsync(
+    `SELECT pd.date, pd.title, pd.week_number, pd.phase, pd.is_rest_day, pd.is_completed,
+            GROUP_CONCAT(
+              CASE WHEN pb.is_amrap = 1 THEN pb.name
+                   ELSE COALESCE(e.name, pe.exercise_id) || ' ' || COALESCE(pe.actual_weight, pe.weight, '') || 'lb x' || COALESCE(pe.actual_reps, pe.reps, '')
+              END, ' | '
+            ) as summary
+     FROM plan_days pd
+     LEFT JOIN plan_blocks pb ON pb.plan_day_id = pd.id
+     LEFT JOIN plan_exercises pe ON pe.plan_block_id = pb.id
+     LEFT JOIN exercises e ON e.id = pe.exercise_id
+     WHERE pd.plan_id = ?
+       AND (e.category IS NULL OR e.category != 'cardio')
+     GROUP BY pd.id
+     ORDER BY pd.date`,
+    [planId]
+  );
+  return days;
+}
+
+export async function getWodByName(name) {
+  const database = await getDatabase();
+  return database.getFirstAsync(
+    `SELECT * FROM wods WHERE LOWER(name) LIKE LOWER(?) LIMIT 1`,
+    [`%${name}%`]
+  );
+}
+
+export async function getRecentActualWeights(limitDays = 28) {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync(
+    `SELECT COALESCE(e.name, pe.exercise_id) as name, pe.exercise_id, pe.actual_weight, pe.weight as prescribed, pd.date
+     FROM plan_exercises pe
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     LEFT JOIN exercises e ON e.id = pe.exercise_id
+     WHERE pe.is_completed = 1
+       AND pe.actual_weight IS NOT NULL
+       AND pe.actual_weight != ''
+       AND pe.actual_weight NOT LIKE 'BW%'
+       AND CAST(pe.actual_weight AS REAL) > 0
+       AND (e.category IS NULL OR e.category != 'cardio')
+       AND pd.date >= date('now', '-' || ? || ' days')
+     ORDER BY pd.date DESC`,
+    [limitDays],
+  );
+  // Deduplicate — keep most recent per exercise
+  const seen = {};
+  const result = [];
+  for (const row of rows) {
+    if (!seen[row.exercise_id]) {
+      seen[row.exercise_id] = true;
+      result.push(row);
+    }
+    if (result.length >= 20) break;
+  }
+  return result;
 }
 
 export async function getPlanRationales(planId) {

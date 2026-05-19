@@ -9,6 +9,7 @@ import {
   TextInput,
   Platform,
   KeyboardAvoidingView,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -128,6 +129,7 @@ export default function Onboarding({ navigation }) {
   const [heightFt, setHeightFt] = useState('');
   const [heightIn, setHeightIn] = useState('');
   const [bodyWeight, setBodyWeight] = useState('');
+  const [runningLevel, setRunningLevel] = useState(null); // 'none' | 'beginner' | 'intermediate' | 'strong'
   // Step 3: Experience + working weights
   const [selectedExperience, setSelectedExperience] = useState(null);
   const [workingWeights, setWorkingWeights] = useState({});
@@ -203,6 +205,7 @@ export default function Onboarding({ navigation }) {
     } catch (e) {
       console.error('Error regenerating:', e);
       setIsGenerating(false);
+      Alert.alert('Plan Generation Failed', e.message || 'Please try again.');
     }
   };
 
@@ -303,9 +306,10 @@ export default function Onboarding({ navigation }) {
         exclusions: exclusions,
         bodyCompGoals: bodyCompGoals,
         bodyCompGoal: bodyCompGoals[0] || 'maintain',
+        runningLevel: runningLevel,
         additionalNotes: additionalNotes.trim(),
         createdAt: new Date().toISOString(),
-        onboardingVersion: 6,
+        onboardingVersion: 7,
       };
 
       // Save profile
@@ -366,6 +370,7 @@ export default function Onboarding({ navigation }) {
     } catch (error) {
       console.error('Error completing onboarding:', error);
       setIsGenerating(false);
+      Alert.alert('Plan Generation Failed', error.message || 'Please try again.');
     }
   };
 
@@ -462,6 +467,26 @@ export default function Onboarding({ navigation }) {
           maxLength={3}
         />
         <Text style={styles.detailUnit}>lbs</Text>
+
+        <Text style={[styles.sectionLabel, { marginTop: 20 }]}>How far can you comfortably run?</Text>
+        {[
+          { id: 'none', label: 'Non-runner', desc: 'Rarely or never run' },
+          { id: 'beginner', label: 'Under 2 miles', desc: 'Just getting started with running' },
+          { id: 'intermediate', label: '2–5 miles', desc: 'Regular runner, comfortable pace' },
+          { id: 'strong', label: '5+ miles', desc: 'Strong aerobic base, regular training' },
+        ].map(opt => (
+          <TouchableOpacity
+            key={opt.id}
+            style={[styles.optionCard, runningLevel === opt.id && styles.optionCardSelected]}
+            onPress={() => setRunningLevel(opt.id)}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.optionLabel}>{opt.label}</Text>
+              <Text style={styles.optionDesc}>{opt.desc}</Text>
+            </View>
+            {runningLevel === opt.id && <View style={styles.checkMark} />}
+          </TouchableOpacity>
+        ))}
       </ScrollView>
 
       <View style={styles.buttonRow}>
@@ -469,8 +494,8 @@ export default function Onboarding({ navigation }) {
           <Text style={styles.backButtonText}>BACK</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.nextButton, (!sex || !heightFt || !bodyWeight) && styles.nextButtonDisabled]}
-          disabled={!sex || !heightFt || !bodyWeight}
+          style={[styles.nextButton, (!sex || !heightFt || !bodyWeight || !runningLevel) && styles.nextButtonDisabled]}
+          disabled={!sex || !heightFt || !bodyWeight || !runningLevel}
           onPress={() => setStep(3)}
         >
           <Text style={styles.nextButtonText}>NEXT</Text>
@@ -712,67 +737,69 @@ export default function Onboarding({ navigation }) {
       <Text style={styles.stepTitle}>Training schedule</Text>
       <Text style={styles.stepSubtitle}>How many days per week?</Text>
 
-      {/* Days per week selector */}
-      <View style={styles.daysCountRow}>
-        {[3, 4, 5, 6].map(num => (
-          <TouchableOpacity
-            key={num}
-            style={[styles.dayCountButton, daysPerWeek === num && styles.dayCountSelected]}
-            onPress={() => { setDaysPerWeek(num); setTrainingDays([]); }}
-          >
-            <Text style={[styles.dayCountText, daysPerWeek === num && styles.dayCountTextSelected]}>{num}</Text>
-            <Text style={[styles.dayCountLabel, daysPerWeek === num && styles.dayCountLabelSelected]}>days</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.optionsScroll} contentContainerStyle={{ paddingBottom: 16 }}>
+        {/* Days per week selector */}
+        <View style={styles.daysCountRow}>
+          {[3, 4, 5, 6].map(num => (
+            <TouchableOpacity
+              key={num}
+              style={[styles.dayCountButton, daysPerWeek === num && styles.dayCountSelected]}
+              onPress={() => { setDaysPerWeek(num); setTrainingDays([]); }}
+            >
+              <Text style={[styles.dayCountText, daysPerWeek === num && styles.dayCountTextSelected]}>{num}</Text>
+              <Text style={[styles.dayCountLabel, daysPerWeek === num && styles.dayCountLabelSelected]}>days</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
-      {daysPerWeek && (
-        <>
-          <Text style={styles.sectionLabel}>
-            Pick your {daysPerWeek} training days ({trainingDays.length}/{daysPerWeek})
-          </Text>
-          <View style={styles.weekDayRow}>
-            {DAYS_OF_WEEK.map(day => {
-              const selected = trainingDays.includes(day.id);
-              const canSelect = selected || trainingDays.length < daysPerWeek;
-              return (
+        {daysPerWeek && (
+          <>
+            <Text style={styles.sectionLabel}>
+              Pick your {daysPerWeek} training days ({trainingDays.length}/{daysPerWeek})
+            </Text>
+            <View style={styles.weekDayRow}>
+              {DAYS_OF_WEEK.map(day => {
+                const selected = trainingDays.includes(day.id);
+                const canSelect = selected || trainingDays.length < daysPerWeek;
+                return (
+                  <TouchableOpacity
+                    key={day.id}
+                    style={[
+                      styles.weekDayButton,
+                      selected && styles.weekDaySelected,
+                      !canSelect && !selected && styles.weekDayDisabled,
+                    ]}
+                    disabled={!canSelect && !selected}
+                    onPress={() => toggleTrainingDay(day.id)}
+                  >
+                    <Text style={[styles.weekDayText, selected && styles.weekDayTextSelected]}>
+                      {day.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        )}
+
+        {/* Session duration */}
+        {daysPerWeek && trainingDays.length === daysPerWeek && (
+          <>
+            <Text style={[styles.sectionLabel, { marginTop: 20 }]}>How long per session?</Text>
+            <View style={[styles.daysCountRow, { flexWrap: 'wrap' }]}>
+              {SESSION_DURATIONS.map(dur => (
                 <TouchableOpacity
-                  key={day.id}
-                  style={[
-                    styles.weekDayButton,
-                    selected && styles.weekDaySelected,
-                    !canSelect && !selected && styles.weekDayDisabled,
-                  ]}
-                  disabled={!canSelect && !selected}
-                  onPress={() => toggleTrainingDay(day.id)}
+                  key={dur.id}
+                  style={[styles.dayCountButton, sessionDuration === dur.id && styles.dayCountSelected, { width: 'auto', paddingHorizontal: 14 }]}
+                  onPress={() => setSessionDuration(dur.id)}
                 >
-                  <Text style={[styles.weekDayText, selected && styles.weekDayTextSelected]}>
-                    {day.label}
-                  </Text>
+                  <Text style={[styles.dayCountText, sessionDuration === dur.id && styles.dayCountTextSelected, { fontSize: 16 }]}>{dur.label}</Text>
                 </TouchableOpacity>
-              );
-            })}
-          </View>
-        </>
-      )}
-
-      {/* Session duration */}
-      {daysPerWeek && trainingDays.length === daysPerWeek && (
-        <>
-          <Text style={[styles.sectionLabel, { marginTop: 20 }]}>How long per session?</Text>
-          <View style={[styles.daysCountRow, { flexWrap: 'wrap' }]}>
-            {SESSION_DURATIONS.map(dur => (
-              <TouchableOpacity
-                key={dur.id}
-                style={[styles.dayCountButton, sessionDuration === dur.id && styles.dayCountSelected, { width: 'auto', paddingHorizontal: 14 }]}
-                onPress={() => setSessionDuration(dur.id)}
-              >
-                <Text style={[styles.dayCountText, sessionDuration === dur.id && styles.dayCountTextSelected, { fontSize: 16 }]}>{dur.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </>
-      )}
+              ))}
+            </View>
+          </>
+        )}
+      </ScrollView>
 
       <View style={styles.buttonRow}>
         <TouchableOpacity style={styles.backButton} onPress={() => {

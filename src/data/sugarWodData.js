@@ -542,7 +542,6 @@ export function getSugarWods() {
     "difficulty": "intermediate",
     "estimatedTime": "12-18 min",
     "equipment": [
-      "barbell",
       "dumbbell"
     ],
     "tips": null

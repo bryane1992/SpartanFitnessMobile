@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   TextInput,
+  PanResponder,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import useWorkoutStore from '../store/useWorkoutStore';
-import { displayWeight, convertDistanceText } from '../utils/units';
+import { displayWeight, convertDistanceText, contentWidth } from '../utils/units';
 import ExerciseSwapModal from './ExerciseSwapModal';
 import ExerciseDetailModal from '../components/ExerciseDetailModal';
 import WodTimer from '../components/WodTimer';
@@ -32,17 +34,39 @@ export default function TodayWorkout({ navigation }) {
     pendingAdjustment,
     confirmAdjustment,
     dismissAdjustment,
+    planStartDate,
   } = useWorkoutStore();
 
   const [expandedBlocks, setExpandedBlocks] = useState({});
   const [swapModal, setSwapModal] = useState(null);
+
+  // Use refs so PanResponder always reads current values without stale closure
+  const selectedDateRef = useRef(selectedDate);
+  selectedDateRef.current = selectedDate;
+  const loadWorkoutForDateRef = useRef(loadWorkoutForDate);
+  loadWorkoutForDateRef.current = loadWorkoutForDate;
+
+  const swipeResponder = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) =>
+      Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 12,
+    onPanResponderRelease: (_, g) => {
+      const offset = g.dx < -40 ? 1 : g.dx > 40 ? -1 : 0;
+      if (offset !== 0) {
+        const d = new Date(selectedDateRef.current);
+        d.setDate(d.getDate() + offset);
+        loadWorkoutForDateRef.current(d.toISOString().split('T')[0]);
+      }
+    },
+  })).current;
   const [detailExerciseId, setDetailExerciseId] = useState(null);
   // Coach chat moved to global App.js — available on all screens
   const [repSuggestion, setRepSuggestion] = useState(null); // coach suggestion for rep drop-off
 
-  useEffect(() => {
-    loadTodayWorkout();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadTodayWorkout();
+    }, [])
+  );
 
   useEffect(() => {
     if (workout && workout.blocks) {
@@ -80,7 +104,7 @@ export default function TodayWorkout({ navigation }) {
   if (!workout) {
     const isTodaySelected = selectedDate === new Date().toISOString().split('T')[0];
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} {...swipeResponder.panHandlers}>
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => goToDay(-1)} style={styles.navArrow}>
             <Text style={styles.navArrowText}>{'\u25C0'}</Text>
@@ -93,12 +117,32 @@ export default function TodayWorkout({ navigation }) {
           </TouchableOpacity>
         </View>
         <View style={styles.centerContainer}>
-          <Text style={styles.emptyTitle}>{isTodaySelected ? 'Rest Day' : 'No workout scheduled'}</Text>
-          <Text style={styles.emptySub}>
-            {isTodaySelected
-              ? 'Recovery day. Use the arrows to browse your upcoming workouts.'
-              : 'Use the arrows to navigate to a training day.'}
-          </Text>
+          {(() => {
+            const beforePlan = planStartDate && selectedDate < planStartDate;
+            if (beforePlan) {
+              const start = new Date(planStartDate + 'T12:00:00');
+              const startStr = start.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+              return (
+                <>
+                  <Text style={styles.emptyTitle}>Plan Starts {startStr}</Text>
+                  <Text style={styles.emptySub}>Your training plan kicks off then. Use the arrow to jump ahead.</Text>
+                  <TouchableOpacity onPress={() => loadWorkoutForDate(planStartDate)} style={{ marginTop: 16, backgroundColor: '#FF4136', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 20 }}>
+                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13, letterSpacing: 1 }}>JUMP TO START</Text>
+                  </TouchableOpacity>
+                </>
+              );
+            }
+            return (
+              <>
+                <Text style={styles.emptyTitle}>{isTodaySelected ? 'Rest Day' : 'No workout scheduled'}</Text>
+                <Text style={styles.emptySub}>
+                  {isTodaySelected
+                    ? 'Recovery day. Use the arrows to browse your upcoming workouts.'
+                    : 'Use the arrows to navigate to a training day.'}
+                </Text>
+              </>
+            );
+          })()}
         </View>
       </SafeAreaView>
     );
@@ -128,7 +172,7 @@ export default function TodayWorkout({ navigation }) {
 
   if (isRestDay) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} {...swipeResponder.panHandlers}>
         {dayNavContent}
         <View style={styles.centerContainer}>
           <Text style={styles.restTitle}>REST DAY</Text>
@@ -140,7 +184,8 @@ export default function TodayWorkout({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} {...swipeResponder.panHandlers}>
+      <View style={styles.innerContainer}>
       {pendingAdjustment ? (
         <View style={styles.adjustmentPrompt}>
           <Text style={styles.adjustmentPromptTitle}>WEIGHT ADJUSTMENT</Text>
@@ -217,7 +262,15 @@ export default function TodayWorkout({ navigation }) {
           const totalCount = exercises.length;
           const progress = totalCount > 0 ? (doneCount / totalCount) * 100 : 0;
           const blockColor = workout.color || '#FF4136';
-          const hasGps = !!block.has_gps;
+          // Show TRACK RUN only on dedicated run blocks — not WODs/AMRAPs or warmups that incidentally include running
+          const isWodBlock = !!block.is_amrap || /wod|amrap|emom|circuit/i.test(block.name || '');
+          const isWarmupBlock = /warm.?up|movement.?prep|cool.?down/i.test(block.name || '');
+          const runExercise = (!isWodBlock && !isWarmupBlock) ? exercises.find(ex =>
+            /^(easy_run|interval_run|tempo_run|long_run|sprint_intervals|easy_jog)$/.test(ex.exercise_id || '')
+          ) : null;
+          const hasGps = !!block.has_gps || !!runExercise;
+          const runTypeMap = { easy_run: 'EASY', interval_run: 'INTERVALS', tempo_run: 'TEMPO', long_run: 'LONG_RUN', sprint_intervals: 'INTERVALS', easy_jog: 'EASY' };
+          const runType = runTypeMap[runExercise?.exercise_id] || 'EASY';
           const isAmrap = !!block.is_amrap;
 
           return (
@@ -236,14 +289,16 @@ export default function TodayWorkout({ navigation }) {
                       ? `AMRAP${block.time_cap ? ` ${block.time_cap}` : ''}`
                       : /emom/i.test(block.type || '')
                       ? `EMOM${block.time_cap ? ` ${block.time_cap}` : ''}`
-                      : `${block.type || ''}${block.time_cap ? ` \u2022 ${block.time_cap}` : ''}`
+                      : /for.?time/i.test(block.type || '')
+                      ? `FOR TIME${block.time_cap ? ` • ${block.time_cap}` : ''}`
+                      : `${block.type || ''}${block.time_cap ? ` • ${block.time_cap}` : ''}`
                   }</Text>
                 </View>
                 <View style={styles.blockRight}>
                   {hasGps ? (
                     <TouchableOpacity
                       style={styles.trackRunBtn}
-                      onPress={() => navigation.navigate('GpsRunTracker', { date: selectedDate })}
+                      onPress={() => navigation.navigate('GpsRunTracker', { date: selectedDate, runType })}
                     >
                       <Text style={styles.trackRunText}>TRACK RUN</Text>
                     </TouchableOpacity>
@@ -309,53 +364,68 @@ export default function TodayWorkout({ navigation }) {
                   ))}
 
                   {/* WOD Timer */}
-                  {isAmrap ? (
-                    <WodTimer
-                      type={/emom/i.test(block.name || '') || /emom/i.test(block.type || '') ? 'EMOM' : /amrap/i.test(block.type || '') ? 'AMRAP' : 'FOR TIME'}
-                      timeCap={block.time_cap}
-                      onRoundsChange={(roundCount) => {
-                        saveAmrapRounds(block.id, `${roundCount}`);
-                      }}
-                      onComplete={({ elapsed, rounds: roundCount }) => {
-                        saveAmrapRounds(block.id, `${roundCount}`);
-                        console.log(`[WOD] Completed: ${roundCount} rounds in ${elapsed}s`);
-                      }}
-                    />
-                  ) : null}
+                  {isAmrap ? (() => {
+                    const blockType = /emom/i.test(block.name || '') || /emom/i.test(block.type || '') ? 'EMOM' : /amrap/i.test(block.type || '') ? 'AMRAP' : 'FOR TIME';
+                    const isForTimeBlock = blockType === 'FOR TIME';
+                    // Parse target rounds from scheme stored in time_cap (e.g. "10 rounds" → 10)
+                    const roundsMatch = isForTimeBlock && (block.time_cap || '').match(/^(\d+)\s*rounds?/i);
+                    const targetRounds = roundsMatch ? parseInt(roundsMatch[1]) : 0;
+                    return (
+                      <WodTimer
+                        type={blockType}
+                        timeCap={isForTimeBlock ? null : block.time_cap}
+                        targetRounds={targetRounds}
+                        onRoundsChange={(roundCount) => {
+                          saveAmrapRounds(block.id, `${roundCount}`);
+                        }}
+                        onComplete={({ elapsed, rounds: roundCount }) => {
+                          saveAmrapRounds(block.id, `${roundCount}`, elapsed);
+                        }}
+                      />
+                    );
+                  })() : null}
 
-                  {/* AMRAP rounds input */}
-                  {isAmrap ? (
-                    <View style={styles.amrapRow}>
-                      <Text style={styles.amrapLabel}>AMRAP ROUNDS</Text>
-                      <View style={styles.amrapInputs}>
-                        <TextInput
-                          style={styles.amrapInput}
-                          placeholder="Rounds"
-                          placeholderTextColor="rgba(1,255,112,0.3)"
-                          keyboardType="numeric"
-                          defaultValue={block.amrap_rounds ? String(block.amrap_rounds).split('+')[0] : ''}
-                          onEndEditing={(e) => {
-                            const existing = block.amrap_rounds ? String(block.amrap_rounds) : '';
-                            const reps = existing.includes('+') ? existing.split('+')[1] : '';
-                            saveAmrapRounds(block.id, `${e.nativeEvent.text}${reps ? '+' + reps : ''}`);
-                          }}
-                        />
-                        <Text style={styles.amrapPlus}>+</Text>
-                        <TextInput
-                          style={styles.amrapInput}
-                          placeholder="Reps"
-                          placeholderTextColor="rgba(1,255,112,0.3)"
-                          keyboardType="numeric"
-                          defaultValue={block.amrap_rounds && String(block.amrap_rounds).includes('+') ? String(block.amrap_rounds).split('+')[1] : ''}
-                          onEndEditing={(e) => {
-                            const existing = block.amrap_rounds ? String(block.amrap_rounds) : '';
-                            const rounds = existing.includes('+') ? existing.split('+')[0] : existing;
-                            saveAmrapRounds(block.id, `${rounds}+${e.nativeEvent.text}`);
-                          }}
-                        />
+                  {/* Rounds log — AMRAP: rounds+reps, FOR TIME: just rounds completed */}
+                  {isAmrap ? (() => {
+                    const isForTimeBlock = /for.?time/i.test(block.type || '');
+                    const label = isForTimeBlock ? 'ROUNDS COMPLETED' : 'AMRAP ROUNDS';
+                    return (
+                      <View style={styles.amrapRow}>
+                        <Text style={styles.amrapLabel}>{label}</Text>
+                        <View style={styles.amrapInputs}>
+                          <TextInput
+                            style={styles.amrapInput}
+                            placeholder="Rounds"
+                            placeholderTextColor="rgba(1,255,112,0.3)"
+                            keyboardType="numeric"
+                            defaultValue={block.amrap_rounds ? String(block.amrap_rounds).split('+')[0] : ''}
+                            onEndEditing={(e) => {
+                              const existing = block.amrap_rounds ? String(block.amrap_rounds) : '';
+                              const reps = existing.includes('+') ? existing.split('+')[1] : '';
+                              saveAmrapRounds(block.id, `${e.nativeEvent.text}${reps ? '+' + reps : ''}`);
+                            }}
+                          />
+                          {!isForTimeBlock ? (
+                            <>
+                              <Text style={styles.amrapPlus}>+</Text>
+                              <TextInput
+                                style={styles.amrapInput}
+                                placeholder="Reps"
+                                placeholderTextColor="rgba(1,255,112,0.3)"
+                                keyboardType="numeric"
+                                defaultValue={block.amrap_rounds && String(block.amrap_rounds).includes('+') ? String(block.amrap_rounds).split('+')[1] : ''}
+                                onEndEditing={(e) => {
+                                  const existing = block.amrap_rounds ? String(block.amrap_rounds) : '';
+                                  const rounds = existing.includes('+') ? existing.split('+')[0] : existing;
+                                  saveAmrapRounds(block.id, `${rounds}+${e.nativeEvent.text}`);
+                                }}
+                              />
+                            </>
+                          ) : null}
+                        </View>
                       </View>
-                    </View>
-                  ) : null}
+                    );
+                  })() : null}
                 </View>
               ) : null}
             </View>
@@ -390,6 +460,7 @@ export default function TodayWorkout({ navigation }) {
       />
 
       {/* AI Coach button moved to global App.js — available on all screens */}
+      </View>
     </SafeAreaView>
   );
 }
@@ -402,24 +473,24 @@ const NO_GIF_IDS = new Set([
   // Core holds/bodyweight with no match
   'plank', 'plank_to_pushup', 'bird_dog', 'high_knees',
   // Gymnastics/obstacle
-  'dead_hang', 'monkey_bars', 'rope_climb', 'wall_climb', 'handstand_push_ups',
+  'dead_hang', 'monkey_bars', 'wall_climb', 'handstand_push_ups',
   // Conditioning without match
-  'wall_balls', 'ball_slams', 'battle_ropes', 'broad_jump', 'double_unders',
+  'wall_balls', 'ball_slams', 'battle_ropes', 'broad_jump',
   'burpee_box_jumps', 'assault_bike', 'rowing_machine',
   // Stretches/warmup/cooldown
   'samson_stretch', 'dynamic_stretching', 'pvc_pass_throughs', 'lunge_matrix',
-  'hip_flexor_stretch', 'pigeon_pose', 'hamstring_stretch', 'shoulder_stretch',
+  'hip_flexor_stretch', 'pigeon_pose', 'shoulder_stretch',
   'thoracic_rotation', 'a_skips', 'easy_jog', 'strides', 'push_up_to_t',
   'cossack_squats',
   // Carries
   'suitcase_carry', 'kb_suitcase_carry', 'kb_carry',
-  'overhead_carry', 'overhead_kb_carry', 'sandbag_carry', 'bucket_carry',
+  'overhead_kb_carry', 'sandbag_carry', 'bucket_carry',
   'plate_carry', 'db_farmer_walk', 'spear_throw', 'plate_pinch',
   // Cable/other without match
-  'cable_woodchop', 'cable_crunch', 'cable_fly', 'pallof_press', 'ab_wheel',
+  'cable_woodchop', 'cable_crunch', 'cable_fly', 'ab_wheel',
   'close_grip_lat_pulldown', 'chest_supported_row', 'single_arm_cable_row',
   'incline_machine_press', 'machine_chest_press',
-  'band_assisted_pull_ups',
+  'band_assisted_pull_ups', 'push_press', 'barbell_thrusters', 'db_hip_thrust',
   // DB exercises without match
   'db_thrusters', 'db_snatches', 'db_clean_press', 'db_hang_clean',
   'db_hip_thrust', 'db_swing', 'db_good_morning', 'db_floor_press', 'db_seal_row',
@@ -447,7 +518,6 @@ function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress,
   const isDone = !!exercise.is_completed;
   const [isExpanded, setIsExpanded] = useState(false);
   const rawName = String(exercise.name || 'Exercise');
-  // Format underscore IDs into readable names: barbell_thrusters → Barbell Thrusters
   const name = rawName.includes('_')
     ? rawName.replace(/_/g, ' ').replace(/\b(db|kb|rdl|ohp)\b/gi, m => m.toUpperCase()).replace(/\b\w/g, c => c.toUpperCase())
     : rawName;
@@ -455,6 +525,9 @@ function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress,
   const weight = exercise.weight ? convertDistanceText(displayWeight(exercise.weight)) : '';
   const rest = exercise.rest ? String(exercise.rest) : '';
   const swapped = exercise.swapped_from ? ' (swapped)' : '';
+
+  // Cardio/run exercises display differently — no weight logging, show duration + effort
+  const isCardio = exercise.category === 'cardio' || /^(easy_run|interval_run|tempo_run|long_run|sprint_intervals|easy_jog|strides)$/.test(exercise.exercise_id || '');
 
   // Parse target reps and sets from prescribed (e.g., "4x10" → 4 sets of 10)
   const targetReps = parseInt((sets.match(/x(\d+)/) || [])[1]) || 0;
@@ -472,7 +545,9 @@ function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress,
   // Sync set data back to the exercise log as comma-separated values
   const syncToLog = (updatedSets) => {
     const repsStr = updatedSets.map(s => s.reps).filter(Boolean).join(',');
-    const weightStr = updatedSets[0]?.weight || '';
+    // Use max weight across all sets so autoregulation triggers if any set is heavier
+    const numericWeights = updatedSets.map(s => parseFloat(s.weight)).filter(v => !isNaN(v));
+    const weightStr = numericWeights.length > 0 ? String(Math.max(...numericWeights)) : (updatedSets[0]?.weight || '');
     onLogChange('reps', repsStr);
     onLogChange('weight', weightStr);
 
@@ -528,9 +603,19 @@ function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress,
               style={[styles.exerciseName, isDone ? styles.exerciseNameDone : null]}
               numberOfLines={1}
             >{`${name}${swapped}`}</Text>
-            <Text style={[styles.exerciseRx, { color: blockColor }, isDone ? styles.exerciseRxDone : null]}>{sets}</Text>
+            {isCardio ? (
+              <Text style={[styles.exerciseRx, { color: blockColor }, isDone ? styles.exerciseRxDone : null]}>
+                {String(exercise.reps || sets)}
+              </Text>
+            ) : (
+              <Text style={[styles.exerciseRx, { color: blockColor }, isDone ? styles.exerciseRxDone : null]}>{sets}</Text>
+            )}
           </View>
-          <Text style={styles.exerciseLoad}>{rest ? `${weight} \u2014 ${rest}` : weight}</Text>
+          {isCardio ? (
+            <Text style={styles.exerciseLoad}>{String(exercise.weight || 'Cardio')}</Text>
+          ) : (
+            <Text style={styles.exerciseLoad}>{rest ? `${weight} \u2014 ${rest}` : weight}</Text>
+          )}
         </View>
 
         {/* GIF/Demo button — hidden for exercises without GIFs */}
@@ -541,8 +626,8 @@ function ExerciseRow({ exercise, blockColor, onToggle, onLogChange, onLongPress,
         ) : null}
       </TouchableOpacity>
 
-      {/* Per-set rows — shown when expanded (tap exercise row to expand) */}
-      {isExpanded ? (
+      {/* Per-set rows — not shown for cardio/run exercises */}
+      {isExpanded && !isCardio ? (
         <View style={styles.setLogContainer}>
           {setData.map((s, i) => {
             const repNum = parseInt(s.reps);
@@ -601,6 +686,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0A0A0A',
+    alignItems: 'center',
+  },
+  innerContainer: {
+    width: contentWidth(),
+    flex: 1,
   },
   adjustmentPrompt: {
     backgroundColor: 'rgba(255,65,54,0.08)',

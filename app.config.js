@@ -14,7 +14,7 @@ export default {
       backgroundColor: '#0A0A0A',
     },
     ios: {
-      supportsTablet: false,
+      supportsTablet: true,
       bundleIdentifier: 'com.gritos.app',
       buildNumber: '1',
       infoPlist: {
@@ -59,6 +59,16 @@ export default {
         },
       ],
       'expo-sqlite',
+      ['expo-notifications', {
+        sounds: [
+          './assets/sounds/HardInterval.m4a',
+          './assets/sounds/RecoveryJog.m4a',
+          './assets/sounds/EasyPace.m4a',
+          './assets/sounds/warmup.m4a',
+          './assets/sounds/cooldown.m4a',
+          './assets/sounds/RunComplete.m4a',
+        ],
+      }],
     ],
     extra: {
       eas: {

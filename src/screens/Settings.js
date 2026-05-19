@@ -278,7 +278,7 @@ export default function Settings({ navigation }) {
               await generateNewPlan(profile);
             } catch (e) {
               console.error('Error regenerating:', e);
-              Alert.alert('Error', 'Failed to regenerate plan. Please try again.');
+              Alert.alert('Plan Generation Failed', e.message || 'Please try again.');
             }
             setIsRegenerating(false);
           },
@@ -824,8 +824,50 @@ export default function Settings({ navigation }) {
               <Text style={styles.actionDesc}>Log out of your GritOS account</Text>
             </View>
           </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.actionButton, { borderColor: '#8B0000', borderWidth: 1, marginTop: 8 }]} onPress={() => {
+            Alert.alert(
+              'Delete Account',
+              'This will permanently delete your account and all your data including your training plan, workout history, and performance records. This cannot be undone.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete My Account', style: 'destructive', onPress: () => {
+                  Alert.alert(
+                    'Are you absolutely sure?',
+                    'Your account and all data will be permanently deleted.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Yes, Delete Everything', style: 'destructive', onPress: async () => {
+                        try {
+                          const { supabase } = require('../data/supabase');
+                          const { deleteAllPlanData: wipeLocal } = require('../data/database');
+                          // Delete local data
+                          await wipeLocal();
+                          await AsyncStorage.multiRemove(['userProfile', 'onboardingComplete', 'planMeta', 'coachApiKey']);
+                          // Delete account server-side via RPC
+                          await supabase.rpc('delete_user');
+                          await supabase.auth.signOut();
+                        } catch (e) {
+                          console.error('Delete account error:', e);
+                          Alert.alert('Error', 'Could not delete account. Please try again or contact support@gritos.app');
+                        }
+                      }},
+                    ]
+                  );
+                }},
+              ]
+            );
+          }}>
+            <View style={styles.actionContent}>
+              <Text style={[styles.actionLabel, { color: '#8B0000' }]}>Delete Account</Text>
+              <Text style={styles.actionDesc}>Permanently delete your account and all data</Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
+        <Text style={{ color: 'rgba(255,255,255,0.15)', fontSize: 10, textAlign: 'center', fontFamily: 'monospace', marginTop: 16 }}>
+          {require('expo-constants').default.expoConfig?.version || ''}
+        </Text>
         <View style={{ height: 40 }} />
       </ScrollView>
 

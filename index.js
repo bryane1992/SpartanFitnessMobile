@@ -1,8 +1,16 @@
 import { registerRootComponent } from 'expo';
+import './src/utils/locationTask'; // register background location task before app mounts
 
+import React from 'react';
 import App from './App';
+import ErrorBoundary from './src/components/ErrorBoundary';
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
-registerRootComponent(App);
+function Root() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}
+
+registerRootComponent(Root);

@@ -1,20 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, ActivityIndicator, Alert, Platform, SafeAreaView,
+  ScrollView, ActivityIndicator, Alert, Platform, SafeAreaView, Linking,
 } from 'react-native';
 import Purchases from 'react-native-purchases';
 import useSubscriptionStore from '../store/useSubscriptionStore';
+
+const PRIVACY_URL = 'https://bryane1992.github.io/SpartanFitnessMobile/privacy.html';
+const TERMS_URL = 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
 
 const FEATURES = [
   { label: 'AI-Generated Training Plan', free: true },
   { label: 'Exercise Library & GIF Demos', free: true },
   { label: 'GPS Run Tracker', free: true },
-  { label: 'AI Coach', pro: true },
+  { label: 'Coach Charlie', pro: true },
   { label: 'Plan Quality Reviews', pro: true },
   { label: 'WOD Score Logging', pro: true },
   { label: 'Full Performance Analytics', pro: true },
-  { label: 'Unlimited AI Coach Messages', elite: true },
+  { label: 'Unlimited Messages + Extended Coaching', elite: true },
 ];
 
 export default function PaywallScreen({ navigation, route }) {
@@ -24,6 +27,7 @@ export default function PaywallScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const { tier } = useSubscriptionStore();
 
   useEffect(() => {
@@ -44,6 +48,7 @@ export default function PaywallScreen({ navigation, route }) {
       if (pkgs.length > 0) setSelectedPkg(pkgs[0]);
     } catch (e) {
       console.error('[Paywall] Failed to load packages:', e.message);
+      setLoadError(e.message);
     } finally {
       setLoading(false);
     }
@@ -93,6 +98,12 @@ export default function PaywallScreen({ navigation, route }) {
     if (id.includes('annual') || id === '$rc_annual') return 'Annual';
     if (id.includes('monthly') || id === '$rc_monthly') return 'Monthly';
     return pkg.product?.title || 'Subscription';
+  };
+
+  const getPackagePeriod = (pkg) => {
+    const id = (pkg.packageType || pkg.identifier || '').toLowerCase();
+    if (id.includes('annual') || id === '$rc_annual') return 'year';
+    return 'month';
   };
 
   const getPackageDescription = (pkg) => {
@@ -146,6 +157,7 @@ export default function PaywallScreen({ navigation, route }) {
         ) : packages.length === 0 ? (
           <View style={styles.noPackages}>
             <Text style={styles.noPackagesText}>Subscriptions unavailable. Please try again later.</Text>
+            {loadError ? <Text style={[styles.noPackagesText, { fontSize: 10, marginTop: 8, color: '#FF4136' }]}>{loadError}</Text> : null}
           </View>
         ) : (
           <View style={styles.packages}>
@@ -154,6 +166,7 @@ export default function PaywallScreen({ navigation, route }) {
               const label = getPackageLabel(pkg);
               const desc = getPackageDescription(pkg);
               const price = pkg.product?.priceString || '—';
+              const period = getPackagePeriod(pkg);
               return (
                 <TouchableOpacity
                   key={i}
@@ -169,7 +182,7 @@ export default function PaywallScreen({ navigation, route }) {
                     </View>
                   </View>
                   <Text style={styles.packagePrice}>
-                    {price}<Text style={styles.packagePer}>/mo</Text>
+                    {price}<Text style={styles.packagePer}>/{period}</Text>
                   </Text>
                 </TouchableOpacity>
               );
@@ -189,15 +202,16 @@ export default function PaywallScreen({ navigation, route }) {
           ) : (
             <Text style={styles.ctaText}>
               {selectedPkg
-                ? `Subscribe — ${selectedPkg.product?.priceString || ''}/mo`
+                ? `Subscribe — ${selectedPkg.product?.priceString || ''}/${getPackagePeriod(selectedPkg)}`
                 : 'Subscribe'}
             </Text>
           )}
         </TouchableOpacity>
 
         <Text style={styles.legal}>
-          Subscription renews monthly. Cancel anytime in{' '}
+          Subscription auto-renews until cancelled. Cancel anytime in{' '}
           {Platform.OS === 'ios' ? 'App Store' : 'Google Play'} settings.
+          Payment will be charged to your Apple ID account at confirmation.
         </Text>
 
         {/* Restore */}
@@ -206,6 +220,17 @@ export default function PaywallScreen({ navigation, route }) {
             ? <ActivityIndicator color="#555" size="small" />
             : <Text style={styles.restoreText}>Restore Purchases</Text>}
         </TouchableOpacity>
+
+        {/* Required legal links */}
+        <View style={styles.legalLinks}>
+          <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)}>
+            <Text style={styles.legalLink}>Privacy Policy</Text>
+          </TouchableOpacity>
+          <Text style={styles.legalLinkSep}>·</Text>
+          <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)}>
+            <Text style={styles.legalLink}>Terms of Use</Text>
+          </TouchableOpacity>
+        </View>
 
       </ScrollView>
     </SafeAreaView>
@@ -245,4 +270,7 @@ const styles = StyleSheet.create({
   legal: { color: '#444', fontSize: 12, textAlign: 'center', lineHeight: 18, marginBottom: 20 },
   restoreBtn: { alignItems: 'center', paddingVertical: 8 },
   restoreText: { color: '#555', fontSize: 14 },
+  legalLinks: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 16, gap: 8 },
+  legalLink: { color: '#555', fontSize: 13, textDecorationLine: 'underline' },
+  legalLinkSep: { color: '#333', fontSize: 13 },
 });

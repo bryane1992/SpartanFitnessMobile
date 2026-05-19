@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendCoachMessage } from '../data/coachApi';
-import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, adjustFutureWeights, getPlanRationales, getWodsFromDb, swapWodBlock, restoreWodBlock, deleteLatestInjury, swapWorkoutDays, clearAllInjuries, getWorkoutForDate } from '../data/database';
+import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, adjustFutureWeights, getPlanRationales, getWodsFromDb, swapWodBlock, restoreWodBlock, deleteLatestInjury, swapWorkoutDays, clearAllInjuries, getWorkoutForDate, addExerciseToBlock, getRecentActualWeights, getFullPlanContext, getWodByName, swapWodOnDate, addExerciseOnDate } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 import { buildExerciseMenu } from '../core/menuBuilder';
 import { detectArchetype, adjustArchetypeForEquipment } from '../core/archetypes';
@@ -45,9 +45,12 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [undoStack, setUndoStack] = useState([]);
-  const [apiKey, setApiKey] = useState('bundled'); // Always available, uses bundled key
+  const [apiKey, setApiKey] = useState('bundled');
   const scrollRef = useRef(null);
   const mountedRef = useRef(true);
+  const tier = require('../store/useSubscriptionStore').default(s => s.tier);
+  const presentPaywall = require('../store/useSubscriptionStore').default(s => s.presentPaywall);
+  const canUseCoach = tier !== 'free';
 
   useEffect(() => {
     mountedRef.current = true;
@@ -56,7 +59,8 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
 
   useEffect(() => {
     if (visible) {
-      loadState();
+      // Only reload from DB if no messages in memory — prevents wiping in-progress conversations
+      if (messages.length === 0) loadState();
     }
   }, [visible]);
 
@@ -174,6 +178,22 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         }
       } catch {}
 
+      let recentActualWeights = [];
+      try { recentActualWeights = await getRecentActualWeights(); } catch {}
+
+      let fullPlanContext = [];
+      try {
+        const { currentPlanId } = require('../store/useWorkoutStore').default.getState();
+        if (currentPlanId) fullPlanContext = await getFullPlanContext(currentPlanId);
+      } catch {}
+
+      // Look up any WOD mentioned by name in user's message
+      let mentionedWod = null;
+      try {
+        const wodMatch = text.trim().match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/);
+        if (wodMatch) mentionedWod = await getWodByName(wodMatch[1]);
+      } catch {}
+
       const context = {
         profile: parsedProfile,
         workout: workout,
@@ -184,12 +204,21 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         alternatives: alternatives,
         rationales: rationales,
         availableWods: availableWods,
+        recentActualWeights,
+        fullPlanContext,
+        mentionedWod,
       };
 
       // Send to Claude (last 6 messages for context)
       const recentMsgs = newMessages.slice(-6).map(m => ({ role: m.role, content: m.content }));
       const keyToUse = apiKey === 'bundled' ? null : apiKey; // null = use bundled key
-      const response = await sendCoachMessage(keyToUse, recentMsgs, context);
+      const response = await sendCoachMessage(keyToUse, recentMsgs, context, tier);
+
+      // Safety check: if Charlie claims to have made changes but returned no actions, append a warning
+      const claimsChanges = /i've (added|swapped|moved|changed|locked|updated|adjusted)|sorted mate|done mate/i.test(response.message || '');
+      if (claimsChanges && (!response.actions || response.actions.length === 0)) {
+        response.message = (response.message || '') + '\n\n(Note: no changes were saved — please ask Charlie to try again.)';
+      }
 
       // Save assistant response
       await saveCoachMessage(sessionId, 'assistant', response.message, response.actions);
@@ -317,7 +346,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
     for (let action of actions) {
       // Normalize action format — Claude sometimes nests as { "swap": {...} } instead of { "type": "swap", ... }
       if (!action.type) {
-        const key = Object.keys(action).find(k => ['swap', 'swapWod', 'adjustWeight', 'adjustReps', 'flagInjury', 'removeExercise', 'addNote', 'swapDay', 'clearInjuries'].includes(k));
+        const key = Object.keys(action).find(k => ['swap', 'swapWod', 'adjustWeight', 'adjustReps', 'flagInjury', 'removeExercise', 'addNote', 'addExercise', 'swapDay', 'clearInjuries'].includes(k));
         if (key) {
           action = { type: key, ...action[key] };
         }
@@ -329,7 +358,10 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         'adjustreps': 'adjustReps', 'adjust_reps': 'adjustReps',
         'flaginjury': 'flagInjury', 'flag_injury': 'flagInjury',
         'addnote': 'addNote', 'add_note': 'addNote',
+        'addexercise': 'addExercise', 'add_exercise': 'addExercise',
         'swapwod': 'swapWod', 'swap_wod': 'swapWod',
+        'swapwodondate': 'swapWodOnDate', 'swap_wod_on_date': 'swapWodOnDate',
+        'addexerciseondate': 'addExerciseOnDate', 'add_exercise_on_date': 'addExerciseOnDate',
         'swapday': 'swapDay', 'swap_day': 'swapDay',
         'clearinjuries': 'clearInjuries', 'clear_injuries': 'clearInjuries',
       };
@@ -425,6 +457,57 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
               await store.loadTodayWorkout();
             }
             break;
+          case 'addExercise': {
+            // Find the target block — use planBlockId if provided, else pick best block
+            let blockId = parseInt(action.planBlockId) || action.planBlockId;
+            if (!blockId && workout?.blocks) {
+              // For prehab/mobility exercises default to warmup; for working exercises prefer accessories then main lifts
+              const isPrehabExercise = /stretch|raise|circle|walk|angel|rotation|pass_through|cat_cow|child_pose|cobra|dead_bug|cossack|terminal|banded|90_90|ankle|shin|calf/i.test(action.exerciseId || '');
+              if (isPrehabExercise) {
+                const warmupBlock = workout.blocks.find(b => /warm.?up|movement.?prep/i.test(b.name || ''));
+                if (warmupBlock) blockId = warmupBlock.id;
+              } else {
+                // Prefer accessories block, then main lift block, then any non-WOD block
+                const accessoryBlock = workout.blocks.find(b => /accessor|arm|core|finish/i.test(b.name || ''));
+                const mainBlock = workout.blocks.find(b => /main|lift|strength|compound/i.test(b.name || ''));
+                const fallbackBlock = workout.blocks.find(b => !b.is_amrap && !/warm.?up|cool.?down|wod|circuit|amrap|emom/i.test(b.name || ''));
+                blockId = (accessoryBlock || mainBlock || fallbackBlock)?.id;
+              }
+            }
+            if (blockId && action.exerciseId) {
+              // Normalize sets — if coach sends sets="2" and reps="15", format as "2x15"
+              const rawSets = action.sets ? String(action.sets) : null;
+              const rawReps = action.reps ? String(action.reps) : '15';
+              const formattedSets = rawSets && /^\d+$/.test(rawSets) ? `${rawSets}x${rawReps}` : (rawSets || `2x${rawReps}`);
+              const newPeId = await addExerciseToBlock(blockId, action.exerciseId, formattedSets, rawReps, action.weight, action.note);
+              if (!skipUndo) {
+                undoEntries.push({ type: 'removeExercise', planExerciseId: newPeId, restore: { oldActualReps: null, oldNotes: null } });
+              }
+              await store.loadTodayWorkout();
+            }
+            break;
+          }
+          case 'swapWodOnDate': {
+            // Charlie uses this for future days — finds the block by date automatically
+            if (action.date && action.newWodId) {
+              await swapWodOnDate(action.date, action.newWodId);
+              await store.loadTodayWorkout();
+            }
+            break;
+          }
+          case 'addExerciseOnDate': {
+            if (action.date && action.exerciseId) {
+              const rawSets = action.sets ? String(action.sets) : null;
+              const rawReps = action.reps ? String(action.reps) : '15';
+              const formattedSets = rawSets && /^\d+$/.test(rawSets) ? `${rawSets}x${rawReps}` : (rawSets || `2x${rawReps}`);
+              // Detect block preference from exercise type or explicit action field
+              const isPrehabEx = /stretch|raise|circle|walk|angel|rotation|pass_through|cat_cow|child_pose|cobra|dead_bug|cossack|terminal|banded|90_90|ankle|shin|calf/i.test(action.exerciseId || '');
+              const blockPref = action.blockPreference || (isPrehabEx ? 'warmup' : 'main');
+              await addExerciseOnDate(action.date, action.exerciseId, formattedSets, rawReps, action.weight, action.note, blockPref);
+              await store.loadTodayWorkout();
+            }
+            break;
+          }
           case 'swapWod': {
             console.log('[AI Coach] swapWod action:', JSON.stringify(action));
             let blockId = parseInt(action.planBlockId) || action.planBlockId;
@@ -667,7 +750,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.headerTitle}>AI COACH</Text>
+              <Text style={styles.headerTitle}>COACH CHARLIE</Text>
               <Text style={styles.headerSub}>Powered by Claude</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -675,8 +758,25 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
             </TouchableOpacity>
           </View>
 
-          {/* Messages */}
-          <ScrollView
+          {/* Free tier gate */}
+          {!canUseCoach ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+              <Text style={{ color: '#FF4136', fontSize: 16, fontWeight: '900', letterSpacing: 1, marginBottom: 12 }}>PRO FEATURE</Text>
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>Unlock Coach Charlie</Text>
+              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 28 }}>
+                Get real-time coaching during your workouts, exercise swaps, weight adjustments, and injury guidance with a Pro subscription.
+              </Text>
+              <TouchableOpacity
+                style={{ backgroundColor: '#FF4136', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 32 }}
+                onPress={() => { onClose(); presentPaywall('Coach Charlie'); }}
+              >
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 1 }}>UPGRADE TO PRO</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {/* Messages + Quick Actions + Input — Pro/Elite only */}
+          {canUseCoach ? (<><ScrollView
             ref={scrollRef}
             style={styles.messageList}
             showsVerticalScrollIndicator={false}
@@ -761,6 +861,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
               <Text style={styles.sendBtnText}>SEND</Text>
             </TouchableOpacity>
           </View>
+          </>) : null}
 
         </View>
       </KeyboardAvoidingView>

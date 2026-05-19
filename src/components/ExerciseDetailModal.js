@@ -33,9 +33,14 @@ const SEED_TO_EXDB_ID = {
   bulgarian_split_squat: '1757', step_ups: '0809',
   db_reverse_fly: '0383', preacher_curl: '0372', db_push_press: '1700',
   db_romanian_deadlift: '1459', db_single_leg_deadlift: '1757',
-  split_squat: '0097',
+  split_squat: '0410',
   // Barbell extra
-  barbell_thrusters: '3305', back_extension: '0573',
+  back_extension: '0573', hip_thrust: '3562',
+  // Spartan / functional
+  rope_climb: '0680', tire_flip: '2459', overhead_carry: '4244',
+  double_unders: '3885', pallof_press: '0979',
+  // Stretches
+  hamstring_stretch: '1511',
   straight_arm_pulldown: '0237',
   // Bodyweight
   push_ups: '0662', pull_ups: '0652', chin_ups: '1326', dips: '0251',
@@ -58,6 +63,8 @@ const SEED_TO_EXDB_ID = {
   // Extra
   box_jumps: '1374', machine_dip: '0009',
   calf_raise_bodyweight: '0417', hanging_knee_raise: '0010',
+  // Olympic lifts
+  snatch: '0067', db_snatches: '3888', kb_snatch: '0542',
   // Rehab/Prehab
   calf_stretch_wall: '1377', seated_calf_stretch: '1390', ankle_circles: '1368',
   glute_stretch_seated: '1424', wrist_circles: '1428', neck_stretch: '0716',

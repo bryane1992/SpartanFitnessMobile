@@ -4,7 +4,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { navigationRef } from './src/navigation/navigationRef';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Image } from 'react-native';
+
+const COACH_IMAGE = require('./assets/coaches/Charlie.png');
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, syncExerciseDb } from './src/data/database';
 import useWorkoutStore from './src/store/useWorkoutStore';
@@ -41,11 +43,7 @@ function MainTabsWithCoach() {
   const presentPaywall = useSubscriptionStore(s => s.presentPaywall);
 
   const handleCoachPress = () => {
-    if (canUseCoach) {
-      setCoachVisible(true);
-    } else {
-      presentPaywall();
-    }
+    setCoachVisible(true);
   };
 
   return (
@@ -56,7 +54,7 @@ function MainTabsWithCoach() {
         onPress={handleCoachPress}
         activeOpacity={0.8}
       >
-        <Text style={styles.globalCoachFabText}>AI</Text>
+        <Image source={COACH_IMAGE} style={styles.globalCoachFabImage} />
       </TouchableOpacity>
       <CoachChat
         visible={coachVisible}
@@ -161,6 +159,7 @@ export default Sentry.wrap(function App() {
   const [hasOnboarded, setHasOnboarded] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
   const loadPlanMeta = useWorkoutStore(s => s.loadPlanMeta);
+  const loadTodayWorkout = useWorkoutStore(s => s.loadTodayWorkout);
   const initSubscription = useSubscriptionStore(s => s.initialize);
   const identifyUser = useSubscriptionStore(s => s.identifyUser);
 
@@ -193,6 +192,15 @@ export default Sentry.wrap(function App() {
 
   const initApp = async () => {
     try {
+      // Clean up any orphaned GPS task left running from a force-closed run
+      try {
+        const { LOCATION_TASK } = require('./src/utils/locationTask');
+        const Location = require('expo-location');
+        const TaskManager = require('expo-task-manager');
+        const isRunning = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
+        if (isRunning) await Location.stopLocationUpdatesAsync(LOCATION_TASK);
+      } catch {}
+
       await initDatabase();
       await initSubscription();
 
@@ -221,6 +229,7 @@ export default Sentry.wrap(function App() {
 
       if (onboarded) {
         await loadPlanMeta();
+        await loadTodayWorkout();
       }
     } catch (error) {
       console.error('Error initializing app:', error);
@@ -291,9 +300,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 80,
     right: 16,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    overflow: 'hidden',
     backgroundColor: '#FF4136',
     justifyContent: 'center',
     alignItems: 'center',
@@ -304,10 +314,8 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     zIndex: 1000,
   },
-  globalCoachFabText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 1,
+  globalCoachFabImage: {
+    width: 58,
+    height: 58,
   },
 });

@@ -13,6 +13,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import usePerformanceStore from '../store/usePerformanceStore';
 import useSubscriptionStore from '../store/useSubscriptionStore';
 import { displayWeight, displayDistance, displayPace } from '../utils/units';
+import { getWorkoutLog } from '../data/database';
 
 const PHASE_COLORS = {
   foundation: '#FF4136',
@@ -93,12 +94,14 @@ export default function PerformanceTracker() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedSection, setExpandedSection] = useState(null);
-  const [activeTab, setActiveTab] = useState('lifts'); // lifts, runs, prs
+  const [activeTab, setActiveTab] = useState('lifts');
+  const [workoutLog, setWorkoutLog] = useState([]);
 
   // Reload stats every time the tab is focused
   useFocusEffect(
     useCallback(() => {
       loadDashboard();
+      getWorkoutLog(30).then(setWorkoutLog).catch(() => {});
     }, [])
   );
 
@@ -155,14 +158,14 @@ export default function PerformanceTracker() {
 
         {/* Tab Selector */}
         <View style={styles.tabRow}>
-          {['lifts', 'runs', 'wods', 'prs'].map(tab => (
+          {['lifts', 'runs', 'wods', 'prs', 'log'].map(tab => (
             <TouchableOpacity
               key={tab}
               style={[styles.tab, activeTab === tab && styles.tabActive]}
               onPress={() => setActiveTab(tab)}
             >
               <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                {tab === 'lifts' ? 'LIFTS' : tab === 'runs' ? 'RUNS' : tab === 'wods' ? 'WODs' : 'PRs'}
+                {tab === 'lifts' ? 'LIFTS' : tab === 'runs' ? 'RUNS' : tab === 'wods' ? 'WODs' : tab === 'prs' ? 'PRs' : 'LOG'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -425,11 +428,17 @@ export default function PerformanceTracker() {
         {/* ═══ WODs TAB ═══ */}
         {activeTab === 'wods' ? (
           <View>
-            {/* AMRAP Progression */}
+            {/* WOD Progression */}
             {canSeeAdvancedStats && wodProgression.length > 0 ? (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>AMRAP ROUNDS PROGRESSION</Text>
+                <Text style={styles.sectionTitle}>WOD PROGRESSION</Text>
                 {(() => {
+                  const fmtElapsed = (secs) => {
+                    if (!secs) return null;
+                    const m = Math.floor(secs / 60);
+                    const s = secs % 60;
+                    return `${m}:${String(s).padStart(2, '0')}`;
+                  };
                   // Group by WOD name
                   const byWod = {};
                   for (const w of wodProgression) {
@@ -438,29 +447,49 @@ export default function PerformanceTracker() {
                     byWod[name].push(w);
                   }
                   return Object.entries(byWod).map(([wodName, entries]) => {
+                    const isForTime = /^\d+\s*rounds?/i.test(entries[0]?.time_cap || '');
                     const maxRounds = Math.max(...entries.map(e => parseInt(e.amrap_rounds) || 0), 1);
                     return (
                       <View key={wodName} style={{ marginBottom: 16 }}>
                         <Text style={styles.wodGroupName}>{wodName}</Text>
-                        <Text style={styles.wodTimeCap}>{entries[0]?.time_cap || ''}</Text>
+                        <Text style={styles.wodTimeCap}>
+                          {isForTime ? entries[0]?.time_cap : (entries[0]?.time_cap ? `AMRAP ${entries[0].time_cap}` : '')}
+                        </Text>
                         <View style={styles.amrapChart}>
                           {entries.map((entry, i) => {
                             const rounds = parseInt(entry.amrap_rounds) || 0;
                             const barHeight = (rounds / maxRounds) * 100;
                             const phaseColor = PHASE_COLORS[entry.phase?.toLowerCase()] || '#FF4136';
+                            const timeStr = fmtElapsed(entry.wod_elapsed);
                             return (
                               <View key={i} style={styles.amrapChartBar}>
                                 <View style={styles.amrapBarTrack}>
                                   <View style={[styles.amrapBarFill, { height: `${Math.max(barHeight, 5)}%`, backgroundColor: phaseColor }]} />
                                 </View>
-                                <Text style={styles.amrapBarRounds}>{rounds}</Text>
+                                {isForTime && timeStr ? (
+                                  <Text style={styles.amrapBarRounds}>{timeStr}</Text>
+                                ) : (
+                                  <Text style={styles.amrapBarRounds}>{rounds}</Text>
+                                )}
                                 <Text style={styles.amrapBarLabel}>{`W${entry.week_number}`}</Text>
                               </View>
                             );
                           })}
                         </View>
-                        {/* Best vs first */}
+                        {/* Best result summary */}
                         {entries.length >= 2 ? (() => {
+                          if (isForTime) {
+                            const times = entries.map(e => e.wod_elapsed).filter(Boolean);
+                            if (times.length === 0) return null;
+                            const best = Math.min(...times);
+                            const bestStr = fmtElapsed(best);
+                            return (
+                              <View style={styles.wodSummaryRow}>
+                                <Text style={styles.wodSummaryLabel}>BEST TIME</Text>
+                                <Text style={styles.wodSummaryValue}>{bestStr}</Text>
+                              </View>
+                            );
+                          }
                           const first = parseInt(entries[0].amrap_rounds) || 0;
                           const best = Math.max(...entries.map(e => parseInt(e.amrap_rounds) || 0));
                           const gain = best - first;
@@ -483,10 +512,40 @@ export default function PerformanceTracker() {
               </View>
             ) : (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>AMRAP ROUNDS PROGRESSION</Text>
-                <Text style={styles.emptyText}>Complete AMRAP WODs to see your round progression</Text>
+                <Text style={styles.sectionTitle}>WOD PROGRESSION</Text>
+                <Text style={styles.emptyText}>Complete WODs to see your progression</Text>
               </View>
             )}
+
+            {/* Recent In-Plan WOD Completions */}
+            {wodProgression.length > 0 ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>RECENT IN-PLAN WODS</Text>
+                {[...wodProgression].reverse().slice(0, 8).map((entry, i) => {
+                  const isForTime = /^\d+\s*rounds?/i.test(entry.time_cap || '');
+                  const fmtSecs = (s) => { const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; };
+                  const scoreStr = isForTime && entry.wod_elapsed
+                    ? `${entry.amrap_rounds} rounds in ${fmtSecs(entry.wod_elapsed)}`
+                    : entry.amrap_rounds
+                      ? `${entry.amrap_rounds} rounds`
+                      : '';
+                  return (
+                    <View key={i} style={styles.wodScoreRow}>
+                      <View style={[styles.accentBar, { backgroundColor: '#01FF70' }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.wodScoreName}>{String(entry.wod_name || 'WOD')}</Text>
+                        <Text style={styles.wodScoreDate}>{String(entry.date || '')}</Text>
+                      </View>
+                      <View style={styles.wodScoreBox}>
+                        <Text style={styles.wodScoreVal}>{scoreStr}</Text>
+                        <Text style={styles.wodScoreType}>{isForTime ? 'FOR TIME' : 'AMRAP'}</Text>
+                        {entry.exercise_weights ? <Text style={[styles.wodScoreType, { color: 'rgba(255,255,255,0.3)', marginTop: 2 }]}>{String(entry.exercise_weights)}</Text> : null}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : null}
 
             {/* WOD Library Scores */}
             {wodStats.recentScores.length > 0 ? (
@@ -646,6 +705,39 @@ export default function PerformanceTracker() {
                 </View>
               ) : null}
             </View>
+          </View>
+        ) : null}
+
+        {/* ═══ LOG TAB ═══ */}
+        {activeTab === 'log' ? (
+          <View>
+            {workoutLog.length === 0 ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>WORKOUT LOG</Text>
+                <Text style={styles.emptyText}>Complete workouts to see your history here</Text>
+              </View>
+            ) : workoutLog.map((day, i) => (
+              <View key={i} style={styles.section}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <Text style={styles.sectionTitle}>{String(day.title || 'Workout')}</Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, fontFamily: 'monospace' }}>{String(day.date)}</Text>
+                </View>
+                <Text style={{ color: 'rgba(255,255,255,0.25)', fontSize: 9, fontFamily: 'monospace', letterSpacing: 1, marginBottom: 10 }}>
+                  {`WEEK ${day.week} · ${String(day.phase || '').toUpperCase()}`}
+                </Text>
+                {day.exercises.map((ex, j) => (
+                  <View key={j} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' }}>
+                    <Text style={{ color: '#fff', fontSize: 13, fontWeight: '500', flex: 1 }} numberOfLines={1}>{String(ex.exercise_name || '')}</Text>
+                    <Text style={{ color: '#FF4136', fontSize: 13, fontWeight: '700', fontFamily: 'monospace', marginRight: 8 }}>
+                      {ex.actual_weight ? `${ex.actual_weight} lb` : ''}
+                    </Text>
+                    <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontFamily: 'monospace', minWidth: 40, textAlign: 'right' }}>
+                      {ex.actual_reps ? String(ex.actual_reps) : ''}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ))}
           </View>
         ) : null}
 

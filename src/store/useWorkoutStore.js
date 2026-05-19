@@ -12,7 +12,6 @@ import {
   adjustFutureWeights as dbAdjustFutureWeights,
   deletePlan,
 } from '../data/database';
-import { generatePlan } from '../core/planGenerator';
 import { generateAIPlan } from '../core/aiPlanGenerator';
 
 const useWorkoutStore = create((set, get) => ({
@@ -65,7 +64,11 @@ const useWorkoutStore = create((set, get) => ({
   },
 
   loadTodayWorkout: async () => {
-    const { selectedDate, currentPlanId } = get();
+    let { selectedDate, currentPlanId } = get();
+    if (!currentPlanId) {
+      await get().loadPlanMeta();
+      currentPlanId = get().currentPlanId;
+    }
     set({ isLoading: true });
     try {
       const workout = await getWorkoutForDate(selectedDate, currentPlanId);
@@ -77,8 +80,12 @@ const useWorkoutStore = create((set, get) => ({
   },
 
   loadWorkoutForDate: async (date) => {
-    const { currentPlanId } = get();
-    set({ selectedDate: date, isLoading: true });
+    let { currentPlanId } = get();
+    if (!currentPlanId) {
+      await get().loadPlanMeta();
+      currentPlanId = get().currentPlanId;
+    }
+    set({ selectedDate: date, isLoading: true, _lastCheckedWeights: {}, adjustedExercises: {}, dismissedExercises: {} });
     try {
       const workout = await getWorkoutForDate(date, currentPlanId);
       set({ todayWorkout: workout, isLoading: false });
@@ -127,7 +134,23 @@ const useWorkoutStore = create((set, get) => ({
       if (isCurrentlyCompleted) {
         await dbUncompleteExercise(planExerciseId);
       } else {
-        await dbCompleteExercise(planExerciseId, null, null);
+        // Use already-entered actual weight if available, otherwise fall back to prescribed
+        // so every completed exercise shows up in PRs and history
+        const workout = get().todayWorkout;
+        let actualWeight = null;
+        let actualReps = null;
+        if (workout?.blocks) {
+          for (const block of workout.blocks) {
+            const ex = (block.exercises || []).find(e => e.id === planExerciseId);
+            if (ex) {
+              const isBW = /^(BW|bodyweight|assisted|band)/i.test(String(ex.weight || ''));
+              actualWeight = ex.actual_weight || (!isBW ? ex.weight : null);
+              actualReps = ex.actual_reps || null;
+              break;
+            }
+          }
+        }
+        await dbCompleteExercise(planExerciseId, actualWeight, actualReps);
       }
     } catch (e) {
       console.error('Error toggling exercise:', e);
@@ -138,6 +161,25 @@ const useWorkoutStore = create((set, get) => ({
   updateExerciseLog: async (planExerciseId, actualReps, actualWeight, notes) => {
     try {
       await dbUpdateExerciseLog(planExerciseId, actualReps, actualWeight, notes);
+
+      // Sync to Zustand state so toggleExercise reads the correct actual values
+      set(state => {
+        const workout = state.todayWorkout;
+        if (!workout?.blocks) return state;
+        return {
+          todayWorkout: {
+            ...workout,
+            blocks: workout.blocks.map(block => ({
+              ...block,
+              exercises: (block.exercises || []).map(ex =>
+                ex.id === planExerciseId
+                  ? { ...ex, actual_weight: actualWeight ?? ex.actual_weight, actual_reps: actualReps ?? ex.actual_reps }
+                  : ex
+              ),
+            })),
+          },
+        };
+      });
 
       // Autoregulation: detect significant weight difference and prompt user
       // Rules:
@@ -227,9 +269,9 @@ const useWorkoutStore = create((set, get) => ({
     }
   },
 
-  saveAmrapRounds: async (planBlockId, rounds) => {
+  saveAmrapRounds: async (planBlockId, rounds, elapsed = null) => {
     try {
-      await dbSaveAmrapRounds(planBlockId, rounds);
+      await dbSaveAmrapRounds(planBlockId, rounds, elapsed);
     } catch (e) {
       console.error('Error saving AMRAP rounds:', e);
     }
@@ -271,19 +313,9 @@ const useWorkoutStore = create((set, get) => ({
         await deletePlan(currentPlanId);
       }
 
-      let result;
-      try {
-        // Try AI-powered generation first
-        if (onStatus) onStatus('Connecting to AI coach...');
-        result = await generateAIPlan(userProfile, onStatus);
-        console.log('[Plan] AI generation succeeded:', result.planName);
-      } catch (aiError) {
-        // Fall back to algorithmic generation
-        console.error('[Plan] AI generation FAILED:', aiError.message, aiError.stack?.slice(0, 200));
-        if (onStatus) onStatus('Building plan with training engine...');
-        result = await generatePlan(userProfile);
-        console.warn('[Plan] Used FALLBACK algorithmic generator — this does NOT have v5 improvements');
-      }
+      if (onStatus) onStatus('Connecting to AI coach...');
+      const result = await generateAIPlan(userProfile, onStatus);
+      console.log('[Plan] AI generation succeeded:', result.planName);
 
       // Save plan metadata
       await AsyncStorage.setItem('planMeta', JSON.stringify(result));
@@ -295,8 +327,7 @@ const useWorkoutStore = create((set, get) => ({
         planPhases: result.phases,
         totalWeeks: result.totalWeeks,
         isGenerating: false,
-        // Navigate to first training day (plan starts on next Monday, not today)
-        selectedDate: new Date().toISOString().split('T')[0],
+        selectedDate: result.startDate,
       });
 
       // Load the first day's workout

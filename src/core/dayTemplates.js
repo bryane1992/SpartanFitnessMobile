@@ -327,13 +327,18 @@ export function getDefaultDayConfigs(daysPerWeek, goals, hasBarbell, hasSpartanG
       { type: 'legs', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat', 'hinge'], arm_finisher: false, core_block: true },
     ];
     if (daysPerWeek >= 5) {
-      // 5-day PPL: Push/Pull/Legs/Legs/Pull — 2 leg days for hypertrophy, 2 pull for back
-      return [...base,
+      // 5-day PPL: Push/Legs_A/Pull/Push_B/Legs_B — legs on days 2 & 5, never adjacent
+      return [
+        { type: 'push_a', primary_patterns: ['horizontal_push', 'vertical_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true, core_block: true },
+        { type: 'legs_a', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat'], arm_finisher: false, core_block: true },
+        { type: 'pull_a', primary_patterns: ['horizontal_pull', pullPattern], secondary_patterns: ['elbow_flexion'], arm_finisher: true, core_block: true },
+        { type: 'push_b', primary_patterns: ['vertical_push', 'horizontal_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true, core_block: true },
         { type: 'legs_b', primary_patterns: ['hinge', 'squat'], secondary_patterns: ['hinge'], arm_finisher: false, core_block: true },
-        { type: 'pull_b', primary_patterns: ['horizontal_pull', pullPattern], secondary_patterns: ['elbow_flexion'], arm_finisher: true, core_block: true }];
+      ];
     }
     if (daysPerWeek >= 4) {
-      return [...base, { type: 'legs_b', primary_patterns: ['squat', 'hinge'], secondary_patterns: ['squat', 'hinge'], arm_finisher: false, core_block: true }];
+      // 4-day PPL: Push/Pull/Legs/Push_B — legs only once, not back to back
+      return [...base, { type: 'push_b', primary_patterns: ['vertical_push', 'horizontal_push'], secondary_patterns: ['elbow_extension'], arm_finisher: true, core_block: true }];
     }
     return base;
   }

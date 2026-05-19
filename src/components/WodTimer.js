@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Vibration } from 'react-native';
 
-export default function WodTimer({ type, timeCap, onComplete, onRoundsChange }) {
+export default function WodTimer({ type, timeCap, targetRounds, onComplete, onRoundsChange }) {
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [rounds, setRounds] = useState(0);
@@ -18,11 +18,13 @@ export default function WodTimer({ type, timeCap, onComplete, onRoundsChange }) 
   })();
 
   const wodType = (type || '').toUpperCase();
-  // Detect timer mode from type — AMRAP and EMOM count down, everything else counts up
+  // Detect timer mode from type — AMRAP and EMOM count down, FOR TIME counts up
   const isAMRAP = /AMRAP/i.test(wodType) || /AMRAP/i.test(timeCap || '');
   const isEMOM = /EMOM/i.test(wodType);
   const isCountdown = isAMRAP || isEMOM;
   const isForTime = !isCountdown;
+  // FOR TIME with a rounds target (e.g. Ingrid: 10 rounds) shows round-by-round tracking
+  const hasRoundTarget = isForTime && targetRounds > 0;
 
   useEffect(() => {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
@@ -88,6 +90,14 @@ export default function WodTimer({ type, timeCap, onComplete, onRoundsChange }) 
     setRounds(newRounds);
     Vibration.vibrate(100);
     if (onRoundsChange) onRoundsChange(newRounds);
+    // Auto-finish when all rounds complete for FOR TIME
+    if (hasRoundTarget && newRounds >= targetRounds) {
+      clearInterval(timerRef.current);
+      setIsRunning(false);
+      setIsFinished(true);
+      Vibration.vibrate([200, 100, 200, 100, 200]);
+      if (onComplete) onComplete({ elapsed: seconds, rounds: newRounds });
+    }
   };
 
   // Display
@@ -118,9 +128,11 @@ export default function WodTimer({ type, timeCap, onComplete, onRoundsChange }) 
         <Text style={styles.minuteLabel}>MINUTE {currentMinute + 1} of {Math.ceil(totalSeconds / 60)}</Text>
       ) : null}
 
-      {/* Round counter — AMRAP only (For Time doesn't track rounds) */}
-      {isAMRAP && (isRunning || rounds > 0) ? (
-        <Text style={styles.roundCount}>{rounds} ROUND{rounds !== 1 ? 'S' : ''}</Text>
+      {/* Round counter — AMRAP and FOR TIME with round target */}
+      {(isAMRAP || hasRoundTarget) && (isRunning || rounds > 0) ? (
+        <Text style={styles.roundCount}>
+          {hasRoundTarget ? `ROUND ${rounds} / ${targetRounds}` : `${rounds} ROUND${rounds !== 1 ? 'S' : ''}`}
+        </Text>
       ) : null}
 
       {/* Progress bar */}
@@ -140,18 +152,18 @@ export default function WodTimer({ type, timeCap, onComplete, onRoundsChange }) 
         ) : isRunning ? (
           // Running
           <>
-            {/* Big ROUND button for AMRAP only */}
-            {isAMRAP ? (
+            {/* Big ROUND button for AMRAP and FOR TIME with round target */}
+            {(isAMRAP || hasRoundTarget) ? (
               <TouchableOpacity style={styles.roundBtn} onPress={logRound} activeOpacity={0.6}>
-                <Text style={styles.roundBtnText}>ROUND</Text>
-                <Text style={styles.roundBtnCount}>{rounds + 1}</Text>
+                <Text style={styles.roundBtnText}>{hasRoundTarget ? `COMPLETE ROUND ${rounds + 1}${targetRounds ? ` / ${targetRounds}` : ''}` : 'ROUND'}</Text>
+                {!hasRoundTarget ? <Text style={styles.roundBtnCount}>{rounds + 1}</Text> : null}
               </TouchableOpacity>
             ) : null}
             <View style={styles.secondaryControls}>
               <TouchableOpacity style={styles.pauseBtn} onPress={pause}>
                 <Text style={styles.smallBtnText}>PAUSE</Text>
               </TouchableOpacity>
-              {isForTime ? (
+              {isForTime && !hasRoundTarget ? (
                 <TouchableOpacity style={styles.finishBtn} onPress={finish}>
                   <Text style={styles.finishBtnText}>FINISH</Text>
                 </TouchableOpacity>
@@ -162,7 +174,7 @@ export default function WodTimer({ type, timeCap, onComplete, onRoundsChange }) 
           // Finished
           <View style={styles.finishedRow}>
             <Text style={styles.finishedText}>
-              {isAMRAP ? `${rounds} rounds in ${Math.ceil(totalSeconds / 60)} min` : `Finished in ${mins}:${String(secs).padStart(2, '0')}`}
+              {isAMRAP ? `${rounds} rounds in ${Math.ceil(totalSeconds / 60)} min` : hasRoundTarget ? `${rounds} rounds in ${mins}:${String(secs).padStart(2, '0')}` : `Finished in ${mins}:${String(secs).padStart(2, '0')}`}
             </Text>
             <TouchableOpacity style={styles.resetBtn} onPress={reset}>
               <Text style={styles.smallBtnText}>RESET</Text>

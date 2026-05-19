@@ -7,12 +7,22 @@ import {
   ScrollView,
   Alert,
   Vibration,
+  Platform,
+  AppState,
+  Linking,
 } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { Audio } from 'expo-av';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false }),
+});
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { displayDistance, displayPace, distanceUnit } from '../utils/units';
+import { LOCATION_TASK, locationState, resetLocationState, resetSegmentDistance } from '../utils/locationTask';
 import { useIsFocused } from '@react-navigation/native';
-import { saveRunHistory, getRunTypeForDate, getRunExercisesForDate } from '../data/database';
+import { saveRunHistory, getRunTypeForDate, getRunExercisesForDate, getCardioExercisesForDate, completeExercise } from '../data/database';
 
 // Run type configurations with auto-segments
 const RUN_CONFIGS = {
@@ -65,6 +75,34 @@ const RUN_CONFIGS = {
   },
 };
 
+const SEGMENT_SOUNDS = {
+  hard: require('../../assets/sounds/HardInterval.m4a'),
+  recovery: require('../../assets/sounds/RecoveryJog.m4a'),
+  easy: require('../../assets/sounds/EasyPace.m4a'),
+  tempo: require('../../assets/sounds/HardInterval.m4a'),
+  steady: require('../../assets/sounds/EasyPace.m4a'),
+  fartlek: require('../../assets/sounds/HardInterval.m4a'),
+  warmup: require('../../assets/sounds/warmup.m4a'),
+  cooldown: require('../../assets/sounds/cooldown.m4a'),
+  complete: require('../../assets/sounds/RunComplete.m4a'),
+};
+
+async function playSegmentSound(seg) {
+  try {
+    const key = /warm/i.test(seg?.name || '') ? 'warmup'
+      : /cool/i.test(seg?.name || '') ? 'cooldown'
+      : seg?.type || 'easy';
+    const source = SEGMENT_SOUNDS[key] || SEGMENT_SOUNDS.easy;
+    const { sound } = await Audio.Sound.createAsync(source, { volume: 1.0 });
+    await sound.playAsync();
+    sound.setOnPlaybackStatusUpdate((status) => {
+      if (status.didJustFinish) sound.unloadAsync();
+    });
+  } catch (e) {
+    console.warn('[RunTracker] Audio playback failed:', e.message);
+  }
+}
+
 const SEGMENT_COLORS = {
   easy: '#01FF70',
   hard: '#FF4136',
@@ -77,11 +115,13 @@ const SEGMENT_COLORS = {
 export default function RunTracker({ route, navigation }) {
   const isFocused = useIsFocused();
   const passedDate = route?.params?.date;
+  const passedRunType = route?.params?.runType;
 
   // Run config state
-  const [selectedRunType, setSelectedRunType] = useState('INTERVALS');
+  const [selectedRunType, setSelectedRunType] = useState(passedRunType || 'INTERVALS');
   const [rounds, setRounds] = useState(4);
   const [builtSegments, setBuiltSegments] = useState([]);
+  const updateSegments = (segs) => { builtSegmentsRef.current = segs; setBuiltSegments(segs); };
   const [todayRunType, setTodayRunType] = useState(null);
 
   // Tracking state
@@ -100,10 +140,13 @@ export default function RunTracker({ route, navigation }) {
   const lastPosition = useRef(null);
   const segmentDistance = useRef(0);
   const timerRef = useRef(null);
-  const runStartTime = useRef(null);        // absolute timestamp when run started
-  const segmentStartTime = useRef(null);    // absolute timestamp when current segment started
-  const pausedDuration = useRef(0);         // total seconds spent paused
-  const pauseStartTime = useRef(null);      // when current pause started
+  const runStartTime = useRef(null);
+  const segmentStartTime = useRef(null);
+  const pausedDuration = useRef(0);
+  const pauseStartTime = useRef(null);
+  const currentSegmentRef = useRef(0);
+  const completedSplitsRef = useRef([]);
+  const builtSegmentsRef = useRef([]);      // always current, avoids stale closure in timer/startRun
 
   const [planSegments, setPlanSegments] = useState(null);
 
@@ -121,7 +164,7 @@ export default function RunTracker({ route, navigation }) {
           const segs = buildSegmentsFromPlan(runExercises);
           if (segs.length > 0) {
             setPlanSegments(segs);
-            setBuiltSegments(segs);
+            updateSegments(segs);
           }
         }
 
@@ -159,21 +202,19 @@ export default function RunTracker({ route, navigation }) {
         duration = parseDuration(reps) || parseDuration(sets) || 300;
         segs.push({ name: ex.name, duration, type: segType });
       } else if (name.includes('interval') || name.includes('400m') || name.includes('sprint') || name.includes('repeat')) {
-        // Repeating intervals — parse count from sets
+        segs.push({ name: 'Warm-up', duration: 300, type: 'easy' });
         const count = parseInt(sets) || parseInt(reps) || 4;
-        const intervalDur = parseDuration(reps) || 90; // default 90s
-        const recoveryDur = Math.round(intervalDur * 0.67); // 2:1 work:rest or match
-
-        // Check if rest info is in weight/notes
+        const intervalDur = parseDuration(reps) || 90;
+        const recoveryDur = Math.round(intervalDur * 0.67);
         const restMatch = (weight + ' ' + (ex.notes || '')).match(/(\d+)\s*(?:sec|s)\s*(?:rest|easy|recovery)/i);
         const actualRecovery = restMatch ? parseInt(restMatch[1]) : recoveryDur;
-
         for (let i = 0; i < count; i++) {
           segs.push({ name: `Hard ${i + 1}/${count}`, duration: intervalDur, type: 'hard', round: i + 1 });
           if (i < count - 1 || exercises.indexOf(ex) < exercises.length - 1) {
             segs.push({ name: `Recovery ${i + 1}/${count}`, duration: actualRecovery, type: 'recovery', round: i + 1 });
           }
         }
+        segs.push({ name: 'Cool-down', duration: 180, type: 'easy' });
       } else if (name.includes('tempo')) {
         segType = 'tempo';
         duration = parseDuration(reps) || parseDuration(sets) || 1200;
@@ -219,47 +260,149 @@ export default function RunTracker({ route, navigation }) {
     } else {
       config.segments.forEach(seg => segs.push({ ...seg }));
     }
-    setBuiltSegments(segs);
+    updateSegments(segs);
   };
 
-  // Cleanup
+  // Pre-configure audio session on mount so first sound plays correctly
   useEffect(() => {
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: true,
+      shouldDuckAndroid: true,
+      interruptionModeIOS: 1,
+    }).catch(() => {});
+
     return () => {
+      cancelNotifications();
       stopGPS();
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
 
-  // Timer — uses real timestamps so it survives screen-off/background
+  const getSegmentAnnouncement = (seg) => {
+    const mins = Math.floor(seg.duration / 60);
+    const secs = seg.duration % 60;
+    const durationStr = mins > 0
+      ? `${mins} minute${mins !== 1 ? 's' : ''}${secs > 0 ? ` ${secs} seconds` : ''}`
+      : `${secs} seconds`;
+    const cues = {
+      hard: `Hard interval. ${durationStr}. Push hard!`,
+      recovery: `Recovery. ${durationStr}. Easy jog, bring it down.`,
+      easy: `Easy pace. ${durationStr}. Settle in and breathe.`,
+      tempo: `Tempo pace. ${durationStr}. Controlled hard effort.`,
+      fartlek: `Variable pace. ${durationStr}. Mix it up.`,
+      steady: `Steady run. ${durationStr}. Lock in your pace.`,
+    };
+    return cues[seg.type] || `${seg.name}. ${durationStr}.`;
+  };
+
+
+  const cancelNotifications = useCallback(async () => {
+    try { await Notifications.cancelAllScheduledNotificationsAsync(); } catch {}
+  }, []);
+
+  const scheduleSegmentNotifications = useCallback(async (segments, startTimestamp) => {
+    try {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') return;
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      const soundMap = {
+        hard: 'HardInterval.m4a', recovery: 'RecoveryJog.m4a',
+        easy: 'EasyPace.m4a', tempo: 'HardInterval.m4a',
+        steady: 'EasyPace.m4a', fartlek: 'HardInterval.m4a',
+      };
+      let cumMs = 0;
+      for (let i = 0; i < segments.length - 1; i++) {
+        cumMs += segments[i].duration * 1000;
+        const next = segments[i + 1];
+        const sound = /warm/i.test(next.name) ? 'warmup.m4a'
+          : /cool/i.test(next.name) ? 'cooldown.m4a'
+          : soundMap[next.type] || 'EasyPace.m4a';
+        await Notifications.scheduleNotificationAsync({
+          content: { title: next.name, body: '', sound },
+          trigger: { type: 'date', date: new Date(startTimestamp + cumMs) },
+        });
+      }
+      const totalMs = segments.reduce((s, sg) => s + sg.duration * 1000, 0);
+      await Notifications.scheduleNotificationAsync({
+        content: { title: 'Run Complete', body: '', sound: 'RunComplete.m4a' },
+        trigger: { type: 'date', date: new Date(startTimestamp + totalMs) },
+      });
+    } catch (e) {
+      console.warn('[RunTracker] Notification scheduling failed:', e.message);
+    }
+  }, []);
+
+  // Timer — calculates correct segment from absolute elapsed time
+  // This survives screen-off/background: when screen turns on, timer fires and
+  // immediately jumps to whichever segment we should be in based on real time
   useEffect(() => {
     if (isRunning && !isPaused) {
       if (!runStartTime.current) runStartTime.current = Date.now();
       if (!segmentStartTime.current) segmentStartTime.current = Date.now();
       if (pauseStartTime.current) {
-        // Resuming from pause — add pause duration
         pausedDuration.current += (Date.now() - pauseStartTime.current) / 1000;
         pauseStartTime.current = null;
       }
       timerRef.current = setInterval(() => {
         const elapsed = (Date.now() - runStartTime.current) / 1000 - pausedDuration.current;
-        const segElapsed = (Date.now() - segmentStartTime.current) / 1000;
         setTotalTime(Math.round(elapsed));
-        setSegmentTime(Math.round(segElapsed));
+
+        // Find which segment we should be in based on absolute elapsed time
+        let cumTime = 0;
+        let correctSeg = 0;
+        let segStart = 0;
+        for (let i = 0; i < builtSegmentsRef.current.length; i++) {
+          const segEnd = cumTime + builtSegmentsRef.current[i].duration;
+          if (elapsed < segEnd || i === builtSegmentsRef.current.length - 1) {
+            correctSeg = i;
+            segStart = cumTime;
+            break;
+          }
+          cumTime += builtSegmentsRef.current[i].duration;
+        }
+        setSegmentTime(Math.round(elapsed - segStart));
+
+        // Segment changed (handles background time jumps — may skip multiple segments)
+        if (correctSeg !== currentSegmentRef.current) {
+          // Log all segments we skipped through
+          const prev = currentSegmentRef.current;
+          for (let i = prev; i < correctSeg; i++) {
+            const doneSeg = builtSegmentsRef.current[i];
+            if (doneSeg) {
+              completedSplitsRef.current = [...completedSplitsRef.current, {
+                name: doneSeg.name, type: doneSeg.type,
+                time: doneSeg.duration, distance: 0, pace: 0,
+              }];
+            }
+          }
+          setCompletedSplits([...completedSplitsRef.current]);
+          currentSegmentRef.current = correctSeg;
+          setCurrentSegment(correctSeg);
+          resetSegmentDistance();
+          segmentDistance.current = 0;
+          segmentStartTime.current = Date.now() - ((elapsed - segStart) * 1000);
+          // Announce new segment
+          const newSeg = builtSegmentsRef.current[correctSeg];
+          if (newSeg) {
+            Vibration.vibrate([0, 600, 150, 600, 150, 600]);
+            playSegmentSound(newSeg);
+          }
+        }
+
+        // Check if run is complete
+        const totalDuration = builtSegments.reduce((s, sg) => s + sg.duration, 0);
+        if (elapsed >= totalDuration) {
+          clearInterval(timerRef.current);
+          finishRun();
+        }
       }, 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
       if (isPaused && !pauseStartTime.current) pauseStartTime.current = Date.now();
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isRunning, isPaused]);
-
-  // Auto-advance segment when time expires
-  useEffect(() => {
-    const seg = builtSegments[currentSegment];
-    if (seg && segmentTime >= seg.duration && isRunning && !isPaused) {
-      advanceSegment();
-    }
-  }, [segmentTime]);
+  }, [isRunning, isPaused, builtSegments]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -280,61 +423,67 @@ export default function RunTracker({ route, navigation }) {
   };
 
   const startGPS = async () => {
-    // Request foreground first, then background for screen-off tracking
+    try {
+    const { status: existingStatus } = await Location.getForegroundPermissionsAsync();
+    if (existingStatus === 'denied') {
+      Alert.alert(
+        'Location Access Required',
+        'Location permission was previously denied. Please enable it in Settings to track your run.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openURL('app-settings:') },
+        ]
+      );
+      return false;
+    }
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission Denied', 'Location access is required for run tracking.');
       return false;
     }
-    // Request background permission so tracking continues with screen off
-    const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync().catch(() => ({ status: 'denied' }));
-    if (bgStatus !== 'granted') {
-      console.log('[RunTracker] Background location not granted — tracking may pause with screen off');
+    await Location.requestBackgroundPermissionsAsync().catch(() => {});
+
+    // Stop any existing task before starting fresh
+    const isRunning = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false);
+    if (isRunning) await Location.stopLocationUpdatesAsync(LOCATION_TASK).catch(() => {});
+
+    // Wire up live UI updates from background task
+    locationState.onUpdate = () => {
+      setTotalDistance(locationState.totalDistance);
+      setCurrentSpeed(locationState.currentSpeed);
+      setGpsAccuracy(locationState.lastPosition?.coords?.accuracy || null);
+      segmentDistance.current = locationState.segmentDistance;
+    };
+
+    const locationOptions = {
+      accuracy: Location.Accuracy.BestForNavigation,
+      timeInterval: 2000,
+      distanceInterval: 5,
+      showsBackgroundLocationIndicator: true,
+    };
+    if (Platform.OS === 'android') {
+      locationOptions.foregroundService = {
+        notificationTitle: 'GritOS Run Tracker',
+        notificationBody: 'Tracking your run in the background',
+        notificationColor: '#FF4136',
+      };
     }
-
-    locationSub.current = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 2000,      // every 2 seconds (was 1s — too frequent adds noise)
-        distanceInterval: 5,      // every 5 meters (was 3m — too sensitive)
-      },
-      (loc) => {
-        const accuracy = loc.coords.accuracy || 999;
-
-        // Filter out inaccurate readings (GPS noise when standing still or poor signal)
-        if (accuracy > 20) return; // ignore readings with >20m accuracy radius
-
-        if (lastPosition.current) {
-          const dist = calculateDistance(lastPosition.current.coords, loc.coords);
-          const timeDelta = (loc.timestamp - (lastPosition.current.timestamp || 0)) / 1000;
-
-          // Filter: ignore GPS jumps > 0.1 mi (teleports) and micro-jitter < 0.002 mi (~3m)
-          if (dist < 0.1 && dist > 0.002) {
-            // Speed sanity check: if implied speed > 20 mph, it's probably GPS noise
-            const impliedSpeedMph = timeDelta > 0 ? (dist / timeDelta) * 3600 : 0;
-            if (impliedSpeedMph < 20) {
-              setTotalDistance(d => d + dist);
-              segmentDistance.current += dist;
-            }
-          }
-        }
-        lastPosition.current = loc;
-        setCurrentSpeed(loc.coords.speed && loc.coords.speed > 0 ? loc.coords.speed * 2.237 : 0);
-        setGpsAccuracy(accuracy);
-      }
-    );
+    await Location.startLocationUpdatesAsync(LOCATION_TASK, locationOptions);
     return true;
+    } catch (e) {
+      Alert.alert('GPS Error', e.message || String(e));
+      return false;
+    }
   };
 
-  const stopGPS = () => {
-    if (locationSub.current) {
-      locationSub.current.remove();
-      locationSub.current = null;
-    }
+  const stopGPS = async () => {
+    locationState.onUpdate = null;
+    const isRunning = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false);
+    if (isRunning) await Location.stopLocationUpdatesAsync(LOCATION_TASK).catch(() => {});
   };
 
   const advanceSegment = useCallback(() => {
-    const seg = builtSegments[currentSegment];
+    const seg = builtSegmentsRef.current[currentSegment];
     if (!seg) return;
 
     // Log completed segment
@@ -349,12 +498,20 @@ export default function RunTracker({ route, navigation }) {
     // Vibrate to signal segment change
     Vibration.vibrate([0, 500, 200, 500]);
 
+    // Announce next segment via speech
+    const nextIdx = currentSegment + 1;
+    if (nextIdx < builtSegmentsRef.current.length) {
+      playSegmentSound(builtSegmentsRef.current[nextIdx]);
+    } else {
+      playSegmentSound({ name: 'complete', type: 'complete' });
+    }
+
     // Reset segment tracking
     segmentDistance.current = 0;
-    segmentStartTime.current = Date.now(); // reset segment timer so next segment starts fresh
+    segmentStartTime.current = Date.now();
     setSegmentTime(0);
 
-    if (currentSegment < builtSegments.length - 1) {
+    if (currentSegment < builtSegmentsRef.current.length - 1) {
       setCurrentSegment(s => s + 1);
     } else {
       finishRun();
@@ -364,6 +521,14 @@ export default function RunTracker({ route, navigation }) {
   const startRun = async () => {
     const gpsOk = await startGPS();
     if (!gpsOk) return;
+    const startTs = Date.now();
+    runStartTime.current = startTs;
+    segmentStartTime.current = startTs;
+    pausedDuration.current = 0;
+    pauseStartTime.current = null;
+    currentSegmentRef.current = 0;
+    completedSplitsRef.current = [];
+    resetLocationState();
     setIsRunning(true);
     setIsPaused(false);
     setRunComplete(false);
@@ -372,17 +537,30 @@ export default function RunTracker({ route, navigation }) {
     setTotalTime(0);
     setTotalDistance(0);
     setCompletedSplits([]);
-    segmentDistance.current = 0;
-    lastPosition.current = null;
     Vibration.vibrate(300);
+    scheduleSegmentNotifications(builtSegmentsRef.current, startTs);
+    if (builtSegmentsRef.current.length > 0) {
+      const firstSeg = builtSegmentsRef.current[0];
+      setTimeout(() => playSegmentSound(firstSeg), 1500);
+    }
   };
 
   const togglePause = () => {
     if (isPaused) {
       startGPS();
       Vibration.vibrate(200);
+      // Reschedule notifications for remaining segments from now
+      // Current segment has segmentTime already elapsed, so remaining = duration - segmentTime
+      const now = Date.now();
+      const remainingSegs = builtSegments.slice(currentSegmentRef.current);
+      if (remainingSegs.length > 0) {
+        // Offset start so current segment fires at the right remaining time
+        const currentSegElapsed = segmentTime;
+        const offsetStart = now - currentSegElapsed * 1000;
+      }
     } else {
       stopGPS();
+      cancelNotifications();
       Vibration.vibrate([0, 100, 100, 100]);
     }
     setIsPaused(!isPaused);
@@ -395,7 +573,7 @@ export default function RunTracker({ route, navigation }) {
   const finishRun = async () => {
     // Capture final segment split before stopping
     const finalSplits = [...completedSplits];
-    const seg = builtSegments[currentSegment];
+    const seg = builtSegmentsRef.current[currentSegment];
     if (seg && segmentTime > 0) {
       finalSplits.push({
         name: seg.name,
@@ -409,20 +587,31 @@ export default function RunTracker({ route, navigation }) {
     setIsRunning(false);
     setIsPaused(false);
     setRunComplete(true);
-    stopGPS();
+    await stopGPS();
+    await cancelNotifications();
     Vibration.vibrate([0, 300, 200, 300, 200, 500]);
+    playSegmentSound({ name: 'complete', type: 'complete' });
 
     // Persist to database
     try {
-      const pace = totalDistance > 0 ? (totalTime / 60) / totalDistance : 0;
+      const runDate = passedDate || new Date().toISOString().split('T')[0];
+      const finalDistance = locationState.totalDistance || totalDistance;
+      const pace = finalDistance > 0 ? (totalTime / 60) / finalDistance : 0;
       await saveRunHistory({
-        date: new Date().toISOString().split('T')[0],
+        date: runDate,
         runType: selectedRunType,
         totalTime,
-        totalDistance,
+        totalDistance: finalDistance,
         avgPace: pace,
         splits: JSON.stringify(finalSplits),
       });
+      // Mark plan run exercises complete so TodayWorkout shows checkmarks
+      const cardioExes = await getCardioExercisesForDate(runDate);
+      if (cardioExes?.length) {
+        for (const ex of cardioExes) {
+          await completeExercise(ex.id, null, null);
+        }
+      }
     } catch (e) {
       console.error('Error saving run:', e);
     }
@@ -446,7 +635,7 @@ export default function RunTracker({ route, navigation }) {
     lastPosition.current = null;
   };
 
-  const currentSeg = builtSegments[currentSegment];
+  const currentSeg = builtSegmentsRef.current[currentSegment];
   const segProgress = currentSeg ? Math.min(100, (segmentTime / currentSeg.duration) * 100) : 0;
   const segColor = currentSeg ? (SEGMENT_COLORS[currentSeg.type] || '#fff') : '#fff';
   const avgPace = totalDistance > 0 ? (totalTime / 60) / totalDistance : 0;
@@ -469,56 +658,19 @@ export default function RunTracker({ route, navigation }) {
             <Text style={styles.setupSub}>Auto-segmented run tracking</Text>
           </View>
 
-          {/* Run type selector */}
+          {/* Run type header */}
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>RUN TYPE</Text>
-            {todayRunType ? (
-              <Text style={styles.todayPlanHint}>{`TODAY'S PLAN: ${RUN_CONFIGS[todayRunType]?.name || todayRunType}`}</Text>
-            ) : null}
-            {Object.entries(RUN_CONFIGS).map(([key, config]) => (
-              <TouchableOpacity
-                key={key}
-                style={[
-                  styles.typeCard,
-                  selectedRunType === key && styles.typeCardSelected,
-                  todayRunType === key && selectedRunType !== key && styles.typeCardPlanned,
-                ]}
-                onPress={() => setSelectedRunType(key)}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.typeName, selectedRunType === key && styles.typeNameSelected]}>
-                    {config.name}
-                  </Text>
-                  <Text style={styles.typeDesc}>
-                    {config.segments.length} segment{config.segments.length > 1 ? 's' : ''}
-                  </Text>
-                </View>
-                {todayRunType === key ? <Text style={styles.plannedBadge}>PLANNED</Text> : null}
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Rounds selector for intervals */}
-          {selectedRunType === 'INTERVALS' && (
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>ROUNDS</Text>
-              <View style={styles.roundsRow}>
-                {[3, 4, 5, 6, 8].map(r => (
-                  <TouchableOpacity
-                    key={r}
-                    style={[styles.roundButton, rounds === r && styles.roundButtonSelected]}
-                    onPress={() => setRounds(r)}
-                  >
-                    <Text style={[styles.roundText, rounds === r && styles.roundTextSelected]}>{r}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+            <Text style={styles.sectionLabel}>TODAY'S RUN</Text>
+            <View style={[styles.typeCard, styles.typeCardSelected]}>
+              <Text style={[styles.typeName, styles.typeNameSelected]}>
+                {RUN_CONFIGS[selectedRunType]?.name || selectedRunType}
+              </Text>
             </View>
-          )}
+          </View>
 
           {/* Segment preview */}
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>SEGMENTS ({builtSegments.length})</Text>
+            <Text style={styles.sectionLabel}>SEGMENTS ({builtSegmentsRef.current.length})</Text>
             {builtSegments.slice(0, 8).map((seg, i) => (
               <View key={i} style={styles.previewRow}>
                 <View style={[styles.previewDot, { backgroundColor: SEGMENT_COLORS[seg.type] || '#666' }]} />
@@ -526,8 +678,8 @@ export default function RunTracker({ route, navigation }) {
                 <Text style={styles.previewTime}>{formatTime(seg.duration)}</Text>
               </View>
             ))}
-            {builtSegments.length > 8 && (
-              <Text style={styles.moreSegments}>+{builtSegments.length - 8} more</Text>
+            {builtSegmentsRef.current.length > 8 && (
+              <Text style={styles.moreSegments}>+{builtSegmentsRef.current.length - 8} more</Text>
             )}
           </View>
 
@@ -693,12 +845,6 @@ export default function RunTracker({ route, navigation }) {
             <Text style={[styles.controlBtnText, isPaused && { color: '#000' }]}>
               {isPaused ? 'RESUME' : 'PAUSE'}
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.controlBtn, styles.skipBtn]}
-            onPress={skipSegment}
-          >
-            <Text style={styles.controlBtnText}>{'SKIP \u2192'}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.controlBtn, { backgroundColor: '#FF4136' }]}

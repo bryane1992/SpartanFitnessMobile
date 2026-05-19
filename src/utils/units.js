@@ -164,3 +164,11 @@ export function weightUnit() {
 export function distanceUnit() {
   return isMetric() ? 'km' : 'mi';
 }
+
+// iPad responsive content width — caps content at 600px centered on larger screens
+import { Dimensions } from 'react-native';
+export function contentWidth() {
+  const w = Dimensions.get('window').width;
+  return w > 600 ? 600 : w;
+}
+export const isTablet = () => Dimensions.get('window').width >= 768;

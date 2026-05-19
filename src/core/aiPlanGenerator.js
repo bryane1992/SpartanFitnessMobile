@@ -197,6 +197,19 @@ export async function generateAIPlan(userProfile, onStatus) {
     }
   }
 
+  // Safety: fix any back-to-back lower days regardless of split template
+  const isLowerDay = (d) => d?.primary_patterns?.some(p => p === 'squat' || p === 'hinge');
+  for (let i = 0; i < dayConfigs.length - 1; i++) {
+    if (isLowerDay(dayConfigs[i]) && isLowerDay(dayConfigs[i + 1])) {
+      // Find nearest non-lower day after the pair to swap with
+      const swapIdx = dayConfigs.findIndex((d, idx) => idx > i + 1 && !isLowerDay(d));
+      if (swapIdx >= 0) {
+        [dayConfigs[i + 1], dayConfigs[swapIdx]] = [dayConfigs[swapIdx], dayConfigs[i + 1]];
+        console.log(`[PlanV5] Fixed back-to-back leg days: swapped positions ${i + 1} and ${swapIdx}`);
+      }
+    }
+  }
+
   if (onStatus) onStatus('Designing your program...');
 
   // Step 6: Claude picks exercises from menu — no fallback, fail fast
@@ -251,6 +264,7 @@ async function callClaudeV5(unusedApiKey, userProfile, archetype, exerciseMenu, 
     let text = (data.content?.[0]?.text || '').trim();
     const s = text.indexOf('{'), e = text.lastIndexOf('}');
     if (s >= 0 && e > s) text = text.substring(s, e + 1);
+    text = text.split("").filter(c => { const code = c.charCodeAt(0); return code > 31 || code === 9 || code === 10 || code === 13; }).join("");
     const parsed = JSON.parse(text);
 
     // Validate all IDs exist in the menu
@@ -454,10 +468,13 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
     for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
       const date = addDays(weekStartDate, dayOfWeek);
-      const tdi = trainingDays.indexOf(dayOfWeek);
+      // Convert calendar weekday (0=Sun,1=Mon...) to app day index (0=Mon,1=Tue..6=Sun)
+      const calDay = new Date(date + 'T12:00:00').getDay();
+      const appDay = (calDay + 6) % 7; // 0=Mon,1=Tue...6=Sun
+      const tdi = trainingDays.indexOf(appDay);
 
       if (tdi === -1) {
-        await savePlanDay({ planId, date, dayOfWeek, weekNumber: week, phase: displayPhase, title: 'REST DAY', focus: 'Recovery & mobility', color: '#333', emoji: '', isRestDay: true });
+        await savePlanDay({ planId, date, dayOfWeek: appDay, weekNumber: week, phase: displayPhase, title: 'REST DAY', focus: 'Recovery & mobility', color: '#333', emoji: '', isRestDay: true });
         continue;
       }
 
@@ -526,7 +543,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         ? `TAPER \u2022 RACE PREP \u2022 Week ${week}`
         : `${mesoPhase.label} \u2022 ${stimulus.label} \u2022 Week ${week}`;
 
-      const dayId = await savePlanDay({ planId, date, dayOfWeek, weekNumber: week, phase: displayPhase, title, focus: focusLabel, color: phase.color, emoji: '', isRestDay: false });
+      const dayId = await savePlanDay({ planId, date, dayOfWeek: appDay, weekNumber: week, phase: displayPhase, title, focus: focusLabel, color: phase.color, emoji: '', isRestDay: false });
 
       const usedToday = new Set();
       let blockOrder = 0;
@@ -538,15 +555,43 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
 
       // ── WARMUP — matched to day's movement patterns ──
       const hasJumpRope = (userProfile.equipment || []).includes('jump_rope');
+      const hasBands = (userProfile.equipment || []).includes('resistance_bands') || (userProfile.equipment || []).includes('bands');
       const WARMUP_BY_FOCUS = {
-        lower: ['air_squats', 'cossack_squats', 'lunge_matrix', 'samson_stretch', 'high_knees', 'hip_90_90', 'glute_stretch_seated', 'adductor_stretch',
-          ...(hasJumpRope ? ['jump_rope', 'double_unders'] : [])],
-        upper: ['push_up_to_t', 'pvc_pass_throughs', 'arm_circles', 'bear_crawl', 'inchworm', 'band_pull_apart', 'wall_angels', 'shoulder_ext_rotation'],
-        full: ['air_squats', 'push_up_to_t', 'bear_crawl', 'high_knees', 'lunge_matrix', 'inchworm', 'arm_circles',
-          ...(hasJumpRope ? ['jump_rope'] : [])],
+        // Lower: glute activation + hip mobility + posterior chain + knee prep
+        lower: [
+          'glute_bridge', 'clam_shells', 'fire_hydrants', 'banded_lateral_walk',
+          'hip_90_90', 'hip_flexor_stretch', 'samson_stretch', 'adductor_stretch',
+          'cat_cow', 'cobra_stretch', 'hamstring_stretch',
+          'terminal_knee_ext', 'knee_circles', 'cossack_squats',
+          'air_squats', 'lunge_matrix', 'inchworm',
+          ...(hasJumpRope ? ['jump_rope'] : []),
+        ],
+        // Upper: shoulder mobility + chest opening + thoracic + pressing prep
+        upper: [
+          'wall_angels', 'arm_circles', 'shoulder_ext_rotation', 'shoulder_int_rotation',
+          'chest_doorway_stretch', 'thoracic_rotation',
+          ...(hasBands ? ['band_pull_apart'] : []),
+          'pvc_pass_throughs', 'push_up_to_t', 'bear_crawl', 'inchworm',
+        ],
+        // Full body / WOD: balanced mix
+        full: [
+          'inchworm', 'air_squats', 'push_up_to_t', 'lunge_matrix',
+          'hip_90_90', 'glute_bridge', 'arm_circles', 'wall_angels', 'cat_cow',
+          ...(hasJumpRope ? ['jump_rope'] : []),
+        ],
       };
+      // Detect hinge-heavy days (deadlift focus) → prioritise hip/hamstring work
+      const isHingeDay = dayPatterns.filter(p => p === 'hinge').length > dayPatterns.filter(p => p === 'squat').length;
       const warmupFocus = dayPatterns.some(p => ['squat', 'hinge'].includes(p)) ? 'lower'
         : dayPatterns.some(p => ['horizontal_push', 'horizontal_pull', 'vertical_push', 'vertical_pull'].includes(p)) ? 'upper' : 'full';
+      // For hinge-dominant days, move posterior chain exercises to the front of the pool
+      if (isHingeDay && warmupFocus === 'lower') {
+        const hingeFirst = ['cat_cow', 'glute_bridge', 'hip_90_90', 'hamstring_stretch', 'cobra_stretch'];
+        WARMUP_BY_FOCUS.lower = [
+          ...hingeFirst,
+          ...WARMUP_BY_FOCUS.lower.filter(id => !hingeFirst.includes(id)),
+        ];
+      }
       let dayWarmupPool = WARMUP_BY_FOCUS[warmupFocus];
       if (!shouldHaveRuns) dayWarmupPool = dayWarmupPool.filter(id => id !== 'easy_jog' && id !== 'strides');
 
@@ -565,7 +610,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
       const rawCompoundPool = expandPool(daySelection.compounds || [], exerciseMenu, dayConfig, archetype, week);
       const allowedDayPatterns = new Set([...(dayConfig.primary_patterns || []), ...(dayConfig.secondary_patterns || [])]);
       // Sprint/run-only days with no patterns = no compound block (run IS the workout)
-      const compoundPool = allowedDayPatterns.size === 0 && hasRun ? [] : rawCompoundPool.filter(id => {
+      const compoundPool = allowedDayPatterns.size === 0 && !!dayConfig.run ? [] : rawCompoundPool.filter(id => {
         const ex = exerciseById[id];
         if (!ex) return false;
         if (NEVER_MAIN_LIFT.test(ex.name)) return false;
@@ -688,7 +733,7 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
         const runType = dayConfig.run.type?.toUpperCase() || pickRunType(displayPhase, week);
         const runBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: dayConfig.run.label || 'RUN', type: runType, timeCap: runType === 'LONG_RUN' ? '30 min' : '20 min', isAmrap: false, hasGps: true });
         await updateBlockRunType(runBlockId, runType);
-        const runExercises = generateRunExercises(week, displayPhase, totalWeeks, runType, userProfile.experience, targetDistance);
+        const runExercises = generateRunExercises(week, displayPhase, totalWeeks, runType, userProfile.experience, targetDistance, userProfile.runningLevel);
         for (let i = 0; i < runExercises.length; i++) {
           await savePlanExercise({ planBlockId: runBlockId, exerciseId: runExercises[i].id, sortOrder: i, sets: runExercises[i].sets, reps: runExercises[i].reps, weight: runExercises[i].weight, rest: null, notes: runExercises[i].notes });
         }
@@ -873,12 +918,25 @@ async function buildPlanV5(selections, dayConfigs, userProfile, exerciseMenu, wo
           const selectedMeta = getWodMetadata(selectedWod);
           if (selectedMeta.phaseTier === 'hero') heroWodCount++;
 
-          if (week <= 2) console.log(`[PlanV5] WOD: ${selectedWod.name} (${selectedMeta.phaseTier}) wk${week}`);
+          // Long/hero WODs (35+ min) are the ENTIRE workout — skip main lifts
+          const timeFields = [selectedWod.estimated_time, selectedWod.estimatedTime].filter(Boolean);
+          let wodEstMin = 0;
+          for (const tf of timeFields) { const m = String(tf).match(/(\d+)/); if (m) wodEstMin = Math.max(wodEstMin, parseInt(m[1])); }
+          const isLongWod = wodEstMin >= 35 || selectedMeta.phaseTier === 'hero';
+          if (isLongWod) { bt.mainLiftCount = 0; bt.accessoryCount = 0; bt.armBlaster = 0; }
+
+          if (week <= 2) console.log(`[PlanV5] WOD: ${selectedWod.name} (${selectedMeta.phaseTier}) wk${week}${isLongWod ? ' [STANDALONE]' : ''}`);
           const wodBlockType = selectedWod.type || dayConfig.wod.type || 'CIRCUIT';
           const isAmrap = /amrap/i.test(wodBlockType);
-          const isTimedWod = /amrap|for time|emom/i.test(wodBlockType);
-          const wodTimeCap = selectedWod.time_cap || selectedWod.timeCap || (isAmrap ? '10 min' : null);
-          const wodBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: selectedWod.name || 'WOD', type: wodBlockType, timeCap: wodTimeCap || '10 min', isAmrap: isTimedWod ? 1 : 0, hasGps: false });
+          const isEmom = /emom/i.test(wodBlockType);
+          const isForTime = /for.?time/i.test(wodBlockType);
+          const wodTimeCap = selectedWod.time_cap || selectedWod.timeCap;
+          const wodScheme = selectedWod.scheme || null; // e.g. "10 rounds", "21-15-9"
+          // AMRAP/EMOM: use time cap or default 10 min. FOR TIME: store scheme (e.g. "10 rounds") so UI can show target.
+          const effectiveTimeCap = wodTimeCap || (isAmrap || isEmom ? '10 min' : null) || (isForTime && wodScheme ? wodScheme : null);
+          // All timed WODs (AMRAP, EMOM, FOR TIME) get is_amrap:1 so the timer shows
+          const isTimedBlock = isAmrap || isEmom || isForTime;
+          const wodBlockId = await savePlanBlock({ planDayId: dayId, sortOrder: blockOrder++, name: selectedWod.name || 'WOD', type: wodBlockType, timeCap: effectiveTimeCap, isAmrap: isTimedBlock ? 1 : 0, hasGps: false });
           const wodExercises = buildWodExercises(selectedWod, sanitizedProfile.equipmentDetails, sanitizedProfile.workingWeights, userProfile.experience);
           for (let i = 0; i < wodExercises.length; i++) {
             await savePlanExercise({ planBlockId: wodBlockId, exerciseId: wodExercises[i].id, sortOrder: i, sets: wodExercises[i].sets, reps: wodExercises[i].reps, weight: wodExercises[i].weight, rest: null, notes: wodExercises[i].notes });
@@ -1159,7 +1217,7 @@ function calculateBlockTimes(sessionMinutes, dayConfig, archetypeKey) {
   if (isLongRunDay || (isCarryDay && hasRun)) {
     // Carry + Long Run day: carries + run + cooldown, no accessories/core/arms
     bt = { warmup: 8, mainLifts: isCarryDay ? 20 : 15, wod: 0, accessories: 0, armBlaster: 0, core: 0, cooldown: 5,
-      sets: 3, mainLiftCount: isCarryDay ? 3 : 2, accessoryCount: 0, coreCount: 0, warmupCount: 3, rest: '60-90s' };
+      sets: 3, mainLiftCount: isCarryDay ? 3 : 2, accessoryCount: 0, coreCount: 0, warmupCount: 4, rest: '60-90s' };
   } else if (isSprintDay) {
     // Sprint day: 2 explosive lifts + sprints + core, no accessories/arms
     bt = { warmup: 8, mainLifts: 15, wod: 0, accessories: 0, armBlaster: 0, core: 5, cooldown: 5,
@@ -1173,7 +1231,7 @@ function calculateBlockTimes(sessionMinutes, dayConfig, archetypeKey) {
     // Pure lifting day (no WOD, no run): 3 main lifts + accessories + core + arms
     const armTime = wantArms ? 6 : 0;
     bt = { warmup: 5, mainLifts: 25, wod: 0, accessories: 8, armBlaster: armTime, core: 5, cooldown: 5,
-      sets: 3, mainLiftCount: 3, accessoryCount: 2, coreCount: 2, warmupCount: 2, rest: '45-60s' };
+      sets: 3, mainLiftCount: 3, accessoryCount: 2, coreCount: 2, warmupCount: 4, rest: '45-60s' };
   }
 
   // ── Scale for session duration ──
@@ -1279,6 +1337,14 @@ function getMovementNiche(exerciseId) {
     skull_crushers: 'tricep_ext', overhead_tricep_ext: 'tricep_ext', cable_tricep_pushdown: 'tricep_ext',
     // Lateral raise
     lateral_raise: 'lateral_raise', cable_lateral_raise: 'lateral_raise',
+    // Glute/hip extension — hip thrust variants should never pair with each other
+    hip_thrust: 'glute_hip_ext', db_hip_thrust: 'glute_hip_ext', glute_bridge: 'glute_hip_ext',
+    single_leg_glute_bridge: 'glute_hip_ext',
+    // Lunge/split squat — don't pair walking lunges with split squats
+    db_lunges: 'lunge_split', barbell_lunge: 'lunge_split',
+    split_squat: 'lunge_split', bulgarian_split_squat: 'lunge_split', db_lunge: 'lunge_split',
+    // Thruster (squat+press combo) — don't pair barbell and DB thrusters
+    thrusters: 'thruster', db_thrusters: 'thruster', kb_thruster: 'thruster',
   };
 
   if (NICHE_MAP[id]) return NICHE_MAP[id];
@@ -1662,9 +1728,12 @@ function pickRunType(phase, weekNumber) {
   return (RUN_ROTATION[phase] || RUN_ROTATION.foundation)[(weekNumber - 1) % 4];
 }
 
-function generateRunExercises(weekNumber, phase, totalWeeks, runType, experience, targetDistance) {
+function generateRunExercises(weekNumber, phase, totalWeeks, runType, experience, targetDistance, runningLevel) {
   const runParams = calculateRunParams(weekNumber, phase, totalWeeks, targetDistance);
-  const distScale = (runType === 'LONG_RUN' || runType === 'RACE_PACE') ? 1.0 : (experience === 'beginner' ? 0.7 : experience === 'intermediate' ? 0.85 : 1.0);
+  // Running level overrides experience scale for distance — a non-runner starts much lower
+  const runLevelScale = { none: 0.45, beginner: 0.65, intermediate: 0.85, strong: 1.0 }[runningLevel] ?? null;
+  const expScale = experience === 'beginner' ? 0.7 : experience === 'intermediate' ? 0.85 : 1.0;
+  const distScale = (runType === 'LONG_RUN' || runType === 'RACE_PACE') ? (runLevelScale ?? expScale) : (runLevelScale ?? expScale);
   const scaledDist = Math.round(parseFloat(runParams.distance) * distScale * 2) / 2;
   const distance = `${scaledDist} mi`;
 
@@ -1705,7 +1774,8 @@ function generateUUID() { return 'xxxx-xxxx-xxxx'.replace(/x/g, () => Math.floor
 function addDays(d, n) { const dt = new Date(d + 'T12:00:00Z'); dt.setUTCDate(dt.getUTCDate() + n); return dt.toISOString().split('T')[0]; }
 function addWeeks(d, w) { return addDays(d, w * 7); }
 function getNextMonday() {
-  const n = new Date(), d = n.getDay(), dm = d === 0 ? 1 : d === 1 ? 0 : 8 - d;
-  n.setDate(n.getDate() + dm);
+  // Start tomorrow so the plan begins the day after generation, not the following Monday
+  const n = new Date();
+  n.setDate(n.getDate() + 1);
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
 }
