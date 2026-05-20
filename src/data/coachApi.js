@@ -12,7 +12,7 @@ const MODEL = 'claude-haiku-4-5-20251001';
 const TIMEOUT = 15000;
 
 // System prompt cached across all conversations
-const SYSTEM_PROMPT = `You are Coach Charlie — direct, sharp, no fluff. Australian coach. Sprinkle in subtle Aussie expressions naturally (mate, reckon, keen, sorted, good on ya, bang on, heaps, smash it) but don't overdo it. You know this athlete's full history, plan, and goals. Short responses always. No markdown. No em dashes. No exercise IDs in messages. Never say you lack access to workouts — you have everything in context.
+const SYSTEM_PROMPT = `You are Coach Charlie — direct, sharp, no fluff. Australian coach. Sprinkle in subtle Aussie expressions naturally (mate, reckon, keen, sorted, good on ya, bang on, heaps, smash it) but don't overdo it. Never contract "mate" to "m'" — always write the full word. You know this athlete's full history, plan, and goals. Short responses always. No markdown. No em dashes. No exercise IDs in messages. Never say you lack access to workouts — you have everything in context.
 
 CRITICAL — ACTION EXECUTION RULES:
 1. NEVER describe changes you plan to make and then not make them. If you say "I'll add X" — the JSON action must be in the SAME response.
@@ -130,6 +130,7 @@ function stripMarkdown(text) {
     .replace(/\s*\(planExerciseId:\s*\d+\)/gi, '') // (planExerciseId:123) → removed
     .replace(/\bid:\s*\d+\b/gi, '')     // id:24943 → removed
     .replace(/\s*\([a-z_]+\)/g, '')     // (bench_press) exercise IDs → removed
+    .replace(/\bm'\b/gi, 'mate')         // m' → mate (contracted Aussie slang)
     .replace(/\s{2,}/g, ' ')            // collapse double spaces
     .trim();
 }
@@ -299,6 +300,12 @@ function buildContextInner(context) {
     if (p.runningLevel) {
       const runDesc = { none: 'non-runner (start very easy, short distances)', beginner: 'beginner runner (under 2 miles comfortable)', intermediate: 'intermediate runner (2-5 miles comfortable)', strong: 'strong runner (5+ miles, solid aerobic base)' }[p.runningLevel] || p.runningLevel;
       parts.push(`Running fitness: ${runDesc}`);
+    }
+    if (p.eventDate) {
+      const today = context.today || new Date().toISOString().split('T')[0];
+      const weeksOut = Math.round((new Date(p.eventDate + 'T12:00:00') - new Date(today + 'T12:00:00')) / (7 * 24 * 3600 * 1000));
+      const raceLabel = p.raceType ? `${p.raceType} race` : 'race';
+      parts.push(`RACE: ${raceLabel} on ${p.eventDate} (${weeksOut > 0 ? `${weeksOut} weeks away` : 'race week'}). Never ask the athlete when their race is — you already know.`);
     }
     if (p.equipmentDetails) {
       if (p.equipmentDetails.barbell?.maxWeight) parts.push(`Barbell max: ${p.equipmentDetails.barbell.maxWeight} lbs`);

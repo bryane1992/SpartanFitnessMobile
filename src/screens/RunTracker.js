@@ -202,7 +202,9 @@ export default function RunTracker({ route, navigation }) {
         duration = parseDuration(reps) || parseDuration(sets) || 300;
         segs.push({ name: ex.name, duration, type: segType });
       } else if (name.includes('interval') || name.includes('400m') || name.includes('sprint') || name.includes('repeat')) {
-        segs.push({ name: 'Warm-up', duration: 300, type: 'easy' });
+        // Only add auto warmup if no prior segments already cover it
+        const hasLeadIn = segs.length > 0 && segs[segs.length - 1].type === 'easy';
+        if (!hasLeadIn) segs.push({ name: 'Warm-up', duration: 300, type: 'easy' });
         const count = parseInt(sets) || parseInt(reps) || 4;
         const intervalDur = parseDuration(reps) || 90;
         const recoveryDur = Math.round(intervalDur * 0.67);
@@ -210,11 +212,17 @@ export default function RunTracker({ route, navigation }) {
         const actualRecovery = restMatch ? parseInt(restMatch[1]) : recoveryDur;
         for (let i = 0; i < count; i++) {
           segs.push({ name: `Hard ${i + 1}/${count}`, duration: intervalDur, type: 'hard', round: i + 1 });
-          if (i < count - 1 || exercises.indexOf(ex) < exercises.length - 1) {
+          if (i < count - 1) {
             segs.push({ name: `Recovery ${i + 1}/${count}`, duration: actualRecovery, type: 'recovery', round: i + 1 });
           }
         }
-        segs.push({ name: 'Cool-down', duration: 180, type: 'easy' });
+        // Only add auto cool-down if no trailing easy exercise follows in the plan
+        const exIdx = exercises.indexOf(ex);
+        const hasTrail = exercises.slice(exIdx + 1).some(e => {
+          const n = (e.name || '').toLowerCase();
+          return n.includes('cool') || n.includes('easy jog') || n.includes('jog') || n.includes('easy run');
+        });
+        if (!hasTrail) segs.push({ name: 'Cool-down', duration: 180, type: 'easy' });
       } else if (name.includes('tempo')) {
         segType = 'tempo';
         duration = parseDuration(reps) || parseDuration(sets) || 1200;
@@ -318,8 +326,10 @@ export default function RunTracker({ route, navigation }) {
         const sound = /warm/i.test(next.name) ? 'warmup.m4a'
           : /cool/i.test(next.name) ? 'cooldown.m4a'
           : soundMap[next.type] || 'EasyPace.m4a';
+        const mins = Math.floor(next.duration / 60);
+        const body = mins > 0 ? `${mins} min — ${next.type === 'hard' ? 'Push hard!' : next.type === 'recovery' ? 'Easy jog, bring it down.' : 'Settle in and breathe.'}` : '';
         await Notifications.scheduleNotificationAsync({
-          content: { title: next.name, body: '', sound },
+          content: { title: next.name, body, sound },
           trigger: { type: 'date', date: new Date(startTimestamp + cumMs) },
         });
       }

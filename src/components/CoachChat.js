@@ -851,7 +851,9 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
               onChangeText={setInputText}
               onSubmitEditing={() => sendMessage(inputText)}
               returnKeyType="send"
-              multiline={false}
+              multiline={true}
+              blurOnSubmit={true}
+              numberOfLines={3}
             />
             <TouchableOpacity
               style={[styles.sendBtn, (!inputText.trim() || isLoading) && styles.sendBtnDisabled]}
@@ -943,8 +945,8 @@ const styles = StyleSheet.create({
   quickText: { color: '#FF4136', fontSize: 11, fontWeight: '700' },
 
   // Input
-  inputRow: { flexDirection: 'row', padding: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
-  input: { flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 20, paddingVertical: 10, paddingHorizontal: 16, color: '#fff', fontSize: 14, marginRight: 8 },
+  inputRow: { flexDirection: 'row', padding: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)', alignItems: 'flex-end' },
+  input: { flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 16, paddingVertical: 10, paddingHorizontal: 16, color: '#fff', fontSize: 14, marginRight: 8, minHeight: 44, maxHeight: 110, textAlignVertical: 'top' },
   sendBtn: { backgroundColor: '#FF4136', borderRadius: 20, paddingHorizontal: 20, justifyContent: 'center' },
   sendBtnDisabled: { opacity: 0.4 },
   sendBtnText: { color: '#fff', fontSize: 12, fontWeight: '800', letterSpacing: 1 },
