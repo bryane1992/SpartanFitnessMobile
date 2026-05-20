@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { Audio } from 'expo-av';
-import * as Speech from 'expo-speech';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false }),
@@ -76,7 +75,19 @@ const RUN_CONFIGS = {
   },
 };
 
-// Notification sound map — used only for lock-screen notifications
+const SEGMENT_SOUNDS = {
+  hard: require('../../assets/sounds/HardInterval.m4a'),
+  recovery: require('../../assets/sounds/RecoveryJog.m4a'),
+  easy: require('../../assets/sounds/EasyPace.m4a'),
+  tempo: require('../../assets/sounds/HardInterval.m4a'),
+  steady: require('../../assets/sounds/EasyPace.m4a'),
+  fartlek: require('../../assets/sounds/HardInterval.m4a'),
+  warmup: require('../../assets/sounds/warmup.m4a'),
+  cooldown: require('../../assets/sounds/cooldown.m4a'),
+  complete: require('../../assets/sounds/RunComplete.m4a'),
+};
+
+// Notification sound filenames — for lock-screen delivery
 const NOTIFICATION_SOUNDS = {
   hard: 'HardInterval.m4a',
   recovery: 'RecoveryJog.m4a',
@@ -86,33 +97,22 @@ const NOTIFICATION_SOUNDS = {
   fartlek: 'HardInterval.m4a',
 };
 
-function announceSegment(seg) {
+async function announceSegment(seg) {
   if (!seg) return;
   try {
-    Speech.stop();
-    const text = seg.type === 'complete'
-      ? 'Run complete. Great work.'
-      : getSegmentAnnouncementText(seg);
-    Speech.speak(text, { rate: 0.95, pitch: 1.0 });
+    const key = /warm/i.test(seg?.name || '') ? 'warmup'
+      : /cool/i.test(seg?.name || '') ? 'cooldown'
+      : seg?.type || 'easy';
+    const source = SEGMENT_SOUNDS[key] || SEGMENT_SOUNDS.easy;
+    console.log(`[RunTracker] Playing sound: ${key} for segment "${seg?.name}" (type: ${seg?.type})`);
+    const { sound } = await Audio.Sound.createAsync(source, { volume: 1.0 });
+    await sound.playAsync();
+    sound.setOnPlaybackStatusUpdate((status) => {
+      if (status.didJustFinish) sound.unloadAsync();
+    });
   } catch (e) {
-    console.warn('[RunTracker] Speech failed:', e.message);
+    console.warn('[RunTracker] Audio playback failed:', e.message);
   }
-}
-
-function getSegmentAnnouncementText(seg) {
-  const mins = Math.floor((seg.duration || 0) / 60);
-  const durStr = mins > 0 ? `${mins} minute${mins !== 1 ? 's' : ''}` : `${seg.duration || 0} seconds`;
-  const cues = {
-    hard: `Hard interval. ${durStr}. Push hard!`,
-    recovery: `Recovery. ${durStr}. Easy jog, bring it down.`,
-    easy: /warm/i.test(seg.name || '') ? `Warm up. ${durStr}. Build into it.`
-        : /cool/i.test(seg.name || '') ? `Cool down. ${durStr}. Wind it back.`
-        : `Easy pace. ${durStr}. Settle in and breathe.`,
-    tempo: `Tempo pace. ${durStr}. Controlled hard effort.`,
-    steady: `Steady run. ${durStr}. Lock in your pace.`,
-    fartlek: `Variable pace. ${durStr}. Mix it up.`,
-  };
-  return cues[seg.type] || `${seg.name}. ${durStr}.`;
 }
 
 const SEGMENT_COLORS = {
@@ -284,10 +284,16 @@ export default function RunTracker({ route, navigation }) {
   };
 
   useEffect(() => {
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: true,
+      shouldDuckAndroid: true,
+      interruptionModeIOS: 1,
+    }).catch(() => {});
+
     return () => {
       cancelNotifications();
       stopGPS();
-      Speech.stop();
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
