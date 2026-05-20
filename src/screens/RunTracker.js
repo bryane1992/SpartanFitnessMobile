@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { Audio } from 'expo-av';
+import * as Speech from 'expo-speech';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false }),
@@ -75,32 +76,43 @@ const RUN_CONFIGS = {
   },
 };
 
-const SEGMENT_SOUNDS = {
-  hard: require('../../assets/sounds/HardInterval.m4a'),
-  recovery: require('../../assets/sounds/RecoveryJog.m4a'),
-  easy: require('../../assets/sounds/EasyPace.m4a'),
-  tempo: require('../../assets/sounds/HardInterval.m4a'),
-  steady: require('../../assets/sounds/EasyPace.m4a'),
-  fartlek: require('../../assets/sounds/HardInterval.m4a'),
-  warmup: require('../../assets/sounds/warmup.m4a'),
-  cooldown: require('../../assets/sounds/cooldown.m4a'),
-  complete: require('../../assets/sounds/RunComplete.m4a'),
+// Notification sound map — used only for lock-screen notifications
+const NOTIFICATION_SOUNDS = {
+  hard: 'HardInterval.m4a',
+  recovery: 'RecoveryJog.m4a',
+  easy: 'EasyPace.m4a',
+  tempo: 'HardInterval.m4a',
+  steady: 'EasyPace.m4a',
+  fartlek: 'HardInterval.m4a',
 };
 
-async function playSegmentSound(seg) {
+function announceSegment(seg) {
+  if (!seg) return;
   try {
-    const key = /warm/i.test(seg?.name || '') ? 'warmup'
-      : /cool/i.test(seg?.name || '') ? 'cooldown'
-      : seg?.type || 'easy';
-    const source = SEGMENT_SOUNDS[key] || SEGMENT_SOUNDS.easy;
-    const { sound } = await Audio.Sound.createAsync(source, { volume: 1.0 });
-    await sound.playAsync();
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.didJustFinish) sound.unloadAsync();
-    });
+    Speech.stop();
+    const text = seg.type === 'complete'
+      ? 'Run complete. Great work.'
+      : getSegmentAnnouncementText(seg);
+    Speech.speak(text, { rate: 0.95, pitch: 1.0 });
   } catch (e) {
-    console.warn('[RunTracker] Audio playback failed:', e.message);
+    console.warn('[RunTracker] Speech failed:', e.message);
   }
+}
+
+function getSegmentAnnouncementText(seg) {
+  const mins = Math.floor((seg.duration || 0) / 60);
+  const durStr = mins > 0 ? `${mins} minute${mins !== 1 ? 's' : ''}` : `${seg.duration || 0} seconds`;
+  const cues = {
+    hard: `Hard interval. ${durStr}. Push hard!`,
+    recovery: `Recovery. ${durStr}. Easy jog, bring it down.`,
+    easy: /warm/i.test(seg.name || '') ? `Warm up. ${durStr}. Build into it.`
+        : /cool/i.test(seg.name || '') ? `Cool down. ${durStr}. Wind it back.`
+        : `Easy pace. ${durStr}. Settle in and breathe.`,
+    tempo: `Tempo pace. ${durStr}. Controlled hard effort.`,
+    steady: `Steady run. ${durStr}. Lock in your pace.`,
+    fartlek: `Variable pace. ${durStr}. Mix it up.`,
+  };
+  return cues[seg.type] || `${seg.name}. ${durStr}.`;
 }
 
 const SEGMENT_COLORS = {
@@ -271,38 +283,14 @@ export default function RunTracker({ route, navigation }) {
     updateSegments(segs);
   };
 
-  // Pre-configure audio session on mount so first sound plays correctly
   useEffect(() => {
-    Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: true,
-      shouldDuckAndroid: true,
-      interruptionModeIOS: 1,
-    }).catch(() => {});
-
     return () => {
       cancelNotifications();
       stopGPS();
+      Speech.stop();
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
-
-  const getSegmentAnnouncement = (seg) => {
-    const mins = Math.floor(seg.duration / 60);
-    const secs = seg.duration % 60;
-    const durationStr = mins > 0
-      ? `${mins} minute${mins !== 1 ? 's' : ''}${secs > 0 ? ` ${secs} seconds` : ''}`
-      : `${secs} seconds`;
-    const cues = {
-      hard: `Hard interval. ${durationStr}. Push hard!`,
-      recovery: `Recovery. ${durationStr}. Easy jog, bring it down.`,
-      easy: `Easy pace. ${durationStr}. Settle in and breathe.`,
-      tempo: `Tempo pace. ${durationStr}. Controlled hard effort.`,
-      fartlek: `Variable pace. ${durationStr}. Mix it up.`,
-      steady: `Steady run. ${durationStr}. Lock in your pace.`,
-    };
-    return cues[seg.type] || `${seg.name}. ${durationStr}.`;
-  };
 
 
   const cancelNotifications = useCallback(async () => {
@@ -314,18 +302,13 @@ export default function RunTracker({ route, navigation }) {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== 'granted') return;
       await Notifications.cancelAllScheduledNotificationsAsync();
-      const soundMap = {
-        hard: 'HardInterval.m4a', recovery: 'RecoveryJog.m4a',
-        easy: 'EasyPace.m4a', tempo: 'HardInterval.m4a',
-        steady: 'EasyPace.m4a', fartlek: 'HardInterval.m4a',
-      };
       let cumMs = 0;
       for (let i = 0; i < segments.length - 1; i++) {
         cumMs += segments[i].duration * 1000;
         const next = segments[i + 1];
         const sound = /warm/i.test(next.name) ? 'warmup.m4a'
           : /cool/i.test(next.name) ? 'cooldown.m4a'
-          : soundMap[next.type] || 'EasyPace.m4a';
+          : NOTIFICATION_SOUNDS[next.type] || 'EasyPace.m4a';
         const mins = Math.floor(next.duration / 60);
         const body = mins > 0 ? `${mins} min — ${next.type === 'hard' ? 'Push hard!' : next.type === 'recovery' ? 'Easy jog, bring it down.' : 'Settle in and breathe.'}` : '';
         const delaySec = Math.round(cumMs / 1000);
@@ -397,7 +380,7 @@ export default function RunTracker({ route, navigation }) {
           const newSeg = builtSegmentsRef.current[correctSeg];
           if (newSeg) {
             Vibration.vibrate([0, 600, 150, 600, 150, 600]);
-            playSegmentSound(newSeg);
+            announceSegment(newSeg);
           }
         }
 
@@ -512,9 +495,9 @@ export default function RunTracker({ route, navigation }) {
     // Announce next segment via speech
     const nextIdx = currentSegment + 1;
     if (nextIdx < builtSegmentsRef.current.length) {
-      playSegmentSound(builtSegmentsRef.current[nextIdx]);
+      announceSegment(builtSegmentsRef.current[nextIdx]);
     } else {
-      playSegmentSound({ name: 'complete', type: 'complete' });
+      announceSegment({ name: 'complete', type: 'complete' });
     }
 
     // Reset segment tracking
@@ -552,7 +535,7 @@ export default function RunTracker({ route, navigation }) {
     scheduleSegmentNotifications(builtSegmentsRef.current, startTs);
     if (builtSegmentsRef.current.length > 0) {
       const firstSeg = builtSegmentsRef.current[0];
-      setTimeout(() => playSegmentSound(firstSeg), 1500);
+      setTimeout(() => announceSegment(firstSeg), 1500);
     }
   };
 
@@ -601,7 +584,7 @@ export default function RunTracker({ route, navigation }) {
     await stopGPS();
     await cancelNotifications();
     Vibration.vibrate([0, 300, 200, 300, 200, 500]);
-    playSegmentSound({ name: 'complete', type: 'complete' });
+    announceSegment({ name: 'complete', type: 'complete' });
 
     // Persist to database
     try {
