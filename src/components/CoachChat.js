@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendCoachMessage } from '../data/coachApi';
-import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, adjustFutureWeights, getPlanRationales, getWodsFromDb, swapWodBlock, restoreWodBlock, deleteLatestInjury, swapWorkoutDays, clearAllInjuries, getWorkoutForDate, addExerciseToBlock, getRecentActualWeights, getFullPlanContext, getWodByName, swapWodOnDate, addExerciseOnDate } from '../data/database';
+import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, adjustFutureWeights, getPlanRationales, getWodsFromDb, swapWodBlock, restoreWodBlock, deleteLatestInjury, swapWorkoutDays, clearAllInjuries, getWorkoutForDate, addExerciseToBlock, getRecentActualWeights, getFullPlanContext, getWodByName, swapWodOnDate, addExerciseOnDate, removeWodOnDate } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 import { buildExerciseMenu } from '../core/menuBuilder';
 import { detectArchetype, adjustArchetypeForEquipment } from '../core/archetypes';
@@ -342,6 +342,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
     const store = useWorkoutStore.getState();
     const currentWorkout = store.todayWorkout; // snapshot before mutations
     const undoEntries = [];
+    const failedActions = [];
 
     for (let action of actions) {
       // Normalize action format — Claude sometimes nests as { "swap": {...} } instead of { "type": "swap", ... }
@@ -361,6 +362,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         'addexercise': 'addExercise', 'add_exercise': 'addExercise',
         'swapwod': 'swapWod', 'swap_wod': 'swapWod',
         'swapwodondate': 'swapWodOnDate', 'swap_wod_on_date': 'swapWodOnDate',
+        'removewodondate': 'removeWodOnDate', 'remove_wod_on_date': 'removeWodOnDate',
         'addexerciseondate': 'addExerciseOnDate', 'add_exercise_on_date': 'addExerciseOnDate',
         'swapday': 'swapDay', 'swap_day': 'swapDay',
         'clearinjuries': 'clearInjuries', 'clear_injuries': 'clearInjuries',
@@ -488,9 +490,17 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
             break;
           }
           case 'swapWodOnDate': {
-            // Charlie uses this for future days — finds the block by date automatically
             if (action.date && action.newWodId) {
-              await swapWodOnDate(action.date, action.newWodId);
+              const ok = await swapWodOnDate(action.date, action.newWodId);
+              if (!ok) failedActions.push(`Could not find WOD block on ${action.date} to swap`);
+              await store.loadTodayWorkout();
+            }
+            break;
+          }
+          case 'removeWodOnDate': {
+            if (action.date) {
+              const ok = await removeWodOnDate(action.date, action.label || 'Active Recovery');
+              if (!ok) failedActions.push(`Could not find WOD block on ${action.date} to remove`);
               await store.loadTodayWorkout();
             }
             break;
@@ -638,6 +648,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         }
       } catch (e) {
         console.error('Error executing action:', action.type, e);
+        failedActions.push(`${action.type} failed: ${e.message || 'unknown error'}`);
       }
     }
 
@@ -645,6 +656,23 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
     if (undoEntries.length > 0 && !skipUndo) {
       setUndoStack(prev => [...prev.slice(-4), { id: Date.now(), actions: undoEntries }]);
     }
+
+    // Surface any failures to the user
+    if (failedActions.length > 0 && mountedRef.current) {
+      setMessages(prev => {
+        const updated = [...prev];
+        const lastIdx = updated.length - 1;
+        if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+          updated[lastIdx] = {
+            ...updated[lastIdx],
+            content: updated[lastIdx].content + `\n\n(Note: ${failedActions.join('; ')}. Ask Charlie to try again.)`,
+          };
+        }
+        return updated;
+      });
+    }
+
+    return failedActions;
   };
 
   const undoLastAction = async () => {

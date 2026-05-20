@@ -1004,6 +1004,24 @@ export async function swapWodOnDate(date, newWodId) {
   return swapWodBlock(block.id, newWodId);
 }
 
+export async function removeWodOnDate(date, label) {
+  const database = await getDatabase();
+  const block = await database.getFirstAsync(
+    `SELECT pb.id FROM plan_blocks pb
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     WHERE pd.date = ? AND pb.is_amrap = 1
+     ORDER BY pb.sort_order LIMIT 1`,
+    [date]
+  );
+  if (!block) return false;
+  await database.runAsync('DELETE FROM plan_exercises WHERE plan_block_id = ?', [block.id]);
+  await database.runAsync(
+    'UPDATE plan_blocks SET name = ?, is_amrap = 0 WHERE id = ?',
+    [label || 'Active Recovery', block.id]
+  );
+  return true;
+}
+
 // Add exercise to warmup/cooldown block on a specific date
 export async function addExerciseOnDate(date, exerciseId, sets, reps, weight, notes, blockPreference = 'warmup') {
   const database = await getDatabase();
