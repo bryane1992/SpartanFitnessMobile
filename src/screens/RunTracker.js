@@ -328,15 +328,16 @@ export default function RunTracker({ route, navigation }) {
           : soundMap[next.type] || 'EasyPace.m4a';
         const mins = Math.floor(next.duration / 60);
         const body = mins > 0 ? `${mins} min — ${next.type === 'hard' ? 'Push hard!' : next.type === 'recovery' ? 'Easy jog, bring it down.' : 'Settle in and breathe.'}` : '';
+        const delaySec = Math.round(cumMs / 1000);
         await Notifications.scheduleNotificationAsync({
           content: { title: next.name, body, sound },
-          trigger: { type: 'date', date: new Date(startTimestamp + cumMs) },
+          trigger: { type: 'timeInterval', seconds: delaySec, repeats: false },
         });
       }
-      const totalMs = segments.reduce((s, sg) => s + sg.duration * 1000, 0);
+      const totalSec = Math.round(segments.reduce((s, sg) => s + sg.duration, 0));
       await Notifications.scheduleNotificationAsync({
-        content: { title: 'Run Complete', body: '', sound: 'RunComplete.m4a' },
-        trigger: { type: 'date', date: new Date(startTimestamp + totalMs) },
+        content: { title: 'Run Complete', body: 'Great work — run saved.', sound: 'RunComplete.m4a' },
+        trigger: { type: 'timeInterval', seconds: totalSec, repeats: false },
       });
     } catch (e) {
       console.warn('[RunTracker] Notification scheduling failed:', e.message);
