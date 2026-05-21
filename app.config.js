@@ -24,14 +24,11 @@ export default {
           'GritOS uses GPS to track your runs and measure distance and pace.',
         NSMotionUsageDescription:
           'GritOS uses motion data to track your workouts and improve accuracy.',
-        UIBackgroundModes: ['location', 'audio'],
+        UIBackgroundModes: ['location'],
         BGTaskSchedulerPermittedIdentifiers: ['com.gritos.app.refresh'],
       },
       config: {
         usesNonExemptEncryption: false,
-      },
-      entitlements: {
-        'com.apple.developer.in-app-payments': [],
       },
     },
     android: {

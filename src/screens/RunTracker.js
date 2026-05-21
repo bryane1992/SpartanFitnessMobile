@@ -286,7 +286,6 @@ export default function RunTracker({ route, navigation }) {
   useEffect(() => {
     Audio.setAudioModeAsync({
       playsInSilentModeIOS: true,
-      staysActiveInBackground: true,
       shouldDuckAndroid: true,
       interruptionModeIOS: 1,
     }).catch(() => {});
