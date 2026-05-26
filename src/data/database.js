@@ -1021,6 +1021,21 @@ export async function swapWodOnDate(date, newWodId) {
   return swapWodBlock(block.id, newWodId);
 }
 
+export async function clearWarmupOnDate(date) {
+  const database = await getDatabase();
+  await database.runAsync(
+    `DELETE FROM plan_exercises WHERE plan_block_id IN (
+       SELECT pb.id FROM plan_blocks pb
+       JOIN plan_days pd ON pd.id = pb.plan_day_id
+       WHERE pd.date = ?
+         AND (LOWER(pb.name) LIKE '%warm%' OR LOWER(pb.name) LIKE '%movement%'
+              OR LOWER(pb.name) LIKE '%activation%' OR LOWER(pb.name) LIKE '%prep%')
+     )`,
+    [date]
+  );
+  return true;
+}
+
 export async function clearStrengthOnDate(date) {
   const database = await getDatabase();
   // Delete exercises from all non-warmup, non-WOD, non-cooldown blocks on this date

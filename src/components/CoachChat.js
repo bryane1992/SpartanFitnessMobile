@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendCoachMessage } from '../data/coachApi';
-import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, adjustFutureWeights, getPlanRationales, getWodsFromDb, swapWodBlock, restoreWodBlock, deleteLatestInjury, swapWorkoutDays, clearAllInjuries, getWorkoutForDate, addExerciseToBlock, getRecentActualWeights, getFullPlanContext, getWodByName, swapWodOnDate, addExerciseOnDate, removeWodOnDate, clearStrengthOnDate } from '../data/database';
+import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, adjustFutureWeights, getPlanRationales, getWodsFromDb, swapWodBlock, restoreWodBlock, deleteLatestInjury, swapWorkoutDays, clearAllInjuries, getWorkoutForDate, addExerciseToBlock, getRecentActualWeights, getFullPlanContext, getWodByName, swapWodOnDate, addExerciseOnDate, removeWodOnDate, clearStrengthOnDate, clearWarmupOnDate } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 import { buildExerciseMenu } from '../core/menuBuilder';
 import { detectArchetype, adjustArchetypeForEquipment } from '../core/archetypes';
@@ -364,6 +364,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         'swapwodondate': 'swapWodOnDate', 'swap_wod_on_date': 'swapWodOnDate',
         'removewodondate': 'removeWodOnDate', 'remove_wod_on_date': 'removeWodOnDate',
         'clearstrengthondate': 'clearStrengthOnDate', 'clear_strength_on_date': 'clearStrengthOnDate',
+        'clearwarmupondate': 'clearWarmupOnDate', 'clear_warmup_on_date': 'clearWarmupOnDate',
         'addexerciseondate': 'addExerciseOnDate', 'add_exercise_on_date': 'addExerciseOnDate',
         'swapday': 'swapDay', 'swap_day': 'swapDay',
         'clearinjuries': 'clearInjuries', 'clear_injuries': 'clearInjuries',
@@ -509,6 +510,13 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
           case 'clearStrengthOnDate': {
             if (action.date) {
               await clearStrengthOnDate(action.date);
+              await store.loadTodayWorkout();
+            }
+            break;
+          }
+          case 'clearWarmupOnDate': {
+            if (action.date) {
+              await clearWarmupOnDate(action.date);
               await store.loadTodayWorkout();
             }
             break;

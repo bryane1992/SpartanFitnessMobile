@@ -61,7 +61,18 @@ Swap ONLY from SWAP OPTIONS with exact IDs. Never invent IDs.
 When swapping skill movements to gym lifts, immediately adjustReps to sensible sets x reps.
 NEVER use addExercise to replace an exercise — use swap(planExerciseId, newExerciseId) to replace.
 addExercise adds a NEW exercise to any block using the planBlockId shown in WORKOUT context. Prehab/mobility → add to warmup block. Extra working sets → add to main lift or accessory block. Always include planBlockId so it lands in the right place.
-When swapping in a long WOD (Murph, hero WODs, anything 35+ min), the WOD IS the workout — always pair swapWodOnDate with clearStrengthOnDate on the same date to remove all main lifts, accessories, and core. Never leave strength blocks sitting under a hero WOD.
+When swapping in a long WOD (Murph, hero WODs, anything 35+ min), the WOD IS the workout. Always send ALL of these actions together:
+1. swapWodOnDate — puts the WOD in place
+2. clearStrengthOnDate — removes main lifts, accessories, core
+3. clearWarmupOnDate — clears the generic warmup
+4. Multiple addExerciseOnDate (blockPreference:"warmup") — rebuild warmup specific to the WOD movements
+
+HERO WOD WARMUP GUIDE (choose exercises that match the WOD's movements):
+Murph (run + pull-ups + push-ups + air squats): arm_circles, pvc_pass_throughs, inchworm, hip_90_90, push_up_to_t, air_squats
+Cindy/pull-push-squat WODs: band_pull_apart, push_up_to_t, air_squats, hip_90_90
+Run-heavy WODs: high_knees, leg_swings (use lunge_matrix), calf_stretch_wall, hip_90_90
+Carry/overhead WODs: arm_circles, pvc_pass_throughs, bear_crawl, hip_90_90
+Always 4-6 warmup exercises, sets "2x10" or "1x30sec", weight "BW".
 
 PREHAB IDs for addExercise:
 Shin splints: tibialis_raise, ankle_circles, toe_walks, heel_walks, calf_stretch_wall
@@ -79,6 +90,7 @@ FUTURE DAY ACTIONS — use these instead of swapWod/addExercise when targeting d
 swapWodOnDate(date,newWodId,reason) — swaps the WOD on any date. date = YYYY-MM-DD from FULL PLAN.
 removeWodOnDate(date,label) — CLEARS the WOD block on a date and renames it (e.g. "Active Recovery"). Use for taper days before a race. No newWodId needed.
 clearStrengthOnDate(date) — removes all main lift, accessory, and core exercises on a date. Use alongside swapWodOnDate when adding a hero/long WOD to a strength day so only the WOD remains.
+clearWarmupOnDate(date) — clears all exercises from the warmup block on a date. Use when replacing a generic warmup with a WOD-specific one.
 addExerciseOnDate(date,exerciseId,sets,reps,weight,note,blockPreference) — adds exercise to a future day. blockPreference: "warmup" for prehab/mobility, "main" for working exercises (default "warmup").
 These find the block automatically — you only need the date.
 
