@@ -993,15 +993,52 @@ export async function upgradeExercisesForNewEquipment(addedEquipment, exerciseSw
 // Swap WOD on a specific date — Charlie uses this for future days where he doesn't have planBlockId
 export async function swapWodOnDate(date, newWodId) {
   const database = await getDatabase();
-  const block = await database.getFirstAsync(
+  let block = await database.getFirstAsync(
     `SELECT pb.id FROM plan_blocks pb
      JOIN plan_days pd ON pd.id = pb.plan_day_id
      WHERE pd.date = ? AND pb.is_amrap = 1
      ORDER BY pb.sort_order LIMIT 1`,
     [date]
   );
-  if (!block) return false;
+  if (!block) {
+    // No WOD block on this day — create one after the warmup block
+    const day = await database.getFirstAsync(
+      `SELECT pd.id FROM plan_days pd WHERE pd.date = ? LIMIT 1`, [date]
+    );
+    if (!day) return false;
+    // Pick sort_order after existing blocks
+    const maxOrder = await database.getFirstAsync(
+      `SELECT MAX(sort_order) as maxOrd FROM plan_blocks WHERE plan_day_id = ?`, [day.id]
+    );
+    const sortOrder = (maxOrder?.maxOrd ?? 0) + 1;
+    const result = await database.runAsync(
+      `INSERT INTO plan_blocks (plan_day_id, name, type, sort_order, is_amrap, has_gps)
+       VALUES (?, 'WOD', 'CIRCUIT', ?, 1, 0)`,
+      [day.id, sortOrder]
+    );
+    block = { id: result.lastInsertRowId };
+  }
   return swapWodBlock(block.id, newWodId);
+}
+
+export async function clearStrengthOnDate(date) {
+  const database = await getDatabase();
+  // Delete exercises from all non-warmup, non-WOD, non-cooldown blocks on this date
+  await database.runAsync(
+    `DELETE FROM plan_exercises WHERE plan_block_id IN (
+       SELECT pb.id FROM plan_blocks pb
+       JOIN plan_days pd ON pd.id = pb.plan_day_id
+       WHERE pd.date = ?
+         AND pb.is_amrap = 0
+         AND LOWER(pb.name) NOT LIKE '%warm%'
+         AND LOWER(pb.name) NOT LIKE '%cool%'
+         AND LOWER(pb.name) NOT LIKE '%stretch%'
+         AND LOWER(pb.name) NOT LIKE '%mobility%'
+         AND LOWER(pb.name) NOT LIKE '%active recovery%'
+     )`,
+    [date]
+  );
+  return true;
 }
 
 export async function removeWodOnDate(date, label) {
