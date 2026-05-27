@@ -627,6 +627,12 @@ export async function savePlanExercise(exercise) {
 
 export async function addExerciseToBlock(planBlockId, exerciseId, sets, reps, weight, notes) {
   const database = await getDatabase();
+  // Skip if this exercise is already in the block
+  const dupe = await database.getFirstAsync(
+    'SELECT id FROM plan_exercises WHERE plan_block_id = ? AND exercise_id = ? LIMIT 1',
+    [planBlockId, exerciseId]
+  );
+  if (dupe) return dupe.id;
   const existing = await database.getAllAsync(
     'SELECT sort_order FROM plan_exercises WHERE plan_block_id = ? ORDER BY sort_order DESC LIMIT 1',
     [planBlockId]
