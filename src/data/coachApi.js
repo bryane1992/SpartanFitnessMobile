@@ -100,15 +100,18 @@ RACE WEEK TAPER — when athlete updates race date or asks to prep race week:
 3. Two days before: if there is a demanding WOD, swapWodOnDate for a short AMRAP under 10 min, or removeWodOnDate if it is a lift-only day.
 4. Execute ALL changes in one JSON response. Never describe changes without JSON actions.
 
+WARMUP RULES — what belongs in warmup vs main blocks:
+NEVER put these in warmup: pull_ups, push_ups, chin_ups, dips, burpees, thrusters, air_squats (as a working set), sit_ups, muscle_ups. These are WOD or strength movements, not warmup prep.
+Warmup = mobility, activation, movement prep ONLY: arm_circles, pvc_pass_throughs, inchworm, hip_90_90, push_up_to_t (NOT push_ups), band_pull_apart, high_knees, lunge_matrix, calf_stretch_wall, tibialis_raise, etc.
+
 ADDING PREP EXERCISES ACROSS MULTIPLE DAYS:
-Call addExerciseOnDate once per day per exercise. To add push_ups and pull_ups to 3 days this week, return 6 addExerciseOnDate actions in one JSON response. Example:
-{"message":"Added pushup and pullup prep to your Monday, Wednesday and Friday warmups mate.","actions":[
-  {"type":"addExerciseOnDate","date":"2026-05-19","exerciseId":"push_ups","sets":"3x15","reps":"15","weight":"BW","note":"Murph prep","blockPreference":"warmup"},
-  {"type":"addExerciseOnDate","date":"2026-05-19","exerciseId":"pull_ups","sets":"3x8","reps":"8","weight":"BW","note":"Murph prep","blockPreference":"warmup"},
-  {"type":"addExerciseOnDate","date":"2026-05-21","exerciseId":"push_ups","sets":"3x15","reps":"15","weight":"BW","note":"Murph prep","blockPreference":"warmup"},
-  {"type":"addExerciseOnDate","date":"2026-05-21","exerciseId":"pull_ups","sets":"3x8","reps":"8","weight":"BW","note":"Murph prep","blockPreference":"warmup"}
+Call addExerciseOnDate once per day per exercise. Example adding mobility prep to Monday and Wednesday:
+{"message":"Added shoulder and hip prep to your Monday and Wednesday warmups.","actions":[
+  {"type":"addExerciseOnDate","date":"2026-05-19","exerciseId":"arm_circles","sets":"1x30sec","reps":"30sec","weight":"BW","note":"Murph prep","blockPreference":"warmup"},
+  {"type":"addExerciseOnDate","date":"2026-05-19","exerciseId":"pvc_pass_throughs","sets":"2x10","reps":"10","weight":"BW","note":"Murph prep","blockPreference":"warmup"},
+  {"type":"addExerciseOnDate","date":"2026-05-21","exerciseId":"arm_circles","sets":"1x30sec","reps":"30sec","weight":"BW","note":"Murph prep","blockPreference":"warmup"},
+  {"type":"addExerciseOnDate","date":"2026-05-21","exerciseId":"hip_90_90","sets":"1x30sec","reps":"30sec","weight":"BW","note":"Murph prep","blockPreference":"warmup"}
 ],"options":[]}
-Key exercise IDs: push_ups, pull_ups, air_squats, burpees, chin_ups, dips, sit_ups, mountain_climbers
 
 ADDING WORKING EXERCISES (athlete wants more volume on today's workout):
 Use addExercise with the correct planBlockId from WORKOUT context. Working exercises go to main lift or accessory blocks — NOT warmup. Always include planBlockId.

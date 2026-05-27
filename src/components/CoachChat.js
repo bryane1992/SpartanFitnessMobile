@@ -527,8 +527,10 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
               const rawReps = action.reps ? String(action.reps) : '15';
               const formattedSets = rawSets && /^\d+$/.test(rawSets) ? `${rawSets}x${rawReps}` : (rawSets || `2x${rawReps}`);
               // Detect block preference from exercise type or explicit action field
-              const isPrehabEx = /stretch|raise|circle|walk|angel|rotation|pass_through|cat_cow|child_pose|cobra|dead_bug|cossack|terminal|banded|90_90|ankle|shin|calf|inchworm|samson|bear_crawl|high_knee|a_skip|lunge_matrix|pvc|hip_flex|glute_bridge|air_squat|push_up_to_t|arm_swing|leg_swing|hip_circle|knee_circle/i.test(action.exerciseId || '');
-              const blockPref = action.blockPreference || (isPrehabEx ? 'warmup' : 'main');
+              const isPrehabEx = /stretch|raise|circle|walk|angel|rotation|pass_through|cat_cow|child_pose|cobra|dead_bug|cossack|terminal|banded|90_90|ankle|shin|calf|inchworm|samson|bear_crawl|high_knee|a_skip|lunge_matrix|pvc|hip_flex|glute_bridge|push_up_to_t|arm_swing|leg_swing|hip_circle|knee_circle/i.test(action.exerciseId || '');
+              // WOD/strength movements that must never land in warmup regardless of what Charlie sends
+              const isWodMovement = /^(pull_ups?|push_ups?|chin_ups?|dips?|burpees?|thrusters?|muscle_ups?|sit_ups?|box_jumps?|double_unders?)$/i.test(action.exerciseId || '');
+              const blockPref = isWodMovement ? 'main' : (action.blockPreference || (isPrehabEx ? 'warmup' : 'main'));
               await addExerciseOnDate(action.date, action.exerciseId, formattedSets, rawReps, action.weight, action.note, blockPref);
               await store.loadTodayWorkout();
             }
