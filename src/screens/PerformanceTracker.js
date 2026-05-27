@@ -522,26 +522,48 @@ export default function PerformanceTracker() {
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>RECENT IN-PLAN WODS</Text>
                 {[...wodProgression].reverse().slice(0, 8).map((entry, i) => {
-                  const isForTime = /^\d+\s*rounds?/i.test(entry.time_cap || '');
-                  const fmtSecs = (s) => { const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; };
-                  const scoreStr = isForTime && entry.wod_elapsed
-                    ? `${entry.amrap_rounds} rounds in ${fmtSecs(entry.wod_elapsed)}`
-                    : entry.amrap_rounds
-                      ? `${entry.amrap_rounds} rounds`
-                      : '';
+                  const fmtSecs = (s) => { if (!s || s <= 0) return '--'; const h = Math.floor(s/3600); const m = Math.floor((s%3600)/60); const sec = s%60; return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`; };
+                  const wodType = String(entry.wod_type || entry.time_cap || '');
+                  const isForTime = /for.?time|chipper|couplet|triplet/i.test(wodType) || (!entry.amrap_rounds && entry.wod_elapsed > 0);
+                  const isAmrap = /amrap|emom/i.test(wodType);
+                  let scoreStr = '';
+                  if (entry.wod_elapsed > 0 && isForTime) {
+                    scoreStr = fmtSecs(entry.wod_elapsed);
+                  } else if (entry.amrap_rounds) {
+                    scoreStr = entry.wod_elapsed > 0
+                      ? `${entry.amrap_rounds} rds + ${fmtSecs(entry.wod_elapsed)}`
+                      : `${entry.amrap_rounds} rounds`;
+                  }
+                  const typeLabel = isForTime ? 'FOR TIME' : isAmrap ? 'AMRAP' : 'WOD';
+                  const [expanded, setExpanded] = React.useState(false);
                   return (
-                    <View key={i} style={styles.wodScoreRow}>
-                      <View style={[styles.accentBar, { backgroundColor: '#01FF70' }]} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.wodScoreName}>{String(entry.wod_name || 'WOD')}</Text>
-                        <Text style={styles.wodScoreDate}>{String(entry.date || '')}</Text>
+                    <TouchableOpacity key={i} onPress={() => setExpanded(e => !e)} activeOpacity={0.75}>
+                      <View style={styles.wodScoreRow}>
+                        <View style={[styles.accentBar, { backgroundColor: '#01FF70' }]} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.wodScoreName}>{String(entry.wod_name || 'WOD').replace(/^WOD:\s*/i, '')}</Text>
+                          <Text style={styles.wodScoreDate}>{String(entry.date || '')} · W{entry.week_number} {String(entry.phase || '').replace('_', ' ')}</Text>
+                        </View>
+                        <View style={styles.wodScoreBox}>
+                          <Text style={[styles.wodScoreVal, !scoreStr && { color: 'rgba(255,255,255,0.3)' }]}>{scoreStr || 'No score'}</Text>
+                          <Text style={styles.wodScoreType}>{typeLabel}</Text>
+                        </View>
                       </View>
-                      <View style={styles.wodScoreBox}>
-                        <Text style={styles.wodScoreVal}>{scoreStr}</Text>
-                        <Text style={styles.wodScoreType}>{isForTime ? 'FOR TIME' : 'AMRAP'}</Text>
-                        {entry.exercise_weights ? <Text style={[styles.wodScoreType, { color: 'rgba(255,255,255,0.3)', marginTop: 2 }]}>{String(entry.exercise_weights)}</Text> : null}
-                      </View>
-                    </View>
+                      {expanded ? (
+                        <View style={{ paddingLeft: 20, paddingBottom: 10, paddingRight: 12 }}>
+                          {entry.movements ? (
+                            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, lineHeight: 17, fontFamily: 'monospace' }}>
+                              {String(entry.movements)}
+                            </Text>
+                          ) : null}
+                          {entry.exercise_weights ? (
+                            <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, marginTop: 4, fontFamily: 'monospace' }}>
+                              {String(entry.exercise_weights)}
+                            </Text>
+                          ) : null}
+                        </View>
+                      ) : null}
+                    </TouchableOpacity>
                   );
                 })}
               </View>

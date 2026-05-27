@@ -1472,7 +1472,7 @@ export async function getWeeklyProgress() {
 export async function getWodProgression() {
   const database = await getDatabase();
   return database.getAllAsync(
-    `SELECT pb.name as wod_name, pb.amrap_rounds, pb.time_cap, pb.wod_elapsed,
+    `SELECT pb.name as wod_name, pb.type as wod_type, pb.amrap_rounds, pb.time_cap, pb.wod_elapsed,
             pd.week_number, pd.date, pd.phase,
             (SELECT GROUP_CONCAT(
                COALESCE(e.name, pe.exercise_id) || ' @ ' || COALESCE(pe.actual_weight, pe.weight),
@@ -1483,13 +1483,20 @@ export async function getWodProgression() {
                AND (pe.actual_weight IS NOT NULL OR pe.weight IS NOT NULL)
                AND COALESCE(pe.actual_weight, pe.weight) != 'BW'
                AND (e.category IS NULL OR e.category != 'cardio')
-            ) as exercise_weights
+            ) as exercise_weights,
+            (SELECT GROUP_CONCAT(COALESCE(e.name, pe.exercise_id) || ' × ' || pe.reps, ', ')
+             FROM plan_exercises pe
+             LEFT JOIN exercises e ON e.id = pe.exercise_id
+             WHERE pe.plan_block_id = pb.id
+            ) as movements
      FROM plan_blocks pb
      JOIN plan_days pd ON pd.id = pb.plan_day_id
      WHERE pb.is_amrap = 1
-       AND pb.amrap_rounds IS NOT NULL
-       AND pb.amrap_rounds != ''
        AND pd.is_completed = 1
+       AND (
+         (pb.amrap_rounds IS NOT NULL AND pb.amrap_rounds != '')
+         OR (pb.wod_elapsed IS NOT NULL AND pb.wod_elapsed > 0)
+       )
      ORDER BY pd.date ASC`
   );
 }

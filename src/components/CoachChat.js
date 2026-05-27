@@ -466,7 +466,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
             let blockId = parseInt(action.planBlockId) || action.planBlockId;
             if (!blockId && workout?.blocks) {
               // For prehab/mobility exercises default to warmup; for working exercises prefer accessories then main lifts
-              const isPrehabExercise = /stretch|raise|circle|walk|angel|rotation|pass_through|cat_cow|child_pose|cobra|dead_bug|cossack|terminal|banded|90_90|ankle|shin|calf/i.test(action.exerciseId || '');
+              const isPrehabExercise = /stretch|raise|circle|walk|angel|rotation|pass_through|cat_cow|child_pose|cobra|dead_bug|cossack|terminal|banded|90_90|ankle|shin|calf|inchworm|samson|bear_crawl|high_knee|a_skip|lunge_matrix|pvc|hip_flex|glute_bridge|air_squat|push_up_to_t|arm_swing|leg_swing|hip_circle|knee_circle/i.test(action.exerciseId || '');
               if (isPrehabExercise) {
                 const warmupBlock = workout.blocks.find(b => /warm.?up|movement.?prep/i.test(b.name || ''));
                 if (warmupBlock) blockId = warmupBlock.id;
@@ -527,7 +527,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
               const rawReps = action.reps ? String(action.reps) : '15';
               const formattedSets = rawSets && /^\d+$/.test(rawSets) ? `${rawSets}x${rawReps}` : (rawSets || `2x${rawReps}`);
               // Detect block preference from exercise type or explicit action field
-              const isPrehabEx = /stretch|raise|circle|walk|angel|rotation|pass_through|cat_cow|child_pose|cobra|dead_bug|cossack|terminal|banded|90_90|ankle|shin|calf/i.test(action.exerciseId || '');
+              const isPrehabEx = /stretch|raise|circle|walk|angel|rotation|pass_through|cat_cow|child_pose|cobra|dead_bug|cossack|terminal|banded|90_90|ankle|shin|calf|inchworm|samson|bear_crawl|high_knee|a_skip|lunge_matrix|pvc|hip_flex|glute_bridge|air_squat|push_up_to_t|arm_swing|leg_swing|hip_circle|knee_circle/i.test(action.exerciseId || '');
               const blockPref = action.blockPreference || (isPrehabEx ? 'warmup' : 'main');
               await addExerciseOnDate(action.date, action.exerciseId, formattedSets, rawReps, action.weight, action.note, blockPref);
               await store.loadTodayWorkout();

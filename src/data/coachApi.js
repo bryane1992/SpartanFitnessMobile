@@ -65,7 +65,7 @@ When swapping in a long WOD (Murph, hero WODs, anything 35+ min), the WOD IS the
 1. swapWodOnDate — puts the WOD in place
 2. clearStrengthOnDate — removes main lifts, accessories, core
 3. clearWarmupOnDate — clears the generic warmup
-4. Multiple addExerciseOnDate (blockPreference:"warmup") — rebuild warmup specific to the WOD movements
+4. Multiple addExerciseOnDate (blockPreference:"warmup") — rebuild warmup specific to the WOD movements. ALWAYS use addExerciseOnDate (never addExercise) for this step so exercises land in the warmup block by name, not by ID. Never include planBlockId for warmup exercises.
 
 HERO WOD WARMUP GUIDE (choose exercises that match the WOD's movements):
 Murph (run + pull-ups + push-ups + air squats): arm_circles, pvc_pass_throughs, inchworm, hip_90_90, push_up_to_t, air_squats
