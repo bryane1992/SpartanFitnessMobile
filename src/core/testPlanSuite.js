@@ -10,12 +10,13 @@ import { TEST_PROFILES, getTestProfile } from './testProfiles';
 import { sendCoachMessage } from '../data/coachApi';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// 4 key profiles covering the main archetypes
+// 5 key profiles covering the main archetypes + short-plan regression
 const SUITE_PROFILES = [
   'beginner_female_fat_loss',   // overweight_beginner — upper/lower, finishers, no WODs
   'spartan_intermediate',       // obstacle_racer — sport-specific, WODs, runs
   'bodybuilder_male',           // hypertrophy — PPL 6-day, no conditioning
   'beginner_male_dumbbells',    // general_fitness — full body 3-day, DB-only
+  'short_5week_race',           // short plan regression — peak weights must not exceed working × 1.15
 ];
 
 // Coach test scenarios — dynamically built from today's actual workout exercises
@@ -113,6 +114,35 @@ export async function runPlanSuite(onLog, onStatus) {
          JOIN plan_blocks pb ON pb.id = pe.plan_block_id JOIN plan_days pd ON pd.id = pb.plan_day_id
          WHERE pd.plan_id = ?`, [result.planId]);
       output.push(`Training: ${stats.trainingDays} days | Deloads: ${stats.deloadDays} | Exercises: ${exCount.cnt}`);
+
+      // Plan Validator — 11 structural checks (deterministic, no API call)
+      output.push('\n--- PLAN VALIDATOR ---\n');
+      try {
+        const { validatePlan } = require('./planValidator');
+        const validatorPlanDays = await db.getAllAsync('SELECT * FROM plan_days WHERE plan_id = ? ORDER BY date', [result.planId]);
+        for (const day of validatorPlanDays) {
+          day.blocks = await db.getAllAsync('SELECT * FROM plan_blocks WHERE plan_day_id = ? ORDER BY sort_order', [day.id]);
+          for (const block of day.blocks) {
+            block.exercises = await db.getAllAsync(
+              'SELECT pe.*, COALESCE(e.name, pe.exercise_id) as name FROM plan_exercises pe LEFT JOIN exercises e ON e.id = pe.exercise_id WHERE pe.plan_block_id = ? ORDER BY pe.sort_order',
+              [block.id]
+            );
+          }
+        }
+        const validatorResult = validatePlan(validatorPlanDays, profile);
+        const validatorIssues = (validatorResult?.issues || []);
+        if (validatorIssues.length === 0) {
+          output.push('Validator: PASS (all 11 checks)');
+          log(`  Validator: PASS`);
+        } else {
+          output.push(`Validator: ${validatorIssues.length} issue(s):`);
+          for (const issue of validatorIssues) output.push(`  - ${issue}`);
+          log(`  Validator: ${validatorIssues.length} issues — ${validatorIssues[0]}`);
+        }
+      } catch (ve) {
+        output.push(`Validator: ERROR — ${ve.message}`);
+        log(`  Validator error: ${ve.message}`);
+      }
 
       // AI Review
       output.push('\n--- AI REVIEW ---\n');

@@ -130,6 +130,44 @@ export async function testShortPlans(onLog, onStatus) {
       planResult.checks.push({ name: 'Week 1 rep scheme', pass: repMatch, detail: `${setsStr} (phase: ${week1Phase}, expect x${expectedReps[week1Phase] || '10'})` });
       log(`  [${repMatch ? 'PASS' : 'FAIL'}] Week 1 reps: ${setsStr} (phase ${week1Phase} → expect x${expectedReps[week1Phase] || '10'})`);
 
+      // ── CHECK 7: Peak phase weight bounds (regression guard for 90%→85% fix) ──
+      // Peak compound weights should be ≤ user's working weight × 1.12
+      // Old formula (90% intensity) gave ×1.17 — new (85%) gives ×1.105
+      const peakPhase = result.phases.find(p => p.phase === 'peak');
+      if (peakPhase && Object.keys(profile.workingWeights || {}).length > 0) {
+        const maxWorkingWeight = Math.max(...Object.values(profile.workingWeights).map(parseFloat).filter(v => !isNaN(v)));
+        const BENCH_EXERCISE_IDS = ['bench_press', 'barbell_bench_press', 'flat_barbell_bench', 'incline_bench_press'];
+        const peakCompounds = await db.getAllAsync(
+          `SELECT pe.exercise_id, CAST(pe.weight AS REAL) as w, pd.week_number
+           FROM plan_exercises pe
+           JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+           JOIN plan_days pd ON pd.id = pb.plan_day_id
+           WHERE pd.plan_id = ? AND pd.phase = 'peak' AND pb.type = 'COMPOUND'
+             AND pe.weight GLOB '[0-9]*' AND CAST(pe.weight AS REAL) > 0`,
+          [result.planId]
+        );
+        const overweightExercises = peakCompounds.filter(ex => ex.w > maxWorkingWeight * 1.15);
+        const weightBoundCheck = overweightExercises.length === 0;
+        const maxFound = peakCompounds.length > 0 ? Math.max(...peakCompounds.map(e => e.w)) : 0;
+        planResult.checks.push({ name: 'Peak weight bounds', pass: weightBoundCheck, detail: `max ${maxFound} lb vs working ${maxWorkingWeight} lb (limit ×1.15 = ${Math.round(maxWorkingWeight * 1.15)} lb)` });
+        log(`  [${weightBoundCheck ? 'PASS' : 'FAIL'}] Peak weight bounds: max ${maxFound} lb (working ${maxWorkingWeight} lb, limit ${Math.round(maxWorkingWeight * 1.15)} lb)${!weightBoundCheck ? ` — ${overweightExercises.slice(0, 2).map(e => `${e.exercise_id} ${e.w}`).join(', ')}` : ''}`);
+      }
+
+      // ── CHECK 8: Warmup cleanliness — no strength exercises in warmup blocks ──
+      const STRENGTH_IN_WARMUP = ['pull_ups', 'chin_ups', 'push_ups', 'dips', 'burpees', 'thrusters', 'muscle_ups', 'sit_ups', 'box_jumps'];
+      const warmupStrengthExes = await db.getAllAsync(
+        `SELECT pe.exercise_id FROM plan_exercises pe
+         JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+         JOIN plan_days pd ON pd.id = pb.plan_day_id
+         WHERE pd.plan_id = ?
+           AND (LOWER(pb.name) LIKE '%warm%' OR LOWER(pb.name) LIKE '%movement%' OR LOWER(pb.name) LIKE '%prep%')
+           AND pe.exercise_id IN ('${STRENGTH_IN_WARMUP.join("','")}')`,
+        [result.planId]
+      );
+      const warmupCheck = warmupStrengthExes.length === 0;
+      planResult.checks.push({ name: 'Warmup cleanliness', pass: warmupCheck, detail: warmupStrengthExes.length === 0 ? 'clean' : warmupStrengthExes.map(e => e.exercise_id).join(', ') });
+      log(`  [${warmupCheck ? 'PASS' : 'FAIL'}] Warmup cleanliness: ${warmupCheck ? 'no strength exercises in warmup' : `found: ${warmupStrengthExes.map(e => e.exercise_id).join(', ')}`}`);
+
       // Score
       const passed = planResult.checks.filter(c => c.pass).length;
       const failed = planResult.checks.filter(c => !c.pass).length;

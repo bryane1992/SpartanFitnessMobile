@@ -227,12 +227,50 @@ export async function testAutoregulation(onLog) {
   log('Reset test exercises to uncompleted');
   log('NOTE: Adjusted weights remain — regenerate plan to fully reset');
 
+  // ═══════════════════════════════════════════════
+  // TEST 3: Today-inclusion — adjustFutureWeights must update same-day exercises
+  // Regression test for the >= vs > date filter bug
+  // ═══════════════════════════════════════════════
+  log(`\n=== TEST 3: TODAY-INCLUSION ===`);
+  let todayInclusionPass = false;
+  try {
+    // Find any uncompleted exercise with a numeric weight
+    const todayTarget = await db.getFirstAsync(
+      `SELECT pe.id, pe.exercise_id, pe.weight, pd.date
+       FROM plan_exercises pe
+       JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+       JOIN plan_days pd ON pd.id = pb.plan_day_id
+       WHERE pd.plan_id = ? AND pe.is_completed = 0 AND pe.weight GLOB '[0-9]*'
+       ORDER BY pd.date LIMIT 1`,
+      [planId]
+    );
+    if (todayTarget) {
+      const originalWeight = todayTarget.weight;
+      log(`Target: ${todayTarget.exercise_id} on ${todayTarget.date} @ ${originalWeight}`);
+      // Run with todayTarget.date as "today" — exercise should be included via >=
+      await adjustFutureWeights(todayTarget.exercise_id, 1.10, todayTarget.date);
+      const afterToday = await db.getFirstAsync(
+        'SELECT weight FROM plan_exercises WHERE id = ?', [todayTarget.id]
+      );
+      todayInclusionPass = afterToday?.weight !== originalWeight;
+      log(`  Before: ${originalWeight} → After: ${afterToday?.weight}`);
+      log(`  [${todayInclusionPass ? 'PASS' : 'FAIL'}] Same-day exercise was ${todayInclusionPass ? '' : 'NOT '}updated`);
+      // Restore original weight
+      await db.runAsync('UPDATE plan_exercises SET weight = ? WHERE id = ?', [originalWeight, todayTarget.id]);
+    } else {
+      log('  SKIP: no uncompleted exercises with numeric weights');
+    }
+  } catch (e) {
+    log(`  ERROR: ${e.message}`);
+  }
+
   // Summary
-  const totalTests = verified + failures + (lowerTestResult !== null ? 1 : 0);
-  const passed = verified + (lowerTestResult ? 1 : 0);
+  const totalTests = verified + failures + (lowerTestResult !== null ? 1 : 0) + 1;
+  const passed = verified + (lowerTestResult ? 1 : 0) + (todayInclusionPass ? 1 : 0);
   log(`\n=== RESULTS ===`);
   log(`Higher weight test: ${verified} verified, ${failures} failures`);
   log(`Lower weight test: ${lowerTestResult === null ? 'skipped' : lowerTestResult ? 'PASS' : 'FAIL'}`);
+  log(`Today-inclusion test: ${todayInclusionPass ? 'PASS' : 'FAIL'}`);
   log(`Total: ${passed}/${totalTests} passed`);
   log(adjustedCount > 0 ? 'Autoregulation is WORKING' : 'WARNING: No adjustments made');
 

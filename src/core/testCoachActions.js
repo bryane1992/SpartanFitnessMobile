@@ -333,6 +333,32 @@ export async function testCoachActions(onLog) {
   }
 
   // ═══════════════════════════════════════════════
+  // TEST 8: addExerciseToBlock dedup — same exercise added twice = one row
+  // Regression guard for duplicate prehab bug
+  // ═══════════════════════════════════════════════
+  log('\n=== TEST 8: ADD EXERCISE DEDUP ===');
+  const { addExerciseToBlock } = require('../data/database');
+  const warmupBlock = blocks.find(b => /warm.?up|movement.?prep|activation/i.test(b.name || ''));
+  if (warmupBlock) {
+    const testExerciseId = 'tibialis_raise'; // exercise we had the duplicate bug with
+    // Remove any existing instance first so test is clean
+    await db.runAsync('DELETE FROM plan_exercises WHERE plan_block_id = ? AND exercise_id = ?', [warmupBlock.id, testExerciseId]);
+    // Add twice
+    const id1 = await addExerciseToBlock(warmupBlock.id, testExerciseId, '2x15', '15', 'BW', null);
+    const id2 = await addExerciseToBlock(warmupBlock.id, testExerciseId, '2x15', '15', 'BW', null);
+    const rows = await db.getAllAsync('SELECT id FROM plan_exercises WHERE plan_block_id = ? AND exercise_id = ?', [warmupBlock.id, testExerciseId]);
+    const dedupPass = rows.length === 1 && id1 === id2;
+    log(`  Added twice → ${rows.length} row(s) in DB, ids: ${id1}, ${id2}`);
+    log(`  [${dedupPass ? 'PASS' : 'FAIL'}] Dedup: ${dedupPass ? 'second add returned same id, no duplicate' : 'DUPLICATE CREATED'}`);
+    // Cleanup
+    await db.runAsync('DELETE FROM plan_exercises WHERE plan_block_id = ? AND exercise_id = ?', [warmupBlock.id, testExerciseId]);
+    if (dedupPass) results.passed++; else results.failed++;
+  } else {
+    log('  Skipped — no warmup block found on test day');
+    results.skipped++;
+  }
+
+  // ═══════════════════════════════════════════════
   // SUMMARY
   // ═══════════════════════════════════════════════
   const total = results.passed + results.failed;
