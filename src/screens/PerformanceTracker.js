@@ -405,7 +405,7 @@ export default function PerformanceTracker() {
                         <Text style={styles.runDate}>{String(run.date || '')}</Text>
                       </View>
                       <View style={styles.runStats}>
-                        <Text style={styles.runStatVal}>{`${run.total_distance.toFixed(2)} mi`}</Text>
+                        <Text style={styles.runStatVal}>{`${parseFloat(run.total_distance || 0).toFixed(2)} mi`}</Text>
                         <Text style={styles.runStatSub}>{formatTime(run.total_time)}</Text>
                       </View>
                       <View style={styles.runPace}>

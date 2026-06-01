@@ -104,9 +104,17 @@ export default function Settings({ navigation }) {
   const loadProfile = async () => {
     try {
       const str = await AsyncStorage.getItem('userProfile');
-      if (str) setProfile(JSON.parse(str));
+      if (str) {
+        try {
+          setProfile(JSON.parse(str));
+        } catch (parseErr) {
+          console.error('Error parsing userProfile JSON:', parseErr);
+          setProfile(null);
+        }
+      }
     } catch (e) {
       console.error('Error loading profile:', e);
+      setProfile(null);
     }
   };
 
@@ -650,7 +658,8 @@ export default function Settings({ navigation }) {
               const db = await getDb();
               const profileStr = await AsyncStorage.getItem('userProfile');
               if (!profileStr) { Alert.alert('No Profile', 'Complete onboarding first.'); return; }
-              const prof = JSON.parse(profileStr);
+              let prof;
+              try { prof = JSON.parse(profileStr); } catch (pe) { Alert.alert('Profile Error', 'Profile data is corrupted.'); return; }
               const planId = currentPlanId;
               if (!planId) { Alert.alert('No Plan', 'Generate a plan first.'); return; }
 

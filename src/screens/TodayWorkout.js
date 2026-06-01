@@ -69,7 +69,7 @@ export default function TodayWorkout({ navigation }) {
   );
 
   useEffect(() => {
-    if (workout && workout.blocks) {
+    if (workout && Array.isArray(workout.blocks)) {
       const expanded = {};
       workout.blocks.forEach((_, i) => { expanded[i] = true; });
       setExpandedBlocks(expanded);
@@ -255,7 +255,7 @@ export default function TodayWorkout({ navigation }) {
         </View>
 
         {/* Workout Blocks */}
-        {workout.blocks ? workout.blocks.map((block, blockIndex) => {
+        {Array.isArray(workout.blocks) ? workout.blocks.map((block, blockIndex) => {
           const isOpen = !!expandedBlocks[blockIndex];
           const exercises = Array.isArray(block.exercises) ? block.exercises : [];
           const doneCount = exercises.filter(e => !!e.is_completed).length;
@@ -433,7 +433,7 @@ export default function TodayWorkout({ navigation }) {
         }) : null}
 
         {/* Complete Day Button */}
-        {!isCompleted && workout.blocks && workout.blocks.length > 0 ? (
+        {!isCompleted && Array.isArray(workout.blocks) && workout.blocks.length > 0 ? (
           <TouchableOpacity style={styles.completeDayButton} onPress={() => completeDay(workout.id)}>
             <Text style={styles.completeDayText}>COMPLETE WORKOUT</Text>
           </TouchableOpacity>

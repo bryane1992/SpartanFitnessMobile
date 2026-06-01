@@ -74,11 +74,13 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
       // Load previous messages for this session
       if (sessionId) {
         const prev = await getCoachMessages(sessionId);
-        setMessages(prev.map(m => ({
-          role: m.role,
-          content: m.content,
-          actions: m.actions ? JSON.parse(m.actions) : [],
-        })));
+        setMessages(prev.map(m => {
+          let parsedActions = [];
+          if (m.actions) {
+            try { parsedActions = JSON.parse(m.actions); } catch { parsedActions = []; }
+          }
+          return { role: m.role, content: m.content, actions: parsedActions };
+        }));
       }
     } catch (e) {
       console.error('Error loading coach state:', e);
@@ -100,7 +102,10 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
 
       // Build context
       const profile = await AsyncStorage.getItem('userProfile');
-      const parsedProfile = profile ? JSON.parse(profile) : null;
+      let parsedProfile = null;
+      if (profile) {
+        try { parsedProfile = JSON.parse(profile); } catch { parsedProfile = null; }
+      }
       const injuries = await getActiveInjuries();
 
       // Build constrained swap pool from archetype-filtered menu
@@ -146,8 +151,9 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
       try {
         const planMeta = await AsyncStorage.getItem('planMeta');
         if (planMeta) {
-          const { planId } = JSON.parse(planMeta);
-          if (planId) rationales = await getPlanRationales(planId);
+          let parsedMeta;
+          try { parsedMeta = JSON.parse(planMeta); } catch { parsedMeta = null; }
+          if (parsedMeta?.planId) rationales = await getPlanRationales(parsedMeta.planId);
         }
       } catch {}
 
