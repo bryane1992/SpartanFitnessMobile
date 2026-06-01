@@ -842,14 +842,14 @@ export async function adjustFutureWeights(exerciseId, ratio, currentDate) {
     }
   } catch { /* no profile */ }
 
-  // Get all future unfinished instances with their current weights
+  // Get all current + future unfinished instances with their current weights
   const futureExercises = await database.getAllAsync(
     `SELECT pe.id, pe.weight FROM plan_exercises pe
      JOIN plan_blocks pb ON pb.id = pe.plan_block_id
      JOIN plan_days pd ON pd.id = pb.plan_day_id
      WHERE pe.exercise_id = ?
        AND pe.is_completed = 0
-       AND pd.date > ?
+       AND pd.date >= ?
      ORDER BY pd.date ASC`,
     [exerciseId, today]
   );

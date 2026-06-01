@@ -198,10 +198,15 @@ export function calculateWeight(exercise, weekNumber, phase, bodyCompGoal, exper
   // Peak: 85-90% 1RM = heavy
   // Race prep: taper is volume (fewer sets/accessories), NOT load
   // Weights hold near peak — 85% 1RM with 3x5 = reduced volume, maintained intensity
+  // Phase intensities calibrated to match PHASE_REPS rep targets:
+  // Foundation 10 reps → ~75-78% 1RM
+  // Build 8 reps → ~80-83% 1RM
+  // Peak 6 reps → ~85% 1RM  (was 90%, which is a 3-4RM — too heavy for 6-rep sets)
+  // Race prep 5 reps → 85% 1RM (held, volume reduced instead)
   const PHASE_INTENSITY = {
     foundation: { compound: 0.78, isolation: 0.65 },
     build:      { compound: 0.83, isolation: 0.75 },
-    peak:       { compound: 0.90, isolation: 0.82 },
+    peak:       { compound: 0.85, isolation: 0.78 },
     race_prep:  { compound: 0.85, isolation: 0.75 },
   };
   const phaseKey = phase === 'race_prep' ? 'race_prep' : phase === 'peak' ? 'peak' : phase === 'build' ? 'build' : 'foundation';
