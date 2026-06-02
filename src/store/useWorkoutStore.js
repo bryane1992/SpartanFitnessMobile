@@ -27,6 +27,8 @@ const useWorkoutStore = create((set, get) => ({
   selectedDate: new Date().toISOString().split('T')[0],
   lastAdjustment: null, // { exerciseName, newWeight, count } — for success toast
   pendingAdjustment: null, // { exerciseName, exerciseId, prescribed, actual, ratio, direction, pctDiff } — for user prompt
+  pendingHeavy: null, // { exerciseName, exerciseId, prescribed, actual, pctDiff } — nudge to Coach Charlie, no auto-cascade
+  pendingCoachMessage: null, // pre-filled message for Coach Charlie, auto-sent when chat opens
   adjustedExercises: {}, // { exerciseId: true } — already adjusted this session
   dismissedExercises: {}, // { exerciseId: true } — user said "keep as is"
   lastAdjustmentRatio: {}, // { exerciseId: ratio } — track what we last adjusted to
@@ -210,18 +212,14 @@ const useWorkoutStore = create((set, get) => ({
               console.log(`[Autoregulation] ${exId}: prescribed=${prescribed}, actual=${actual}, diff=${prescribed > 0 ? Math.round(((actual-prescribed)/prescribed)*100) : '?'}%`);
               if (!isNaN(prescribed) && !isNaN(actual) && prescribed > 0 && actual > 0) {
                 const diff = (actual - prescribed) / prescribed;
-                // Only autoregulate UPWARD (user exceeded prescription).
-                // Downward adjustments are too risky — a wrong prescription or one-off fatigue
-                // would silently drop weights across the entire plan. Users can ask Coach Charlie
-                // to adjust if they genuinely need a lighter program.
+
                 if (diff > 0.10) {
-                  // Already adjusted — only re-prompt if weight went even HIGHER
+                  // Upward — user beat the prescription. Safe to cascade up.
                   if (adjustedExercises[exId]) {
                     const lastRatio = get().lastAdjustmentRatio?.[exId] || 1;
                     const newRatio = actual / prescribed;
                     if (newRatio <= lastRatio) break;
                   }
-
                   const ratio = actual / prescribed;
                   set({
                     pendingAdjustment: {
@@ -232,6 +230,18 @@ const useWorkoutStore = create((set, get) => ({
                       ratio,
                       direction: 'higher',
                       pctDiff: Math.round(diff * 100),
+                    },
+                  });
+                } else if (diff < -0.10) {
+                  // Downward — user lifted less than prescribed. Don't auto-cascade.
+                  // Show a nudge so they can tell Coach Charlie to adjust the program.
+                  set({
+                    pendingHeavy: {
+                      exerciseName: exercise.name,
+                      exerciseId: exId,
+                      prescribed: `${prescribed} lb`,
+                      actual: `${Math.round(actual / 5) * 5} lb`,
+                      pctDiff: Math.abs(Math.round(diff * 100)),
                     },
                   });
                 }
@@ -272,6 +282,28 @@ const useWorkoutStore = create((set, get) => ({
       set({ pendingAdjustment: null });
     }
   },
+
+  dismissHeavy: () => {
+    const pending = get().pendingHeavy;
+    if (pending) {
+      set({ pendingHeavy: null, dismissedExercises: { ...get().dismissedExercises, [pending.exerciseId]: true } });
+    } else {
+      set({ pendingHeavy: null });
+    }
+  },
+
+  tellCharlieHeavy: () => {
+    const pending = get().pendingHeavy;
+    if (pending) {
+      set({
+        pendingHeavy: null,
+        dismissedExercises: { ...get().dismissedExercises, [pending.exerciseId]: true },
+        pendingCoachMessage: `${pending.exerciseName} feels too heavy at ${pending.prescribed}. I could only do it at ${pending.actual}. Can you adjust my program so future weeks use a weight I can actually work with?`,
+      });
+    }
+  },
+
+  clearPendingCoachMessage: () => set({ pendingCoachMessage: null }),
 
   saveAmrapRounds: async (planBlockId, rounds, elapsed = null) => {
     try {

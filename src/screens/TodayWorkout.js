@@ -34,6 +34,9 @@ export default function TodayWorkout({ navigation }) {
     pendingAdjustment,
     confirmAdjustment,
     dismissAdjustment,
+    pendingHeavy,
+    dismissHeavy,
+    tellCharlieHeavy,
     planStartDate,
   } = useWorkoutStore();
 
@@ -186,6 +189,22 @@ export default function TodayWorkout({ navigation }) {
   return (
     <SafeAreaView style={styles.container} {...swipeResponder.panHandlers}>
       <View style={styles.innerContainer}>
+      {pendingHeavy ? (
+        <View style={[styles.adjustmentPrompt, { borderLeftColor: '#FF851B', borderLeftWidth: 3 }]}>
+          <Text style={styles.adjustmentPromptTitle}>WEIGHT CHECK</Text>
+          <Text style={styles.adjustmentPromptText}>
+            {`Logged ${pendingHeavy.actual} on ${pendingHeavy.exerciseName} (prescribed ${pendingHeavy.prescribed}). If this weight is consistently too heavy, tell Coach Charlie to adjust your program.`}
+          </Text>
+          <View style={styles.adjustmentButtons}>
+            <TouchableOpacity style={[styles.adjustmentBtnYes, { backgroundColor: '#FF851B' }]} onPress={tellCharlieHeavy}>
+              <Text style={styles.adjustmentBtnYesText}>TELL CHARLIE</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.adjustmentBtnNo} onPress={dismissHeavy}>
+              <Text style={styles.adjustmentBtnNoText}>DISMISS</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
       {pendingAdjustment ? (
         <View style={styles.adjustmentPrompt}>
           <Text style={styles.adjustmentPromptTitle}>WEIGHT ADJUSTMENT</Text>

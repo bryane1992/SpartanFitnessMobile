@@ -59,8 +59,13 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
 
   useEffect(() => {
     if (visible) {
-      // Only reload from DB if no messages in memory — prevents wiping in-progress conversations
       if (messages.length === 0) loadState();
+      // Auto-send any pending message (e.g. from "Tell Charlie" weight prompt)
+      const { pendingCoachMessage, clearPendingCoachMessage } = require('../store/useWorkoutStore').default.getState();
+      if (pendingCoachMessage) {
+        clearPendingCoachMessage();
+        setTimeout(() => sendMessage(pendingCoachMessage), 600);
+      }
     }
   }, [visible]);
 
