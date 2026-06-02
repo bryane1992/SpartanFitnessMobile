@@ -1397,20 +1397,22 @@ export async function getWeekOverWeekLifts() {
   const prevWeek = currentWeek - 1;
   if (prevWeek < 1) return [];
 
-  // Get best logged weight per exercise for current and previous week
+  // Get best ACTUALLY LOGGED weight per exercise for current and previous week
+  // Only use actual_weight (what was lifted) — never prescribed weight
   const rows = await database.getAllAsync(
     `SELECT pe.exercise_id, e.name as exercise_name, e.is_compound,
             pd.week_number,
-            MAX(CAST(COALESCE(pe.actual_weight, pe.weight) AS REAL)) as best_weight
+            MAX(CAST(pe.actual_weight AS REAL)) as best_weight
      FROM plan_exercises pe
      JOIN plan_blocks pb ON pb.id = pe.plan_block_id
      JOIN plan_days pd ON pd.id = pb.plan_day_id
      JOIN exercises e ON e.id = pe.exercise_id
      WHERE pd.week_number IN (?, ?)
-       AND COALESCE(pe.actual_weight, pe.weight) IS NOT NULL
-       AND COALESCE(pe.actual_weight, pe.weight) != 'BW'
-       AND COALESCE(pe.actual_weight, pe.weight) != ''
-       AND CAST(COALESCE(pe.actual_weight, pe.weight) AS REAL) > 0
+       AND pe.is_completed = 1
+       AND pe.actual_weight IS NOT NULL
+       AND pe.actual_weight != 'BW'
+       AND pe.actual_weight != ''
+       AND CAST(pe.actual_weight AS REAL) > 0
        AND e.is_compound = 1
      GROUP BY pe.exercise_id, pd.week_number
      ORDER BY best_weight DESC`,
