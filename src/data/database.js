@@ -1388,52 +1388,75 @@ export async function getBiggestStrengthGains() {
 // Returns: [{ exercise_name, exercise_id, thisWeek, lastWeek, delta, pctChange }]
 export async function getWeekOverWeekLifts() {
   const database = await getDatabase();
-  // Get current week number
   const today = new Date().toISOString().split('T')[0];
-  const currentDay = await database.getFirstAsync(
-    'SELECT week_number FROM plan_days WHERE date <= ? ORDER BY date DESC LIMIT 1', [today]
-  );
-  const currentWeek = currentDay?.week_number || 1;
-  const prevWeek = currentWeek - 1;
-  if (prevWeek < 1) return [];
 
-  // Get best ACTUALLY LOGGED weight per exercise for current and previous week
-  // Only use actual_weight (what was lifted) — never prescribed weight
-  const rows = await database.getAllAsync(
-    `SELECT pe.exercise_id, e.name as exercise_name, e.is_compound,
-            pd.week_number,
+  // Use rolling 7-day calendar windows so "this week" always matches
+  // what the user considers this week, regardless of plan week boundaries.
+  // thisWeek  = last 7 days (including today)
+  // lastWeek  = 8–14 days ago
+  const thisWeekStart = new Date();
+  thisWeekStart.setDate(thisWeekStart.getDate() - 6);
+  const lastWeekStart = new Date();
+  lastWeekStart.setDate(lastWeekStart.getDate() - 13);
+  const lastWeekEnd = new Date();
+  lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
+
+  const thisStart = thisWeekStart.toISOString().split('T')[0];
+  const lastStart = lastWeekStart.toISOString().split('T')[0];
+  const lastEnd   = lastWeekEnd.toISOString().split('T')[0];
+
+  // Get best actually-logged weight per exercise for both windows
+  const thisWeekRows = await database.getAllAsync(
+    `SELECT pe.exercise_id, e.name as exercise_name,
             MAX(CAST(pe.actual_weight AS REAL)) as best_weight
      FROM plan_exercises pe
      JOIN plan_blocks pb ON pb.id = pe.plan_block_id
      JOIN plan_days pd ON pd.id = pb.plan_day_id
      JOIN exercises e ON e.id = pe.exercise_id
-     WHERE pd.week_number IN (?, ?)
+     WHERE pd.date BETWEEN ? AND ?
        AND pe.is_completed = 1
        AND pe.actual_weight IS NOT NULL
-       AND pe.actual_weight != 'BW'
-       AND pe.actual_weight != ''
+       AND pe.actual_weight != 'BW' AND pe.actual_weight != ''
        AND CAST(pe.actual_weight AS REAL) > 0
        AND e.is_compound = 1
-     GROUP BY pe.exercise_id, pd.week_number
-     ORDER BY best_weight DESC`,
-    [currentWeek, prevWeek]
+     GROUP BY pe.exercise_id`,
+    [thisStart, today]
   );
 
-  // Pair up this week vs last week
+  const lastWeekRows = await database.getAllAsync(
+    `SELECT pe.exercise_id, e.name as exercise_name,
+            MAX(CAST(pe.actual_weight AS REAL)) as best_weight
+     FROM plan_exercises pe
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     JOIN exercises e ON e.id = pe.exercise_id
+     WHERE pd.date BETWEEN ? AND ?
+       AND pe.is_completed = 1
+       AND pe.actual_weight IS NOT NULL
+       AND pe.actual_weight != 'BW' AND pe.actual_weight != ''
+       AND CAST(pe.actual_weight AS REAL) > 0
+       AND e.is_compound = 1
+     GROUP BY pe.exercise_id`,
+    [lastStart, lastEnd]
+  );
+
   const byExercise = {};
-  for (const row of rows) {
+  for (const row of thisWeekRows) {
+    byExercise[row.exercise_id] = { name: row.exercise_name, thisWeek: row.best_weight, lastWeek: null };
+  }
+  for (const row of lastWeekRows) {
     if (!byExercise[row.exercise_id]) {
-      byExercise[row.exercise_id] = { name: row.exercise_name, thisWeek: null, lastWeek: null };
+      byExercise[row.exercise_id] = { name: row.exercise_name, thisWeek: null, lastWeek: row.best_weight };
+    } else {
+      byExercise[row.exercise_id].lastWeek = row.best_weight;
     }
-    if (row.week_number === currentWeek) byExercise[row.exercise_id].thisWeek = row.best_weight;
-    if (row.week_number === prevWeek) byExercise[row.exercise_id].lastWeek = row.best_weight;
   }
 
   const results = [];
   for (const [id, data] of Object.entries(byExercise)) {
     if (data.thisWeek === null && data.lastWeek === null) continue;
-    const tw = data.thisWeek || data.lastWeek;
-    const lw = data.lastWeek || data.thisWeek;
+    const tw = data.thisWeek ?? data.lastWeek;
+    const lw = data.lastWeek ?? data.thisWeek;
     const delta = tw - lw;
     const pctChange = lw > 0 ? Math.round((delta / lw) * 100) : 0;
     results.push({ exercise_id: id, exercise_name: data.name, thisWeek: tw, lastWeek: lw, delta, pctChange });
