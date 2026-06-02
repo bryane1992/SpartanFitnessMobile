@@ -49,6 +49,7 @@ WEIGHT ADJUSTMENT:
 - "Too heavy": suggest reduction
 - adjustWeight changes FUTURE weeks only
 - BW exercises: use adjustReps not adjustWeight
+- If athlete says their weights got messed up or dropped unexpectedly (e.g. autoregulation fired on a wrong prescription): use resetExerciseWeights(exerciseId, baseWeight) to set ALL future instances of that exercise to the correct weight. Ask what weight they should be at if unsure.
 
 INJURY: 1)reduce reps 2)lighten load 3)limit ROM 4)tempo 5)grip change 6)swap 7)unilateral 8)cross-train 9)skip. Always flagInjury.
 

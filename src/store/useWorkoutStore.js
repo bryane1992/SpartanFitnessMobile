@@ -210,12 +210,16 @@ const useWorkoutStore = create((set, get) => ({
               console.log(`[Autoregulation] ${exId}: prescribed=${prescribed}, actual=${actual}, diff=${prescribed > 0 ? Math.round(((actual-prescribed)/prescribed)*100) : '?'}%`);
               if (!isNaN(prescribed) && !isNaN(actual) && prescribed > 0 && actual > 0) {
                 const diff = (actual - prescribed) / prescribed;
-                if (Math.abs(diff) > 0.10) {
-                  // Already adjusted — only re-prompt if weight went HIGHER than what we adjusted to
+                // Only autoregulate UPWARD (user exceeded prescription).
+                // Downward adjustments are too risky — a wrong prescription or one-off fatigue
+                // would silently drop weights across the entire plan. Users can ask Coach Charlie
+                // to adjust if they genuinely need a lighter program.
+                if (diff > 0.10) {
+                  // Already adjusted — only re-prompt if weight went even HIGHER
                   if (adjustedExercises[exId]) {
                     const lastRatio = get().lastAdjustmentRatio?.[exId] || 1;
                     const newRatio = actual / prescribed;
-                    if (newRatio <= lastRatio) break; // same or lower — don't re-ask
+                    if (newRatio <= lastRatio) break;
                   }
 
                   const ratio = actual / prescribed;
@@ -226,8 +230,8 @@ const useWorkoutStore = create((set, get) => ({
                       prescribed: `${prescribed} lb`,
                       actual: `${Math.round(actual / 5) * 5} lb`,
                       ratio,
-                      direction: diff > 0 ? 'higher' : 'lower',
-                      pctDiff: Math.abs(Math.round(diff * 100)),
+                      direction: 'higher',
+                      pctDiff: Math.round(diff * 100),
                     },
                   });
                 }

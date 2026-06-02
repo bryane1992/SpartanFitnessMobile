@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendCoachMessage } from '../data/coachApi';
-import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, adjustFutureWeights, getPlanRationales, getWodsFromDb, swapWodBlock, restoreWodBlock, deleteLatestInjury, swapWorkoutDays, clearAllInjuries, getWorkoutForDate, addExerciseToBlock, getRecentActualWeights, getFullPlanContext, getWodByName, swapWodOnDate, addExerciseOnDate, removeWodOnDate, clearStrengthOnDate, clearWarmupOnDate } from '../data/database';
+import { saveCoachMessage, getCoachMessages, getActiveInjuries, saveInjury, getAlternatives, updateExerciseLog, adjustFutureWeights, getPlanRationales, getWodsFromDb, swapWodBlock, restoreWodBlock, deleteLatestInjury, swapWorkoutDays, clearAllInjuries, getWorkoutForDate, addExerciseToBlock, getRecentActualWeights, getFullPlanContext, getWodByName, swapWodOnDate, addExerciseOnDate, removeWodOnDate, clearStrengthOnDate, clearWarmupOnDate, resetExerciseWeightsFromBase } from '../data/database';
 import useWorkoutStore from '../store/useWorkoutStore';
 import { buildExerciseMenu } from '../core/menuBuilder';
 import { detectArchetype, adjustArchetypeForEquipment } from '../core/archetypes';
@@ -371,6 +371,7 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
         'removewodondate': 'removeWodOnDate', 'remove_wod_on_date': 'removeWodOnDate',
         'clearstrengthondate': 'clearStrengthOnDate', 'clear_strength_on_date': 'clearStrengthOnDate',
         'clearwarmupondate': 'clearWarmupOnDate', 'clear_warmup_on_date': 'clearWarmupOnDate',
+        'resetexerciseweights': 'resetExerciseWeights', 'reset_exercise_weights': 'resetExerciseWeights',
         'addexerciseondate': 'addExerciseOnDate', 'add_exercise_on_date': 'addExerciseOnDate',
         'swapday': 'swapDay', 'swap_day': 'swapDay',
         'clearinjuries': 'clearInjuries', 'clear_injuries': 'clearInjuries',
@@ -523,6 +524,13 @@ export default function CoachChat({ visible, onClose, workout, sessionId }) {
           case 'clearWarmupOnDate': {
             if (action.date) {
               await clearWarmupOnDate(action.date);
+              await store.loadTodayWorkout();
+            }
+            break;
+          }
+          case 'resetExerciseWeights': {
+            if (action.exerciseId && action.baseWeight) {
+              await resetExerciseWeightsFromBase(action.exerciseId, parseFloat(action.baseWeight));
               await store.loadTodayWorkout();
             }
             break;

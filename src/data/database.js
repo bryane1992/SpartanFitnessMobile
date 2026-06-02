@@ -869,6 +869,33 @@ export async function adjustFutureWeights(exerciseId, ratio, currentDate) {
   return updated;
 }
 
+// Reset all future unfinished instances of an exercise to a specific target weight,
+// then re-apply the plan's weekly progression from that base.
+// Used to recover from autoregulation that was based on a wrong prescription.
+export async function resetExerciseWeightsFromBase(exerciseId, baseWeight, today) {
+  const database = await getDatabase();
+  const cutoff = today || new Date().toISOString().split('T')[0];
+  const futures = await database.getAllAsync(
+    `SELECT pe.id, pe.weight, pd.week_number
+     FROM plan_exercises pe
+     JOIN plan_blocks pb ON pb.id = pe.plan_block_id
+     JOIN plan_days pd ON pd.id = pb.plan_day_id
+     WHERE pe.exercise_id = ? AND pe.is_completed = 0 AND pd.date >= ?
+     ORDER BY pd.date ASC`,
+    [exerciseId, cutoff]
+  );
+  if (futures.length === 0) return 0;
+  // Use the base weight directly for all future instances (Coach Charlie provides the correct value)
+  let updated = 0;
+  for (const ex of futures) {
+    const rounded = Math.round(baseWeight / 5) * 5;
+    await database.runAsync('UPDATE plan_exercises SET weight = ? WHERE id = ?', [`${rounded} lb`, ex.id]);
+    updated++;
+  }
+  console.log(`[WeightReset] Set ${exerciseId} to ${baseWeight} lb for ${updated} future exercises`);
+  return updated;
+}
+
 // Restore a WOD block to its previous state (for undo)
 export async function restoreWodBlock(planBlockId, exercises, blockMeta) {
   const database = await getDatabase();
